@@ -8,20 +8,15 @@
 //!
 //! ```no_run
 //! use std::path::PathBuf;
-//! use bb_flasher::BBFlasher;
 //!
-//! #[tokio::main]
-//! async fn main() {
-//!     let img = bb_flasher::LocalImage::new(PathBuf::from("/tmp/abc.img.xz").into());
-//!     let target = PathBuf::from("/tmp/target").try_into().unwrap();
-//!     let customization =
-//!         bb_flasher::sd::FlashingSdLinuxConfig::sysconfig(None, None, None, None, None, None, None);
+//! let img = bb_flasher::LocalImage::new(PathBuf::from("/tmp/abc.img.xz").into());
+//! let target = PathBuf::from("/tmp/target").try_into().unwrap();
+//! let customization =
+//!     bb_flasher::sd::FlashingSdLinuxConfig::sysconfig(None, None, None, None, None, None, None);
 //!
-//!     let flasher = bb_flasher::sd::Flasher::without_bmap(img.into_image_future(), target, customization, None)
-//!         .flash(None)
-//!         .await
-//!         .unwrap();
-//! }
+//! bb_flasher::sd::Flasher::new(img.into_image_fn(), target, customization)
+//!     .flash(None, None)
+//!     .unwrap();
 //! ```
 //!
 //! # Features

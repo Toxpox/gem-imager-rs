@@ -29,7 +29,6 @@ pub(crate) enum BoardImage {
         flasher: config::Flasher,
         init_format: config::InitFormat,
         img: SelectedImage,
-        bmap: Option<Bmap>,
         info_text: Option<String>,
         description: Option<String>,
         icon: BoardImageIcon,
@@ -48,7 +47,6 @@ impl BoardImage {
 
         Self::Image {
             img: bb_flasher::LocalImage::new(path.into()).into(),
-            bmap: None,
             flasher,
             // Do not try to apply customization for local images
             init_format: config::InitFormat::None,
@@ -83,10 +81,6 @@ impl BoardImage {
                 downloader.clone(),
             )
             .into(),
-            bmap: image.bmap.map(|url| Bmap {
-                url: Box::new(url),
-                downloader,
-            }),
             flasher,
             init_format: image.init_format,
             info_text: image.info_text,
@@ -336,24 +330,6 @@ impl std::fmt::Display for RemoteImage {
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
-pub(crate) struct Bmap {
-    url: Box<Url>,
-    #[serde(skip)]
-    downloader: bb_downloader::Downloader,
-}
-
-impl Bmap {
-    fn into_fn(self) -> impl FnOnce() -> io::Result<Box<str>> {
-        let rt = tokio::runtime::Handle::current();
-        move || {
-            let res =
-                rt.block_on(async move { self.downloader.download(*self.url.clone()).await })?;
-            std::fs::read_to_string(res).map(Into::into)
-        }
-    }
-}
-
-#[derive(Debug, Clone, serde::Serialize)]
 pub(crate) enum SelectedImage {
     LocalImage(bb_flasher::LocalImage),
     RemoteImage(RemoteImage),
@@ -422,41 +398,35 @@ pub(crate) async fn flash(
                 .unwrap()
         }
         #[cfg(feature = "sd")]
-        (
-            BoardImage::Image {
-                img, bmap, flasher, ..
-            },
-            customization,
-            Destination::LocalFile(f),
-        ) if flasher == config::Flasher::SdCard => tokio::task::spawn_blocking(move || {
-            bb_flasher::sd::Flasher::with_file_dest(
-                img.into_image_fn(),
-                bmap.map(|x| x.into_fn()),
-                f,
-                customization.sd_customization(),
-            )
-            .flash(Some(chan), Some(cancel_sync))
-        })
-        .await
-        .unwrap(),
+        (BoardImage::Image { img, flasher, .. }, customization, Destination::LocalFile(f))
+            if flasher == config::Flasher::SdCard =>
+        {
+            tokio::task::spawn_blocking(move || {
+                bb_flasher::sd::Flasher::with_file_dest(
+                    img.into_image_fn(),
+                    f,
+                    customization.sd_customization(),
+                )
+                .flash(Some(chan), Some(cancel_sync))
+            })
+            .await
+            .unwrap()
+        }
         #[cfg(feature = "sd")]
-        (
-            BoardImage::Image {
-                img, bmap, flasher, ..
-            },
-            customization,
-            Destination::SdCard(t),
-        ) if flasher == config::Flasher::SdCard => tokio::task::spawn_blocking(move || {
-            bb_flasher::sd::Flasher::new(
-                img.into_image_fn(),
-                bmap.map(|x| x.into_fn()),
-                t,
-                customization.sd_customization(),
-            )
-            .flash(Some(chan), Some(cancel_sync))
-        })
-        .await
-        .unwrap(),
+        (BoardImage::Image { img, flasher, .. }, customization, Destination::SdCard(t))
+            if flasher == config::Flasher::SdCard =>
+        {
+            tokio::task::spawn_blocking(move || {
+                bb_flasher::sd::Flasher::new(
+                    img.into_image_fn(),
+                    t,
+                    customization.sd_customization(),
+                )
+                .flash(Some(chan), Some(cancel_sync))
+            })
+            .await
+            .unwrap()
+        }
         #[cfg(feature = "sd")]
         (BoardImage::Image { img, flasher, .. }, _, Destination::SdCard(t))
             if flasher == config::Flasher::SdCardBootfs =>

@@ -174,32 +174,24 @@ impl FormatFlasher {
 /// - img: Raw images
 /// - xz: Xz compressed raw images
 #[derive(Debug, Clone)]
-pub struct Flasher<I, B> {
+pub struct Flasher<I> {
     img: I,
-    bmap: Option<B>,
     dst: bb_flasher_sd::Destination,
     customization: FlashingSdLinuxConfig,
 }
 
-impl<I, B> Flasher<I, B> {
-    pub fn new(img: I, bmap: Option<B>, dst: Target, customization: FlashingSdLinuxConfig) -> Self {
+impl<I> Flasher<I> {
+    pub fn new(img: I, dst: Target, customization: FlashingSdLinuxConfig) -> Self {
         Self {
             img,
-            bmap,
             dst: bb_flasher_sd::Destination::SdCard(dst.0.path.into_boxed_path()),
             customization,
         }
     }
 
-    pub fn with_file_dest(
-        img: I,
-        bmap: Option<B>,
-        dst: PathBuf,
-        customization: FlashingSdLinuxConfig,
-    ) -> Self {
+    pub fn with_file_dest(img: I, dst: PathBuf, customization: FlashingSdLinuxConfig) -> Self {
         Self {
             img,
-            bmap,
             dst: bb_flasher_sd::Destination::File(dst.into_boxed_path()),
             customization,
         }
@@ -210,16 +202,9 @@ impl<I, B> Flasher<I, B> {
     }
 }
 
-impl<I> Flasher<I, std::future::Ready<std::io::Result<Box<str>>>> {
-    pub fn without_bmap(img: I, dst: Target, customization: FlashingSdLinuxConfig) -> Self {
-        Self::new(img, None, dst, customization)
-    }
-}
-
-impl<I, B> Flasher<I, B>
+impl<I> Flasher<I>
 where
     I: FnOnce() -> std::io::Result<(crate::img::OsImage, u64)> + Send,
-    B: FnOnce() -> std::io::Result<Box<str>> + Send,
 {
     pub fn flash(
         self,
@@ -260,8 +245,7 @@ where
             None => None,
         };
 
-        bb_flasher_sd::flash(self.img, self.bmap, self.dst, tx, customization, cancel)
-            .map_err(Into::into)
+        bb_flasher_sd::flash(self.img, self.dst, tx, customization, cancel).map_err(Into::into)
     }
 }
 

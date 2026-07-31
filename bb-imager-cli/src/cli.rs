@@ -105,9 +105,6 @@ pub enum TargetCommands {
         #[arg(long)]
         /// Enable USB DHCP
         usb_enable_dhcp: bool,
-        /// Provide the bmap file for the image
-        #[arg(long)]
-        bmap: Option<Box<Path>>,
 
         #[arg(long)]
         /// Generate clound-init config.

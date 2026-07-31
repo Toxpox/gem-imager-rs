@@ -201,8 +201,6 @@ pub struct OsImage {
     /// Initialization Format. Currently only used by SD Card Images
     #[serde(default)]
     pub init_format: InitFormat,
-    /// Bmap file for the image
-    pub bmap: Option<Url>,
     /// Special Instructions for flashing board.
     pub info_text: Option<String>,
     /// URL to support page for image. This is where issues should be reported.

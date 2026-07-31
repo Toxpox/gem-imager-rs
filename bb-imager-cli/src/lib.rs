@@ -1,10 +1,8 @@
 pub mod cli;
-mod helpers;
 
 use bb_flasher::{BBFlasherTarget, DownloadFlashingStatus, LocalImage};
 use clap::CommandFactory;
 use cli::{Commands, DestinationsTarget, Opt, TargetCommands};
-use helpers::LocalStringFile;
 use std::path::PathBuf;
 use std::sync::mpsc;
 
@@ -121,7 +119,6 @@ fn flash_internal(
             img,
             ssh_key,
             usb_enable_dhcp,
-            bmap,
             sysconfig,
             cloud_init,
             file_destination,
@@ -170,14 +167,12 @@ fn flash_internal(
             if file_destination {
                 bb_flasher::sd::Flasher::with_file_dest(
                     LocalImage::new(img).into_image_fn(),
-                    bmap.map(LocalStringFile::new).map(|x| x.into_fn()),
                     dst,
                     customization,
                 )
             } else {
                 bb_flasher::sd::Flasher::new(
                     LocalImage::new(img).into_image_fn(),
-                    bmap.map(LocalStringFile::new).map(|x| x.into_fn()),
                     dst.try_into().unwrap(),
                     customization,
                 )
@@ -521,23 +516,6 @@ mod tests {
             stage_msg(DownloadFlashingStatus::Verifying, 1),
             "[1] Verifying"
         );
-    }
-
-    #[test]
-    fn local_string_file_reads_contents() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("bmap.txt");
-        std::fs::write(&path, "bmap-contents").unwrap();
-
-        let read = LocalStringFile::new(path.into_boxed_path()).into_fn();
-        assert_eq!(&*read().unwrap(), "bmap-contents");
-    }
-
-    #[test]
-    fn local_string_file_missing_path_errors() {
-        let read = LocalStringFile::new(PathBuf::from("/nonexistent/bmap.txt").into_boxed_path())
-            .into_fn();
-        assert!(read().is_err());
     }
 
     #[cfg(not(target_os = "macos"))]

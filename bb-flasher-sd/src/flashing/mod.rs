@@ -38,57 +38,6 @@ fn reader_task(
     Ok(())
 }
 
-/// While writing, a few assumptions should hold:
-/// - All writes should be in buffers multiple of block size (4K).
-/// - All writes should be aligned to block size (4K).
-///
-/// Thus, we will be writing some data that is not strictly present in the bmap.
-fn writer_task_bmap(
-    bmap: bb_bmap_parser::Bmap,
-    mut sd: impl Write + Seek,
-    mut chan: Option<mpsc::SyncSender<f32>>,
-    buf_rx: mpsc::Receiver<(Box<DirectIoBuffer<BUFFER_SIZE>>, usize)>,
-    buf_tx: mpsc::SyncSender<Box<DirectIoBuffer<BUFFER_SIZE>>>,
-    cancel: Option<CancellationToken>,
-) -> Result<()> {
-    let mut pos = 0;
-    let (mut buf, mut count) = buf_rx.recv().unwrap();
-    let img_size = bmap.total_mapped_size();
-    let mut bytes_written = 0u64;
-
-    for b in bmap.block_map() {
-        let end_offset = b.offset() + b.length();
-
-        loop {
-            // Write any buffer that lies even partially in the bmap range.
-            if pos + (count as u64) > b.offset() && pos < end_offset {
-                sd.seek(std::io::SeekFrom::Start(pos))?;
-                sd.write_all(&buf.as_slice()[..count])?;
-                bytes_written += count as u64;
-            } else if pos >= end_offset {
-                break;
-            }
-
-            pos += count as u64;
-            // Clippy warning is simply wrong here
-            #[allow(clippy::option_map_or_none)]
-            chan_send(chan.as_mut(), progress(bytes_written, img_size));
-            check_cancel(cancel.as_ref())?;
-
-            match buf_rx.recv() {
-                Ok((x, y)) => {
-                    let _ = buf_tx.send(buf);
-                    buf = x;
-                    count = y;
-                }
-                Err(_) => break,
-            }
-        }
-    }
-
-    sd.flush().map_err(Into::into)
-}
-
 fn writer_task(
     img_size: u64,
     mut sd: impl Write + Seek,
@@ -140,7 +89,6 @@ fn read_aligned(mut img: impl Read, buf: &mut [u8]) -> Result<usize> {
 fn write_sd(
     img: impl Read + Send,
     img_size: u64,
-    bmap: Option<bb_bmap_parser::Bmap>,
     sd: impl Write + Seek,
     chan: Option<mpsc::SyncSender<f32>>,
     cancel: Option<CancellationToken>,
@@ -160,10 +108,7 @@ fn write_sd(
         let cancle_clone = cancel.clone();
         let handle = s.spawn(move || reader_task(img, rx1, tx2, cancle_clone));
 
-        match bmap {
-            Some(x) => writer_task_bmap(x, sd, chan, rx2, tx1, cancel),
-            None => writer_task(img_size, sd, chan, rx2, tx1, cancel),
-        }?;
+        writer_task(img_size, sd, chan, rx2, tx1, cancel)?;
         tracing::info!("Total Time taken: {:?}", global_start.elapsed());
 
         handle.join().unwrap()
@@ -189,9 +134,8 @@ fn write_sd(
 /// # Progress
 ///
 /// Progress lies between 0 and 1.
-pub fn flash<'a, R, B, C>(
+pub fn flash<'a, R, C>(
     img: impl FnOnce() -> std::io::Result<(R, u64)> + Send,
-    bmap: Option<B>,
     dst: crate::Destination,
     chan: Option<mpsc::SyncSender<f32>>,
     customizations: impl Iterator<Item = Customization<C>> + Send,
@@ -200,7 +144,6 @@ pub fn flash<'a, R, B, C>(
 where
     R: Read + Send,
     C: Iterator<Item = (Box<str>, crate::ContentType<'a>)> + Send,
-    B: FnOnce() -> std::io::Result<Box<str>> + Send,
 {
     tracing::info!("Opening Destination");
 
@@ -212,19 +155,18 @@ where
                 .create(true)
                 .truncate(true)
                 .open(path)?;
-            flash_internal(img, bmap, sd, chan, customizations, cancel)
+            flash_internal(img, sd, chan, customizations, cancel)
         }
         crate::Destination::SdCard(path) => {
             let sd = crate::pal::open(&path)?;
             let sd = crate::helpers::SdCardWrapper::new(sd);
-            flash_internal(img, bmap, sd, chan, customizations, cancel)
+            flash_internal(img, sd, chan, customizations, cancel)
         }
     }
 }
 
-fn flash_internal<'a, R, B, Sd, C>(
+fn flash_internal<'a, R, Sd, C>(
     img: impl FnOnce() -> std::io::Result<(R, u64)> + Send,
-    bmap: Option<B>,
     mut sd: Sd,
     mut chan: Option<mpsc::SyncSender<f32>>,
     customizations: impl Iterator<Item = Customization<C>> + Send,
@@ -234,22 +176,14 @@ where
     R: Read + Send,
     Sd: Read + Write + Seek + Eject + std::fmt::Debug,
     C: Iterator<Item = (Box<str>, crate::ContentType<'a>)> + Send,
-    B: FnOnce() -> std::io::Result<Box<str>> + Send,
 {
-    tracing::info!("Resolving Bmap");
-    let bmap = match bmap {
-        Some(x) => {
-            Some(bb_bmap_parser::Bmap::from_xml(&x()?).map_err(|_| crate::Error::InvalidBmap)?)
-        }
-        None => None,
-    };
     tracing::info!("Resolving Image");
     let (img, img_size) = img()?;
 
     chan_send(chan.as_mut(), 0.0);
 
     tracing::info!("Writing to SD Card");
-    write_sd(img, img_size, bmap, &mut sd, chan, cancel.clone())?;
+    write_sd(img, img_size, &mut sd, chan, cancel.clone())?;
 
     tracing::info!("Applying customization");
     let mut sd = crate::helpers::DeviceWrapper::new(sd).unwrap();

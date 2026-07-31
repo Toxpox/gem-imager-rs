@@ -69,8 +69,6 @@ pub enum Error {
         #[source]
         source: anyhow::Error,
     },
-    #[error("Invalid bmap for the image.")]
-    InvalidBmap,
     #[error("Writer thread has been closed.")]
     WriterClosed,
 

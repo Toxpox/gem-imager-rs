@@ -68,7 +68,6 @@ The workspace is layered: **front-ends → `bb-flasher` façade → per-target f
 - **`bb-downloader`** — async downloader with caching (JSON + file streams).
 - **`bb-helper`** — shared utilities (cancellation tokens, progress-reporting readers, file streaming).
 - **`bb-drivelist`** — Rust port of Balena's drivelist (enumerate destination drives).
-- **`bb-bmap-parser`** — bmap parsing for sparse-image flashing.
 - **`xtask`** — cargo-xtask helper crate for repo automation.
 
 ## Feature-flag notes (important for compiling correctly)

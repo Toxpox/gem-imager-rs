@@ -376,27 +376,6 @@ fn flash_sd_missing_image_fails() {
     ]);
 }
 
-/// `--bmap` is resolved lazily through `LocalStringFile`; an unreadable path
-/// must abort the flash rather than fall back to a full copy.
-#[test]
-#[should_panic(expected = "Failed to flash")]
-fn flash_sd_unreadable_bmap_fails() {
-    let img = pattern_file(4 * 1024);
-    let dst = NamedTempFile::new().unwrap();
-
-    run_cli([
-        "bb-imager-cli",
-        "flash",
-        "--quiet",
-        "sd",
-        img.path().to_str().unwrap(),
-        dst.path().to_str().unwrap(),
-        "--file-destination",
-        "--bmap",
-        "/nonexistent/image.bmap",
-    ]);
-}
-
 /// Build a tar archive containing `entries`, as consumed by `sd-boot-update`.
 fn tar_archive(entries: &[(&str, &str)]) -> NamedTempFile {
     let file = NamedTempFile::new().unwrap();

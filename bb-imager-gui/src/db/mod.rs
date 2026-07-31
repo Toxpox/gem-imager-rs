@@ -111,7 +111,6 @@ pub(crate) struct OsImage {
     pub(crate) extract_size: i64,
     pub(crate) release_date: chrono::NaiveDate,
     pub(crate) init_format: bb_config::config::InitFormat,
-    pub(crate) bmap: Option<Url>,
     pub(crate) info_text: Option<String>,
     pub(crate) support: Option<Url>,
 }
@@ -129,7 +128,6 @@ impl OsImage {
             extract_size: value.get("extract_size")?,
             release_date: value.get("release_date")?,
             init_format: value.get("init_format")?,
-            bmap: value.get("bmap")?,
             info_text: value.get("info_text")?,
             support: value.get("support")?,
         })
@@ -444,8 +442,8 @@ impl Db {
             r#"
             INSERT INTO os_images(name, parent_id, description, icon, url,
                 image_download_size, image_download_sha256, extract_size,
-                release_date, init_format, bmap, info_text, remote_config_id, support)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+                release_date, init_format, info_text, remote_config_id, support)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
             "#,
         )?;
         let id = stmt.insert(rusqlite::params![
@@ -459,7 +457,6 @@ impl Db {
             i64::try_from(img.extract_size).unwrap(),
             img.release_date,
             img.init_format,
-            img.bmap,
             img.info_text,
             remote_config_id,
             img.support
@@ -563,7 +560,7 @@ impl Db {
             r#"
             SELECT id, name, description, icon, url, image_download_size,
                 image_download_sha256, extract_size, release_date, init_format,
-                bmap, info_text, support
+                info_text, support
             FROM os_images WHERE id = $1"#,
         )?;
         stmt.query_row([id], OsImage::from_row)

@@ -31,10 +31,7 @@ fn test_public_flash_with_temp_file() {
         Ok((reader, FILE_LEN as u64))
     };
 
-    // 3. Bmap Resolver Closure (None for this test)
-    let bmap_resolver: Option<fn() -> std::io::Result<Box<str>>> = None;
-
-    // 4. Progress Channel
+    // 3. Progress Channel
     let (tx, rx) = mpsc::sync_channel(32);
 
     // 5. Empty Customizations Iterator
@@ -43,14 +40,7 @@ fn test_public_flash_with_temp_file() {
         std::iter::empty::<Customization<std::iter::Empty<(Box<str>, ContentType)>>>();
 
     // 6. Execute the public flash function
-    let result = bb_flasher_sd::flash(
-        img_resolver,
-        bmap_resolver,
-        dst,
-        Some(tx),
-        customizations,
-        None,
-    );
+    let result = bb_flasher_sd::flash(img_resolver, dst, Some(tx), customizations, None);
 
     assert!(result.is_ok(), "Public flash failed: {:?}", result.err());
 
@@ -85,7 +75,6 @@ fn flash_aborts_with_cancelled_token() {
     let dst = Destination::File(temp_destination.path().into());
 
     let img_resolver = move || Ok((Cursor::new(img_data), FILE_LEN as u64));
-    let bmap_resolver: Option<fn() -> std::io::Result<Box<str>>> = None;
     let customizations =
         std::iter::empty::<Customization<std::iter::Empty<(Box<str>, ContentType)>>>();
 
@@ -94,14 +83,7 @@ fn flash_aborts_with_cancelled_token() {
     drop(token.drop_guard());
     assert!(token.is_cancelled());
 
-    let result = bb_flasher_sd::flash(
-        img_resolver,
-        bmap_resolver,
-        dst,
-        None,
-        customizations,
-        Some(token),
-    );
+    let result = bb_flasher_sd::flash(img_resolver, dst, None, customizations, Some(token));
 
     assert!(
         matches!(result, Err(bb_flasher_sd::Error::Aborted)),
