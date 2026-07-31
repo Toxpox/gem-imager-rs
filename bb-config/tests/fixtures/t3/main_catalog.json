@@ -1,0 +1,573 @@
+{
+  "imager": {
+    "devices": [
+      {
+        "default": false,
+        "description": "Show every possible image",
+        "matching_type": "inclusive",
+        "name": "No filtering",
+        "tags": []
+      },
+      {
+        "description": "T3 Gemstone Obsidian",
+        "emmc": true,
+        "icon": "https://packages.t3gemstone.org/images/icons/gemstone-o1-fritzing.svg",
+        "matching_type": "exclusive",
+        "name": "T3-GEM-O1",
+        "tags": [
+          "t3-gem-o1"
+        ]
+      },
+      {
+        "default": false,
+        "description": "BeagleBoard Beagley-AI",
+        "emmc": false,
+        "icon": "https://packages.t3gemstone.org/images/icons/beagley-ai.svg",
+        "matching_type": "inclusive",
+        "name": "BeagleY-AI",
+        "tags": [
+          "beagley-ai"
+        ]
+      }
+    ],
+    "latest_version": "1.1.1",
+    "url": "https://www.t3gemstone.org/software/"
+  },
+  "os_list": [
+    {
+      "description": "A port of Ubuntu 22.04 (Jammy) with minimal packages (Recommended)",
+      "devices": [
+        "t3-gem-o1"
+      ],
+      "extract_sha256": "9c991802d2ceff5a80cfd3e822f9cd2f9730cee59759714ba7530c81a824c92d",
+      "extract_size": 1024000000,
+      "icon": "https://packages.t3gemstone.org/images/icons/ubuntu.svg",
+      "image_download_sha256": "13e237518eee97dead84f2d8009a6d875516e1ab2eb800c90fe44f5ff49774c7",
+      "image_download_size": 138737372,
+      "init_format": "systemd",
+      "name": "T3 Gemstone OS (Minimal)",
+      "release_date": "2026-03-26",
+      "url": "https://packages.t3gemstone.org/images/ubuntu/jammy/t3-gem-o1/gemstone-minimal-v2026.1-ubuntu-jammy-t3-gem-o1.img.xz"
+    },
+    {
+      "description": "A port of Ubuntu 22.04 (Jammy) with the T3 Gemstone Desktop (Recommended)",
+      "devices": [
+        "beagley-ai"
+      ],
+      "extract_sha256": "33afbc809f8c39c4a7472c49e26f7c5ac507c5b1d97df05c42ec83e97e1f6e51",
+      "extract_size": 4096000000,
+      "icon": "https://packages.t3gemstone.org/images/icons/ubuntu.svg",
+      "image_download_sha256": "668a83c94264c17e9e549284b50ec1f9ec1c0a1d171ede3a92797a458eabc198",
+      "image_download_size": 807607316,
+      "init_format": "systemd",
+      "name": "T3 Gemstone OS (Desktop) For BeagleY-AI",
+      "release_date": "2026-03-26",
+      "url": "https://packages.t3gemstone.org/images/ubuntu/jammy/beagley-ai/gemstone-desktop-v2026.1-ubuntu-jammy-beagley-ai.img.xz"
+    },
+    {
+      "description": "A port of Ubuntu 22.04 (Jammy) with minimal packages (Recommended)",
+      "devices": [
+        "beagley-ai"
+      ],
+      "extract_sha256": "760661d3ebe538371f847a993a618a7d472d949d7c0aa218ff47ca0a01f0a3aa",
+      "extract_size": 1024000000,
+      "icon": "https://packages.t3gemstone.org/images/icons/ubuntu.svg",
+      "image_download_sha256": "f547d6de121ec80818f84b87cd0445759220d1d99c0009bdd447008634ec59f6",
+      "image_download_size": 138482004,
+      "init_format": "systemd",
+      "name": "T3 Gemstone OS (Minimal) For BeagleY-AI",
+      "release_date": "2026-03-26",
+      "url": "https://packages.t3gemstone.org/images/ubuntu/jammy/beagley-ai/gemstone-minimal-v2026.1-ubuntu-jammy-beagley-ai.img.xz"
+    },
+    {
+      "description": "A port of Ubuntu 22.04 (Jammy) with the T3 Gemstone Desktop (Recommended)",
+      "devices": [
+        "t3-gem-o1"
+      ],
+      "extract_sha256": "e8d3f47c51d43253fb061c901ca2c64b2f931bb7137f0d2dcb1c8196e5127fc9",
+      "extract_size": 4096000000,
+      "icon": "https://packages.t3gemstone.org/images/icons/ubuntu.svg",
+      "image_download_sha256": "e75921ee7773c45c557e77c54ac804172eda69eb50b16f9ac74ebacdb809404e",
+      "image_download_size": 808286704,
+      "init_format": "systemd",
+      "name": "T3 Gemstone OS (Desktop)",
+      "release_date": "2026-03-26",
+      "url": "https://packages.t3gemstone.org/images/ubuntu/jammy/t3-gem-o1/gemstone-desktop-v2026.1-ubuntu-jammy-t3-gem-o1.img.xz"
+    },
+    {
+      "description": "Pardus Images For T3 Gemstone",
+      "icon": "https://packages.t3gemstone.org/images/icons/pardus.png",
+      "name": "Pardus Images",
+      "random": true,
+      "subitems": [
+        {
+          "description": "A port of Pardus Yirmiüç with minimal packages",
+          "devices": [
+            "t3-gem-o1"
+          ],
+          "extract_sha256": "d1904b9f30729877201efc70058dd43b2c7dd5308c7baaee52da65e09d243ae7",
+          "extract_size": 1024000000,
+          "icon": "https://packages.t3gemstone.org/images/icons/pardus.png",
+          "image_download_sha256": "6a627f1b6de61465700405444464f7a0e5b00a4b8fb68172aaf9a12f2bede280",
+          "image_download_size": 162818904,
+          "init_format": "systemd",
+          "name": "T3 Gemstone OS (Minimal)",
+          "release_date": "2026-03-26",
+          "url": "https://packages.t3gemstone.org/images/pardus/yirmiuc-deb/t3-gem-o1/gemstone-minimal-v2026.1-pardus-yirmiuc-deb-t3-gem-o1.img.xz"
+        },
+        {
+          "description": "A port of Pardus Yirmiüç with the T3 Gemstone KIOSK",
+          "devices": [
+            "t3-gem-o1"
+          ],
+          "extract_sha256": "9e74c9c6069dbe00cfd86953eb56c98a67df58d975c31c71265ab59540af8176",
+          "extract_size": 4096000000,
+          "icon": "https://packages.t3gemstone.org/images/icons/pardus.png",
+          "image_download_sha256": "c4c8aea9d415dbbe2e74e312604aedec90b79058613347fbb6cdd4a8005e174a",
+          "image_download_size": 395212672,
+          "init_format": "systemd",
+          "name": "T3 Gemstone OS (Kiosk)",
+          "release_date": "2026-03-26",
+          "url": "https://packages.t3gemstone.org/images/pardus/yirmiuc-deb/t3-gem-o1/gemstone-kiosk-v2026.1-pardus-yirmiuc-deb-t3-gem-o1.img.xz"
+        },
+        {
+          "description": "A port of Pardus Yirmiüç with the T3 Gemstone Desktop",
+          "devices": [
+            "t3-gem-o1"
+          ],
+          "extract_sha256": "aa7aa0f6b31c4949e733296285ea71e2b661733184c2c3ab2facb8d42f4be773",
+          "extract_size": 4096000000,
+          "icon": "https://packages.t3gemstone.org/images/icons/pardus.png",
+          "image_download_sha256": "e9bd024bcfa973491fbb0a2642aadc9aed95ee419117d3a25daa73e954508ae2",
+          "image_download_size": 923477028,
+          "init_format": "systemd",
+          "name": "T3 Gemstone OS (Desktop)",
+          "release_date": "2026-03-26",
+          "url": "https://packages.t3gemstone.org/images/pardus/yirmiuc-deb/t3-gem-o1/gemstone-desktop-v2026.1-pardus-yirmiuc-deb-t3-gem-o1.img.xz"
+        },
+        {
+          "description": "A port of Pardus Yirmiüç with minimal packages",
+          "devices": [
+            "beagley-ai"
+          ],
+          "extract_sha256": "baf656939d8e62abbfa8d81c1b43775b693a7ccee50df48aa1a7c39f580cbe82",
+          "extract_size": 1024000000,
+          "icon": "https://packages.t3gemstone.org/images/icons/pardus.png",
+          "image_download_sha256": "3bc3842d394a244a4d8e92389cc37fff753e52705a0526fe13cf7e5198b389b6",
+          "image_download_size": 161267424,
+          "init_format": "systemd",
+          "name": "T3 Gemstone OS (Minimal) For BeagleY-AI",
+          "release_date": "2026-03-26",
+          "url": "https://packages.t3gemstone.org/images/pardus/yirmiuc-deb/beagley-ai/gemstone-minimal-v2026.1-pardus-yirmiuc-deb-beagley-ai.img.xz"
+        },
+        {
+          "description": "A port of Pardus Yirmiüç with the T3 Gemstone KIOSK",
+          "devices": [
+            "beagley-ai"
+          ],
+          "extract_sha256": "1ba341200fef2787e8e2571cf6fe57b5286e6f6681bf1bad2197468cd8bbd92c",
+          "extract_size": 4096000000,
+          "icon": "https://packages.t3gemstone.org/images/icons/pardus.png",
+          "image_download_sha256": "ab3a54e8bbbeb1e04d4edfdb3f7afebb3c963c70f76a18b13737aa12c81c5112",
+          "image_download_size": 393700792,
+          "init_format": "systemd",
+          "name": "T3 Gemstone OS (Kiosk) For BeagleY-AI",
+          "release_date": "2026-03-26",
+          "url": "https://packages.t3gemstone.org/images/pardus/yirmiuc-deb/beagley-ai/gemstone-kiosk-v2026.1-pardus-yirmiuc-deb-beagley-ai.img.xz"
+        },
+        {
+          "description": "A port of Pardus Yirmiüç with the T3 Gemstone Desktop",
+          "devices": [
+            "beagley-ai"
+          ],
+          "extract_sha256": "bba84ee2ba5f318b1a42de751ca59cc029db5610ee9b716d71dee621d473e2ae",
+          "extract_size": 4096000000,
+          "icon": "https://packages.t3gemstone.org/images/icons/pardus.png",
+          "image_download_sha256": "b141facaa3eb1c9d8b618bda8da60db802e4dafa32b3a9ae0b93b69f68bb6441",
+          "image_download_size": 920605652,
+          "init_format": "systemd",
+          "name": "T3 Gemstone OS (Desktop) For BeagleY-AI",
+          "release_date": "2026-03-26",
+          "url": "https://packages.t3gemstone.org/images/pardus/yirmiuc-deb/beagley-ai/gemstone-desktop-v2026.1-pardus-yirmiuc-deb-beagley-ai.img.xz"
+        },
+        {
+          "description": "A port of Pardus Yirmibeş with the T3 Gemstone Desktop",
+          "devices": [
+            "beagley-ai"
+          ],
+          "extract_sha256": "cf3bbd7905425441460cfe7f5f7bba3722151a07746ef66ba48cf6bfd43f51ca",
+          "extract_size": 16384000000,
+          "icon": "https://packages.t3gemstone.org/images/icons/pardus.png",
+          "image_download_sha256": "a3cf2fff09eb044e6918de049ad7e7ad53e28b20ac7dbf285cfcd006f3ab13a6",
+          "image_download_size": 981084620,
+          "init_format": "systemd",
+          "name": "T3 Gemstone OS (Desktop) For BeagleY-AI",
+          "release_date": "2026-06-08",
+          "url": "https://packages.t3gemstone.org/images/pardus/yirmibes-deb/beagley-ai/gemstone-desktop-v2026.1-pardus-yirmibes-beagley-ai.img.xz"
+        },
+        {
+          "description": "A port of Pardus Yirmibeş with the T3 Gemstone Desktop",
+          "devices": [
+            "t3-gem-o1"
+          ],
+          "extract_sha256": "d4a7aec8fe7885958b85029a34e858d5959ec0a53644adb452bd2e732e4b34f7",
+          "extract_size": 16384000000,
+          "icon": "https://packages.t3gemstone.org/images/icons/pardus.png",
+          "image_download_sha256": "40ec2e425944acd5e6100568de055508fe08d07877057a1cf483c9b3978cc0e3",
+          "image_download_size": 984630556,
+          "init_format": "systemd",
+          "name": "T3 Gemstone OS (Desktop)",
+          "release_date": "2026-06-08",
+          "url": "https://packages.t3gemstone.org/images/pardus/yirmibes-deb/t3-gem-o1/gemstone-desktop-v2026.1-pardus-yirmibes-t3-gem-o1.img.xz"
+        },
+        {
+          "description": "A port of Pardus Yirmibeş with the T3 Gemstone KIOSK",
+          "devices": [
+            "beagley-ai"
+          ],
+          "extract_sha256": "7839c0fb930d6e039c6adb0a7e05e9ff043fc90c8aa56b61778443d5df4f4b25",
+          "extract_size": 4096000000,
+          "icon": "https://packages.t3gemstone.org/images/icons/pardus.png",
+          "image_download_sha256": "e05a3674b7ad49f7e1aaa7d7ca168b5ddf089d01f33f9bfcf8649eb2493f8ce2",
+          "image_download_size": 320243712,
+          "init_format": "systemd",
+          "name": "T3 Gemstone OS (Kiosk) For BeagleY-AI",
+          "release_date": "2026-06-08",
+          "url": "https://packages.t3gemstone.org/images/pardus/yirmibes-deb/beagley-ai/gemstone-kiosk-v2026.1-pardus-yirmibes-beagley-ai.img.xz"
+        },
+        {
+          "description": "A port of Pardus Yirmibeş with the T3 Gemstone KIOSK",
+          "devices": [
+            "t3-gem-o1"
+          ],
+          "extract_sha256": "87b91edaf0cbf901eeb9399462728ec1a009b5ca97815aeebdc6c41655775172",
+          "extract_size": 4096000000,
+          "icon": "https://packages.t3gemstone.org/images/icons/pardus.png",
+          "image_download_sha256": "4559d81d971bd1e6c14055a9b1a34a850e55ea5ae7bcceaf4da6822c26f3e35d",
+          "image_download_size": 319198196,
+          "init_format": "systemd",
+          "name": "T3 Gemstone OS (Kiosk)",
+          "release_date": "2026-06-08",
+          "url": "https://packages.t3gemstone.org/images/pardus/yirmibes-deb/t3-gem-o1/gemstone-kiosk-v2026.1-pardus-yirmibes-t3-gem-o1.img.xz"
+        },
+        {
+          "description": "A port of Pardus Yirmibeş with minimal packages",
+          "devices": [
+            "beagley-ai"
+          ],
+          "extract_sha256": "b104277ba46ca94a0bb5f509d693d13099d0433a4bb2f7d01bb96cdfdab2c30c",
+          "extract_size": 1024000000,
+          "icon": "https://packages.t3gemstone.org/images/icons/pardus.png",
+          "image_download_sha256": "2b7440b1c525460e27f5c4fd19582657b3e49eb8b06b958686ec5223922421c5",
+          "image_download_size": 155515832,
+          "init_format": "systemd",
+          "name": "T3 Gemstone OS (Minimal) For BeagleY-AI",
+          "release_date": "2026-06-08",
+          "url": "https://packages.t3gemstone.org/images/pardus/yirmibes-deb/beagley-ai/gemstone-minimal-v2026.1-pardus-yirmibes-beagley-ai.img.xz"
+        },
+        {
+          "description": "A port of Pardus Yirmibeş with minimal packages",
+          "devices": [
+            "t3-gem-o1"
+          ],
+          "extract_sha256": "9aea647fc3164a1118505eabd9af03aaa0e302b548d772ed0904503c6a6dccad",
+          "extract_size": 1024000000,
+          "icon": "https://packages.t3gemstone.org/images/icons/pardus.png",
+          "image_download_sha256": "28dc98f4eaeaa846fc4c1ea8dc01acb6b6d6396823fe490580dcc56cbb954455",
+          "image_download_size": 155844276,
+          "init_format": "systemd",
+          "name": "T3 Gemstone OS (Minimal)",
+          "release_date": "2026-06-08",
+          "url": "https://packages.t3gemstone.org/images/pardus/yirmibes-deb/t3-gem-o1/gemstone-minimal-v2026.1-pardus-yirmibes-t3-gem-o1.img.xz"
+        }
+      ]
+    },
+    {
+      "description": "Ubuntu Images For T3 Gemstone",
+      "icon": "https://packages.t3gemstone.org/images/icons/ubuntu.svg",
+      "name": "Ubuntu Images",
+      "random": true,
+      "subitems": [
+        {
+          "description": "A port of Ubuntu 22.04 (Jammy) with minimal packages (Recommended)",
+          "devices": [
+            "beagley-ai"
+          ],
+          "extract_sha256": "760661d3ebe538371f847a993a618a7d472d949d7c0aa218ff47ca0a01f0a3aa",
+          "extract_size": 1024000000,
+          "icon": "https://packages.t3gemstone.org/images/icons/ubuntu.svg",
+          "image_download_sha256": "f547d6de121ec80818f84b87cd0445759220d1d99c0009bdd447008634ec59f6",
+          "image_download_size": 138482004,
+          "init_format": "systemd",
+          "name": "T3 Gemstone OS (Minimal) For BeagleY-AI",
+          "release_date": "2026-03-26",
+          "url": "https://packages.t3gemstone.org/images/ubuntu/jammy/beagley-ai/gemstone-minimal-v2026.1-ubuntu-jammy-beagley-ai.img.xz"
+        },
+        {
+          "description": "A port of Ubuntu 22.04 (Jammy) with the T3 Gemstone KIOSK",
+          "devices": [
+            "beagley-ai"
+          ],
+          "extract_sha256": "e1e9e32946f13f3a688d19764949e80d8cb7e3dc6ffb5bfd181275045160a96f",
+          "extract_size": 4096000000,
+          "icon": "https://packages.t3gemstone.org/images/icons/ubuntu.svg",
+          "image_download_sha256": "6c0efce0876451f7a7fc2763bee182d516766f3802a95fbbee87f4e2a8876023",
+          "image_download_size": 309360656,
+          "init_format": "systemd",
+          "name": "T3 Gemstone OS (Kiosk) For BeagleY-AI",
+          "release_date": "2026-03-26",
+          "url": "https://packages.t3gemstone.org/images/ubuntu/jammy/beagley-ai/gemstone-kiosk-v2026.1-ubuntu-jammy-beagley-ai.img.xz"
+        },
+        {
+          "description": "A port of Ubuntu 22.04 (Jammy) with the T3 Gemstone Desktop (Recommended)",
+          "devices": [
+            "beagley-ai"
+          ],
+          "extract_sha256": "33afbc809f8c39c4a7472c49e26f7c5ac507c5b1d97df05c42ec83e97e1f6e51",
+          "extract_size": 4096000000,
+          "icon": "https://packages.t3gemstone.org/images/icons/ubuntu.svg",
+          "image_download_sha256": "668a83c94264c17e9e549284b50ec1f9ec1c0a1d171ede3a92797a458eabc198",
+          "image_download_size": 807607316,
+          "init_format": "systemd",
+          "name": "T3 Gemstone OS (Desktop) For BeagleY-AI",
+          "release_date": "2026-03-26",
+          "url": "https://packages.t3gemstone.org/images/ubuntu/jammy/beagley-ai/gemstone-desktop-v2026.1-ubuntu-jammy-beagley-ai.img.xz"
+        },
+        {
+          "description": "A port of Ubuntu 22.04 (Jammy) with minimal packages (Recommended)",
+          "devices": [
+            "t3-gem-o1"
+          ],
+          "extract_sha256": "9c991802d2ceff5a80cfd3e822f9cd2f9730cee59759714ba7530c81a824c92d",
+          "extract_size": 1024000000,
+          "icon": "https://packages.t3gemstone.org/images/icons/ubuntu.svg",
+          "image_download_sha256": "13e237518eee97dead84f2d8009a6d875516e1ab2eb800c90fe44f5ff49774c7",
+          "image_download_size": 138737372,
+          "init_format": "systemd",
+          "name": "T3 Gemstone OS (Minimal)",
+          "release_date": "2026-03-26",
+          "url": "https://packages.t3gemstone.org/images/ubuntu/jammy/t3-gem-o1/gemstone-minimal-v2026.1-ubuntu-jammy-t3-gem-o1.img.xz"
+        },
+        {
+          "description": "A port of Ubuntu 22.04 (Jammy) with the T3 Gemstone KIOSK",
+          "devices": [
+            "t3-gem-o1"
+          ],
+          "extract_sha256": "b02cb029dd4b8b5fef5de819345211e1a08a06b0a7076bc3f618592ac4d466e9",
+          "extract_size": 4096000000,
+          "icon": "https://packages.t3gemstone.org/images/icons/ubuntu.svg",
+          "image_download_sha256": "ace3ef655333ac2244f39dadbcb32a7619915cd159b9fedf595d30825c9aa2c7",
+          "image_download_size": 311763872,
+          "init_format": "systemd",
+          "name": "T3 Gemstone OS (Kiosk)",
+          "release_date": "2026-03-26",
+          "url": "https://packages.t3gemstone.org/images/ubuntu/jammy/t3-gem-o1/gemstone-kiosk-v2026.1-ubuntu-jammy-t3-gem-o1.img.xz"
+        },
+        {
+          "description": "A port of Ubuntu 22.04 (Jammy) with the T3 Gemstone Desktop (Recommended)",
+          "devices": [
+            "t3-gem-o1"
+          ],
+          "extract_sha256": "e8d3f47c51d43253fb061c901ca2c64b2f931bb7137f0d2dcb1c8196e5127fc9",
+          "extract_size": 4096000000,
+          "icon": "https://packages.t3gemstone.org/images/icons/ubuntu.svg",
+          "image_download_sha256": "e75921ee7773c45c557e77c54ac804172eda69eb50b16f9ac74ebacdb809404e",
+          "image_download_size": 808286704,
+          "init_format": "systemd",
+          "name": "T3 Gemstone OS (Desktop)",
+          "release_date": "2026-03-26",
+          "url": "https://packages.t3gemstone.org/images/ubuntu/jammy/t3-gem-o1/gemstone-desktop-v2026.1-ubuntu-jammy-t3-gem-o1.img.xz"
+        },
+        {
+          "description": "A port of Ubuntu 24.04 (Noble) with the T3 Gemstone Desktop (Recommended)",
+          "devices": [
+            "beagley-ai"
+          ],
+          "extract_sha256": "268e82343cc1eb03c3eb0695a079ae56bf523800cf51ed21b21c2b2c3ad7266e",
+          "extract_size": 16384000000,
+          "icon": "https://packages.t3gemstone.org/images/icons/ubuntu.svg",
+          "image_download_sha256": "ca09465bdfe655bee704be2e738f277972800de2965a3fa0954d6372704ddf86",
+          "image_download_size": 870065544,
+          "init_format": "systemd",
+          "name": "T3 Gemstone OS (Desktop) For BeagleY-AI",
+          "release_date": "2026-06-08",
+          "url": "https://packages.t3gemstone.org/images/ubuntu/noble/beagley-ai/gemstone-desktop-v2026.1-ubuntu-noble-beagley-ai.img.xz"
+        },
+        {
+          "description": "A port of Ubuntu 24.04 (Noble) with the T3 Gemstone Desktop (Recommended)",
+          "devices": [
+            "t3-gem-o1"
+          ],
+          "extract_sha256": "24e73f3773c1d72697c702427e94e5507a9af2be12378f882c303dcd8b685008",
+          "extract_size": 16384000000,
+          "icon": "https://packages.t3gemstone.org/images/icons/ubuntu.svg",
+          "image_download_sha256": "356830a32d2462029dcc246f11fa8bc8d5dc9a492d348385f2ac6f7ae0e9d6b3",
+          "image_download_size": 872773516,
+          "init_format": "systemd",
+          "name": "T3 Gemstone OS (Desktop)",
+          "release_date": "2026-06-08",
+          "url": "https://packages.t3gemstone.org/images/ubuntu/noble/t3-gem-o1/gemstone-desktop-v2026.1-ubuntu-noble-t3-gem-o1.img.xz"
+        },
+        {
+          "description": "A port of Ubuntu 24.04 (Noble) with the T3 Gemstone KIOSK",
+          "devices": [
+            "beagley-ai"
+          ],
+          "extract_sha256": "58f3fd5019904187984219895222ea10ad412471a63b4ed4e0f859c1c5a1878a",
+          "extract_size": 4096000000,
+          "icon": "https://packages.t3gemstone.org/images/icons/ubuntu.svg",
+          "image_download_sha256": "93cd2752b122971c3c2f216e4f13f7f1f5cfb29162205d04686097fb10d7d689",
+          "image_download_size": 276955584,
+          "init_format": "systemd",
+          "name": "T3 Gemstone OS (Kiosk) For BeagleY-AI",
+          "release_date": "2026-06-08",
+          "url": "https://packages.t3gemstone.org/images/ubuntu/noble/beagley-ai/gemstone-kiosk-v2026.1-ubuntu-noble-beagley-ai.img.xz"
+        },
+        {
+          "description": "A port of Ubuntu 24.04 (Noble) with the T3 Gemstone KIOSK",
+          "devices": [
+            "t3-gem-o1"
+          ],
+          "extract_sha256": "20b8add2a4385f3f1d24d8402f3daaf79afb1ee1a362b2779df9dce850a538b7",
+          "extract_size": 4096000000,
+          "icon": "https://packages.t3gemstone.org/images/icons/ubuntu.svg",
+          "image_download_sha256": "020164936948f5ce1a7c6804a8f1e41bcb0de93727bacc9cc64c08e35b5fa2b3",
+          "image_download_size": 274234416,
+          "init_format": "systemd",
+          "name": "T3 Gemstone OS (Kiosk)",
+          "release_date": "2026-06-08",
+          "url": "https://packages.t3gemstone.org/images/ubuntu/noble/t3-gem-o1/gemstone-kiosk-v2026.1-ubuntu-noble-t3-gem-o1.img.xz"
+        },
+        {
+          "description": "A port of Ubuntu 24.04 (Noble) with minimal packages (Recommended)",
+          "devices": [
+            "beagley-ai"
+          ],
+          "extract_sha256": "2b33dc51f837f92775524c3cc833c4caabe0147f78250f9401b9646479d7a129",
+          "extract_size": 1024000000,
+          "icon": "https://packages.t3gemstone.org/images/icons/ubuntu.svg",
+          "image_download_sha256": "071de3bad6ade4b41ff1e9e0deb56f91d085281a56f20943a7a83d9465050ca2",
+          "image_download_size": 131388056,
+          "init_format": "systemd",
+          "name": "T3 Gemstone OS (Minimal) For BeagleY-AI",
+          "release_date": "2026-06-08",
+          "url": "https://packages.t3gemstone.org/images/ubuntu/noble/beagley-ai/gemstone-minimal-v2026.1-ubuntu-noble-beagley-ai.img.xz"
+        },
+        {
+          "description": "A port of Ubuntu 24.04 (Noble) with minimal packages (Recommended)",
+          "devices": [
+            "t3-gem-o1"
+          ],
+          "extract_sha256": "fa695f03bfa874982a4842a156faa4dd3c7354f963b646b5c8aaffc61b795d04",
+          "extract_size": 1024000000,
+          "icon": "https://packages.t3gemstone.org/images/icons/ubuntu.svg",
+          "image_download_sha256": "97e4b445e2ba27bc8a86ab3a141a362ecaa1cfbc11cecc6cf5e131df5d0d7ec3",
+          "image_download_size": 132728016,
+          "init_format": "systemd",
+          "name": "T3 Gemstone OS (Minimal)",
+          "release_date": "2026-06-08",
+          "url": "https://packages.t3gemstone.org/images/ubuntu/noble/t3-gem-o1/gemstone-minimal-v2026.1-ubuntu-noble-t3-gem-o1.img.xz"
+        }
+      ]
+    },
+    {
+      "description": "Debian Images For T3 Gemstone",
+      "icon": "https://packages.t3gemstone.org/images/icons/debian.png",
+      "name": "Debian Images",
+      "random": true,
+      "subitems": [
+        {
+          "description": "A port of Debian Bookworm with minimal packages",
+          "devices": [
+            "beagley-ai"
+          ],
+          "extract_sha256": "34685706e138446a20847b4114035f021588746cfd344a7e5efdaf357c52ca72",
+          "extract_size": 1024000000,
+          "icon": "https://packages.t3gemstone.org/images/icons/debian.png",
+          "image_download_sha256": "b3345fc6e140508b9c54144bacecfbea254b4557f89b6b28fd10ccfb377bbc76",
+          "image_download_size": 160542220,
+          "init_format": "systemd",
+          "name": "T3 Gemstone OS (Minimal) For BeagleY-AI",
+          "release_date": "2026-03-26",
+          "url": "https://packages.t3gemstone.org/images/debian/bookworm/beagley-ai/gemstone-minimal-v2026.1-debian-bookworm-beagley-ai.img.xz"
+        },
+        {
+          "description": "A port of Debian Bookworm with the T3 Gemstone KIOSK",
+          "devices": [
+            "beagley-ai"
+          ],
+          "extract_sha256": "3b09d717617b0f79485d0b476062fff915adc291e59abfd2e2e591e3607b7838",
+          "extract_size": 4096000000,
+          "icon": "https://packages.t3gemstone.org/images/icons/debian.png",
+          "image_download_sha256": "a5602682e0b6667afaf91f900e1b9426622d34137aa68972604abd64ec15d582",
+          "image_download_size": 393920964,
+          "init_format": "systemd",
+          "name": "T3 Gemstone OS (Kiosk) For BeagleY-AI",
+          "release_date": "2026-03-26",
+          "url": "https://packages.t3gemstone.org/images/debian/bookworm/beagley-ai/gemstone-kiosk-v2026.1-debian-bookworm-beagley-ai.img.xz"
+        },
+        {
+          "description": "A port of Debian Bookworm with the T3 Gemstone Desktop",
+          "devices": [
+            "beagley-ai"
+          ],
+          "extract_sha256": "9fd1d709fd19a5bfe2490fb78315f62d0901ff0abb1e4f46a146ee7d3f287f4b",
+          "extract_size": 4096000000,
+          "icon": "https://packages.t3gemstone.org/images/icons/debian.png",
+          "image_download_sha256": "5d1f1aaf3a145c35834dee8666eb3ce0a9f6b8c13d7406e0a5ebf0be57b8a70a",
+          "image_download_size": 923482088,
+          "init_format": "systemd",
+          "name": "T3 Gemstone OS (Desktop) For BeagleY-AI",
+          "release_date": "2026-03-26",
+          "url": "https://packages.t3gemstone.org/images/debian/bookworm/beagley-ai/gemstone-desktop-v2026.1-debian-bookworm-beagley-ai.img.xz"
+        },
+        {
+          "description": "A port of Debian Bookworm with minimal packages",
+          "devices": [
+            "t3-gem-o1"
+          ],
+          "extract_sha256": "cead0fdd9595ec1a3ff91783f12a67fed3daddbe36e0a356c5992d5aa0b9f604",
+          "extract_size": 1024000000,
+          "icon": "https://packages.t3gemstone.org/images/icons/debian.png",
+          "image_download_sha256": "0f0f8edef63943c3ca750d9027915efdb777e943f028773c6c0e491f73b4bc82",
+          "image_download_size": 160977556,
+          "init_format": "systemd",
+          "name": "T3 Gemstone OS (Minimal)",
+          "release_date": "2026-03-26",
+          "url": "https://packages.t3gemstone.org/images/debian/bookworm/t3-gem-o1/gemstone-minimal-v2026.1-debian-bookworm-t3-gem-o1.img.xz"
+        },
+        {
+          "description": "A port of Debian Bookworm with the T3 Gemstone KIOSK",
+          "devices": [
+            "t3-gem-o1"
+          ],
+          "extract_sha256": "445be86c455ed9eeb1664d8e93061ff99c7fb0ba3db7889601e56acbe95b3bd5",
+          "extract_size": 4096000000,
+          "icon": "https://packages.t3gemstone.org/images/icons/debian.png",
+          "image_download_sha256": "c9e1588ff14425e987a96ccedc238cbe62ad91c3c6c8161b1c269944abc08c78",
+          "image_download_size": 393133200,
+          "init_format": "systemd",
+          "name": "T3 Gemstone OS (Kiosk)",
+          "release_date": "2026-03-26",
+          "url": "https://packages.t3gemstone.org/images/debian/bookworm/t3-gem-o1/gemstone-kiosk-v2026.1-debian-bookworm-t3-gem-o1.img.xz"
+        },
+        {
+          "description": "A port of Debian Bookworm with the T3 Gemstone Desktop",
+          "devices": [
+            "t3-gem-o1"
+          ],
+          "extract_sha256": "a7461e63e36aae9de00b93fb40205b18bbeb10ceee6e8191f1dea7edbb169327",
+          "extract_size": 4096000000,
+          "icon": "https://packages.t3gemstone.org/images/icons/debian.png",
+          "image_download_sha256": "5c4e282e63928697dd554de3d6d7b457776179c3c1e98b6c78a6b14306cf1f30",
+          "image_download_size": 923820016,
+          "init_format": "systemd",
+          "name": "T3 Gemstone OS (Desktop)",
+          "release_date": "2026-03-26",
+          "url": "https://packages.t3gemstone.org/images/debian/bookworm/t3-gem-o1/gemstone-desktop-v2026.1-debian-bookworm-t3-gem-o1.img.xz"
+        }
+      ]
+    }
+  ]
+}
+

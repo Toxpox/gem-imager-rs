@@ -1,0 +1,1623 @@
+   Compiling strsim v0.11.1
+   Compiling once_cell_polyfill v1.70.2
+   Compiling anstyle v1.0.14
+   Compiling utf8parse v0.2.2
+   Compiling is_terminal_polyfill v1.70.2
+   Compiling colorchoice v1.0.5
+   Compiling clap_lex v1.1.0
+   Compiling windows-sys v0.61.2
+   Compiling serde v1.0.229
+   Compiling tracing v0.1.44
+   Compiling bb-helper v1.0.13 (C:\Users\Toxpo\Desktop\T3 Gemstone\imager-fork\bb-imager-rs\bb-helper)
+   Compiling liblzma-sys v0.4.7
+   Compiling dfu-core v0.11.1
+   Compiling bin_file v0.2.1
+   Compiling fatfs v0.3.6
+   Compiling encode_unicode v1.0.0
+   Compiling portable-atomic v1.13.1
+   Compiling unit-prefix v0.5.2
+   Compiling smallvec v1.15.2
+   Compiling anstyle-parse v1.0.0
+   Compiling darling_core v0.21.3
+   Compiling dfu-libusb v0.6.2
+   Compiling bb-flasher-dfu v1.0.13 (C:\Users\Toxpo\Desktop\T3 Gemstone\imager-fork\bb-imager-rs\bb-flasher-dfu)
+   Compiling serde-big-array v0.5.1
+   Compiling quick-xml v0.41.0
+   Compiling bincode v2.0.1
+   Compiling yaml_serde v0.10.4
+   Compiling bb-flasher-mspm0 v1.0.13 (C:\Users\Toxpo\Desktop\T3 Gemstone\imager-fork\bb-imager-rs\bb-flasher-mspm0)
+   Compiling bb-flasher-bcf v1.0.2 (C:\Users\Toxpo\Desktop\T3 Gemstone\imager-fork\bb-imager-rs\bb-flasher-bcf)
+   Compiling anstyle-wincon v3.0.11
+   Compiling anstyle-query v1.1.5
+   Compiling anstream v1.0.0
+   Compiling clap_builder v4.6.2
+   Compiling tempfile v3.27.0
+   Compiling console v0.16.4
+   Compiling nu-ansi-term v0.50.3
+   Compiling tracing-subscriber v0.3.23
+   Compiling indicatif v0.18.6
+   Compiling mbrman v0.6.1
+   Compiling bb-bmap-parser v0.1.1 (C:\Users\Toxpo\Desktop\T3 Gemstone\imager-fork\bb-imager-rs\bb-bmap-parser)
+   Compiling darling_macro v0.21.3
+   Compiling bb-flasher-sd v3.0.0 (C:\Users\Toxpo\Desktop\T3 Gemstone\imager-fork\bb-imager-rs\bb-flasher-sd)
+   Compiling darling v0.21.3
+   Compiling ownable-macro v0.6.3
+   Compiling clap v4.6.4
+   Compiling clap_mangen v0.3.0
+   Compiling clap_complete v4.6.8
+   Compiling liblzma v0.4.7
+   Compiling ownable v0.6.2
+   Compiling rc-zip v5.4.1
+   Compiling bb-imager-cli v1.0.13 (C:\Users\Toxpo\Desktop\T3 Gemstone\imager-fork\bb-imager-rs\bb-imager-cli)
+   Compiling rc-zip-sync v4.4.2
+   Compiling bb-flasher v0.1.0 (C:\Users\Toxpo\Desktop\T3 Gemstone\imager-fork\bb-imager-rs\bb-flasher)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 19.04s
+     Running unittests src\lib.rs (target\debug\deps\bb_imager_cli-773a7e7a3a87b687.exe)
+
+running 16 tests
+test tests::progress_msg_maps_each_status ... ok
+test tests::local_string_file_missing_path_errors ... ok
+test tests::stage_msg_prefixes_stage_number ... ok
+test tests::check_macos_device_path_is_identity_off_macos ... ok
+test cli::tests::format_and_verbose_parse ... ok
+test cli::tests::flash_sd_minimal_parses ... ok
+test cli::tests::sd_boot_update_parses ... ok
+test cli::tests::flash_sd_customization_flags_parse ... ok
+test cli::tests::list_destinations_flags_parse ... ok
+test cli::tests::unknown_subcommand_is_rejected ... ok
+test cli::tests::cli_definition_is_valid ... ok
+test cli::tests::generate_completion_parses_shell ... ok
+test cli::tests::pb2_mspm0_variant_parses ... ok
+test cli::tests::user_name_requires_password ... ok
+test cli::tests::wifi_ssid_requires_password ... ok
+test tests::local_string_file_reads_contents ... ok
+
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running unittests src\main.rs (target\debug\deps\bb_imager_cli-6b84ff9bd25e948d.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\commands.rs (target\debug\deps\commands-8b0b7ebee97693e7.exe)
+
+running 4 tests
+/sys/class/firmware/mspm0l1105/
+/sys/class/firmware/mspm0l1105/
+_bb-imager-cli() {
+    local i cur prev opts cmd
+    COMPREPLY=()
+    if [[ "${BASH_VERSINFO[0]}" -ge 4 ]]; then
+        cur="$2"
+    else
+        cur="${COMP_WORDS[COMP_CWORD]}"
+    fi
+    prev="$3"
+    cmd=""
+    opts=""
+
+    for i in "${COMP_WORDS[@]:0:COMP_CWORD}"
+    do
+        case "${cmd},${i}" in
+            ",$1")
+                cmd="bb__imager__cli"
+                ;;
+            bb__imager__cli,flash)
+                cmd="bb__imager__cli__subcmd__flash"
+                ;;
+            bb__imager__cli,format)
+                cmd="bb__imager__cli__subcmd__format"
+                ;;
+            bb__imager__cli,generate-completion)
+                cmd="bb__imager__cli__subcmd__generate__subcmd__completion"
+                ;;
+            bb__imager__cli,help)
+                cmd="bb__imager__cli__subcmd__help"
+                ;;
+            bb__imager__cli,list-destinations)
+                cmd="bb__imager__cli__subcmd__list__subcmd__destinations"
+                ;;
+            bb__imager__cli__subcmd__flash,bcf)
+                cmd="bb__imager__cli__subcmd__flash__subcmd__bcf"
+                ;;
+            bb__imager__cli__subcmd__flash,dfu)
+                cmd="bb__imager__cli__subcmd__flash__subcmd__dfu"
+                ;;
+            bb__imager__cli__subcmd__flash,help)
+                cmd="bb__imager__cli__subcmd__flash__subcmd__help"
+                ;;
+            bb__imager__cli__subcmd__flash,pb2-mspm0)
+                cmd="bb__imager__cli__subcmd__flash__subcmd__pb2__subcmd__mspm0"
+                ;;
+            bb__imager__cli__subcmd__flash,sd)
+                cmd="bb__imager__cli__subcmd__flash__subcmd__sd"
+                ;;
+            bb__imager__cli__subcmd__flash,sd-boot-update)
+                cmd="bb__imager__cli__subcmd__flash__subcmd__sd__subcmd__boot__subcmd__update"
+                ;;
+            bb__imager__cli__subcmd__flash,zepto)
+                cmd="bb__imager__cli__subcmd__flash__subcmd__zepto"
+                ;;
+            bb__imager__cli__subcmd__flash__subcmd__help,bcf)
+                cmd="bb__imager__cli__subcmd__flash__subcmd__help__subcmd__bcf"
+                ;;
+            bb__imager__cli__subcmd__flash__subcmd__help,dfu)
+                cmd="bb__imager__cli__subcmd__flash__subcmd__help__subcmd__dfu"
+                ;;
+            bb__imager__cli__subcmd__flash__subcmd__help,help)
+                cmd="bb__imager__cli__subcmd__flash__subcmd__help__subcmd__help"
+                ;;
+            bb__imager__cli__subcmd__flash__subcmd__help,pb2-mspm0)
+                cmd="bb__imager__cli__subcmd__flash__subcmd__help__subcmd__pb2__subcmd__mspm0"
+                ;;
+            bb__imager__cli__subcmd__flash__subcmd__help,sd)
+                cmd="bb__imager__cli__subcmd__flash__subcmd__help__subcmd__sd"
+                ;;
+            bb__imager__cli__subcmd__flash__subcmd__help,sd-boot-update)
+                cmd="bb__imager__cli__subcmd__flash__subcmd__help__subcmd__sd__subcmd__boot__subcmd__update"
+                ;;
+            bb__imager__cli__subcmd__flash__subcmd__help,zepto)
+                cmd="bb__imager__cli__subcmd__flash__subcmd__help__subcmd__zepto"
+                ;;
+            bb__imager__cli__subcmd__help,flash)
+                cmd="bb__imager__cli__subcmd__help__subcmd__flash"
+                ;;
+            bb__imager__cli__subcmd__help,format)
+                cmd="bb__imager__cli__subcmd__help__subcmd__format"
+                ;;
+            bb__imager__cli__subcmd__help,generate-completion)
+                cmd="bb__imager__cli__subcmd__help__subcmd__generate__subcmd__completion"
+                ;;
+            bb__imager__cli__subcmd__help,help)
+                cmd="bb__imager__cli__subcmd__help__subcmd__help"
+                ;;
+            bb__imager__cli__subcmd__help,list-destinations)
+                cmd="bb__imager__cli__subcmd__help__subcmd__list__subcmd__destinations"
+                ;;
+            bb__imager__cli__subcmd__help__subcmd__flash,bcf)
+                cmd="bb__imager__cli__subcmd__help__subcmd__flash__subcmd__bcf"
+                ;;
+            bb__imager__cli__subcmd__help__subcmd__flash,dfu)
+                cmd="bb__imager__cli__subcmd__help__subcmd__flash__subcmd__dfu"
+                ;;
+            bb__imager__cli__subcmd__help__subcmd__flash,pb2-mspm0)
+                cmd="bb__imager__cli__subcmd__help__subcmd__flash__subcmd__pb2__subcmd__mspm0"
+                ;;
+            bb__imager__cli__subcmd__help__subcmd__flash,sd)
+                cmd="bb__imager__cli__subcmd__help__subcmd__flash__subcmd__sd"
+                ;;
+            bb__imager__cli__subcmd__help__subcmd__flash,sd-boot-update)
+                cmd="bb__imager__cli__subcmd__help__subcmd__flash__subcmd__sd__subcmd__boot__subcmd__update"
+                ;;
+            bb__imager__cli__subcmd__help__subcmd__flash,zepto)
+                cmd="bb__imager__cli__subcmd__help__subcmd__flash__subcmd__zepto"
+                ;;
+            *)
+                ;;
+        esac
+    done
+
+    case "${cmd}" in
+        bb__imager__cli)
+            opts="-h -V --verbose --help --version flash list-destinations format generate-completion help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 1 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        bb__subcmd__imager__subcmd__cli__subcmd__flash)
+            opts="-h --quiet --help bcf sd sd-boot-update pb2-mspm0 dfu zepto help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        bb__subcmd__imager__subcmd__cli__subcmd__flash__subcmd__bcf)
+            opts="-h --no-verify --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        bb__subcmd__imager__subcmd__cli__subcmd__flash__subcmd__dfu)
+            opts="-h --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        bb__subcmd__imager__subcmd__cli__subcmd__flash__subcmd__help)
+            opts="bcf sd sd-boot-update pb2-mspm0 dfu zepto help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        bb__subcmd__imager__subcmd__cli__subcmd__flash__subcmd__help__subcmd__bcf)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        bb__subcmd__imager__subcmd__cli__subcmd__flash__subcmd__help__subcmd__dfu)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        bb__subcmd__imager__subcmd__cli__subcmd__flash__subcmd__help__subcmd__help)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        bb__subcmd__imager__subcmd__cli__subcmd__flash__subcmd__help__subcmd__pb2__subcmd__mspm0)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        bb__subcmd__imager__subcmd__cli__subcmd__flash__subcmd__help__subcmd__sd)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        bb__subcmd__imager__subcmd__cli__subcmd__flash__subcmd__help__subcmd__sd__subcmd__boot__subcmd__update)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        bb__subcmd__imager__subcmd__cli__subcmd__flash__subcmd__help__subcmd__zepto)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        bb__subcmd__imager__subcmd__cli__subcmd__flash__subcmd__pb2__subcmd__mspm0)
+            opts="-h --no-eeprom --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        bb__subcmd__imager__subcmd__cli__subcmd__flash__subcmd__sd)
+            opts="-h --hostname --timezone --keymap --user-name --user-password --wifi-ssid --wifi-password --ssh-key --usb-enable-dhcp --bmap --cloud-init --sysconfig --file-destination --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --hostname)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --timezone)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --keymap)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --user-name)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --user-password)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --wifi-ssid)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --wifi-password)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --ssh-key)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --bmap)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        bb__subcmd__imager__subcmd__cli__subcmd__flash__subcmd__sd__subcmd__boot__subcmd__update)
+            opts="-h --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        bb__subcmd__imager__subcmd__cli__subcmd__flash__subcmd__zepto)
+            opts="-h --no-verify --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        bb__subcmd__imager__subcmd__cli__subcmd__format)
+            opts="-h --quiet --help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        bb__subcmd__imager__subcmd__cli__subcmd__generate__subcmd__completion)
+            opts="-h --help bash elvish fish powershell zsh"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        bb__subcmd__imager__subcmd__cli__subcmd__help)
+            opts="flash list-destinations format generate-completion help"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        bb__subcmd__imager__subcmd__cli__subcmd__help__subcmd__flash)
+            opts="bcf sd sd-boot-update pb2-mspm0 dfu zepto"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        bb__subcmd__imager__subcmd__cli__subcmd__help__subcmd__flash__subcmd__bcf)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        bb__subcmd__imager__subcmd__cli__subcmd__help__subcmd__flash__subcmd__dfu)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        bb__subcmd__imager__subcmd__cli__subcmd__help__subcmd__flash__subcmd__pb2__subcmd__mspm0)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        bb__subcmd__imager__subcmd__cli__subcmd__help__subcmd__flash__subcmd__sd)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        bb__subcmd__imager__subcmd__cli__subcmd__help__subcmd__flash__subcmd__sd__subcmd__boot__subcmd__update)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        bb__subcmd__imager__subcmd__cli__subcmd__help__subcmd__flash__subcmd__zepto)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 4 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        bb__subcmd__imager__subcmd__cli__subcmd__help__subcmd__format)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        bb__subcmd__imager__subcmd__cli__subcmd__help__subcmd__generate__subcmd__completion)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        bb__subcmd__imager__subcmd__cli__subcmd__help__subcmd__help)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        bb__subcmd__imager__subcmd__cli__subcmd__help__subcmd__list__subcmd__destinations)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        bb__subcmd__imager__subcmd__cli__subcmd__list__subcmd__destinations)
+            opts="-h --no-frills --no-filter --help bcf sd pb2-mspm0 dfu zepto"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+    esac
+}
+
+if [[ "${BASH_VERSINFO[0]}" -eq 4 && "${BASH_VERSINFO[1]}" -ge 4 || "${BASH_VERSINFO[0]}" -gt 4 ]]; then
+    complete -F _bb-imager-cli -o nosort -o bashdefault -o default bb-imager-cli
+else
+    complete -F _bb-imager-cli -o bashdefault -o default bb-imager-cli
+fi
+
+use builtin;
+use str;
+
+set edit:completion:arg-completer[bb-imager-cli] = {|@words|
+    fn spaces {|n|
+        builtin:repeat $n ' ' | str:join ''
+    }
+    fn cand {|text desc|
+        edit:complex-candidate $text &display=$text' '(spaces (- 14 (wcswidth $text)))$desc
+    }
+    var command = 'bb-imager-cli'
+    for word $words[1..-1] {
+        if (str:has-prefix $word '-') {
+            break
+        }
+        set command = $command';'$word
+    }
+    var completions = [
+        &'bb-imager-cli'= {
+            cand --verbose 'Enable more logging'
+            cand -h 'Print help'
+            cand --help 'Print help'
+            cand -V 'Print version'
+            cand --version 'Print version'
+            cand flash 'Command to flash an image to a specific destination'
+            cand list-destinations 'Command to list available destinations for flashing based on the selected target'
+            cand format 'Command to format SD Card'
+            cand generate-completion 'Command to generate shell completion'
+            cand help 'Print this message or the help of the given subcommand(s)'
+        }
+        &'bb-imager-cli;flash'= {
+            cand --quiet 'Suppress standard output messages for a quieter experience'
+            cand -h 'Print help'
+            cand --help 'Print help'
+            cand bcf 'Flash BeagleConnect Freedom'
+            cand sd 'Flash an SD card with customizable settings for BeagleBoard devices'
+            cand sd-boot-update 'Update boot partition with contents from archive'
+            cand pb2-mspm0 'Flash MSPM0 on Pocketbeagle2'
+            cand dfu 'dfu'
+            cand zepto 'Flash Zepto'
+            cand help 'Print this message or the help of the given subcommand(s)'
+        }
+        &'bb-imager-cli;flash;bcf'= {
+            cand --no-verify 'Disable checksum verification after flashing to speed up the process'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'bb-imager-cli;flash;sd'= {
+            cand --hostname 'Set a custom hostname for the device (e.g., "beaglebone")'
+            cand --timezone 'Set the timezone for the device (e.g., "America/New_York")'
+            cand --keymap 'Set the keyboard layout/keymap (e.g., "us" for the US layout)'
+            cand --user-name 'Set a username for the default user. Cannot be `root`. Requires `user_password`. Required to enter GUI session due to regulatory requirements.'
+            cand --user-password 'Set a password for the default user. Requires `user_name`. Required to enter GUI session due to regulatory requirements.'
+            cand --wifi-ssid 'Configure a Wi-Fi SSID for network access. Requires `wifi_password`'
+            cand --wifi-password 'Set the password for the specified Wi-Fi SSID. Requires `wifi_ssid`'
+            cand --ssh-key 'Set SSH public key for authentication'
+            cand --bmap 'Provide the bmap file for the image'
+            cand --usb-enable-dhcp 'Enable USB DHCP'
+            cand --cloud-init 'Generate clound-init config'
+            cand --sysconfig 'Generate sysconfig. Currently, sysconfig will be generated regardless if this flag is provides. However, this will change in future. So best to explicitly set the flag'
+            cand --file-destination 'The destination is a file instead of SD Card'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'bb-imager-cli;flash;sd-boot-update'= {
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'bb-imager-cli;flash;pb2-mspm0'= {
+            cand --no-eeprom 'Do not persist EEPROM contents'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'bb-imager-cli;flash;dfu'= {
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'bb-imager-cli;flash;zepto'= {
+            cand --no-verify 'Disable checksum verification after flashing to speed up the process'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'bb-imager-cli;flash;help'= {
+            cand bcf 'Flash BeagleConnect Freedom'
+            cand sd 'Flash an SD card with customizable settings for BeagleBoard devices'
+            cand sd-boot-update 'Update boot partition with contents from archive'
+            cand pb2-mspm0 'Flash MSPM0 on Pocketbeagle2'
+            cand dfu 'dfu'
+            cand zepto 'Flash Zepto'
+            cand help 'Print this message or the help of the given subcommand(s)'
+        }
+        &'bb-imager-cli;flash;help;bcf'= {
+        }
+        &'bb-imager-cli;flash;help;sd'= {
+        }
+        &'bb-imager-cli;flash;help;sd-boot-update'= {
+        }
+        &'bb-imager-cli;flash;help;pb2-mspm0'= {
+        }
+        &'bb-imager-cli;flash;help;dfu'= {
+        }
+        &'bb-imager-cli;flash;help;zepto'= {
+        }
+        &'bb-imager-cli;flash;help;help'= {
+        }
+        &'bb-imager-cli;list-destinations'= {
+            cand --no-frills 'Only print paths seperated by newline'
+            cand --no-filter 'Show all possible destinations without any sanity filters. Can be used when a device is not visible due to incorrect reporting by OS'
+            cand -h 'Print help (see more with ''--help'')'
+            cand --help 'Print help (see more with ''--help'')'
+        }
+        &'bb-imager-cli;format'= {
+            cand --quiet 'Suppress standard output messages for a quieter experience'
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'bb-imager-cli;generate-completion'= {
+            cand -h 'Print help'
+            cand --help 'Print help'
+        }
+        &'bb-imager-cli;help'= {
+            cand flash 'Command to flash an image to a specific destination'
+            cand list-destinations 'Command to list available destinations for flashing based on the selected target'
+            cand format 'Command to format SD Card'
+            cand generate-completion 'Command to generate shell completion'
+            cand help 'Print this message or the help of the given subcommand(s)'
+        }
+        &'bb-imager-cli;help;flash'= {
+            cand bcf 'Flash BeagleConnect Freedom'
+            cand sd 'Flash an SD card with customizable settings for BeagleBoard devices'
+            cand sd-boot-update 'Update boot partition with contents from archive'
+            cand pb2-mspm0 'Flash MSPM0 on Pocketbeagle2'
+            cand dfu 'dfu'
+            cand zepto 'Flash Zepto'
+        }
+        &'bb-imager-cli;help;flash;bcf'= {
+        }
+        &'bb-imager-cli;help;flash;sd'= {
+        }
+        &'bb-imager-cli;help;flash;sd-boot-update'= {
+        }
+        &'bb-imager-cli;help;flash;pb2-mspm0'= {
+        }
+        &'bb-imager-cli;help;flash;dfu'= {
+        }
+        &'bb-imager-cli;help;flash;zepto'= {
+        }
+        &'bb-imager-cli;help;list-destinations'= {
+        }
+        &'bb-imager-cli;help;format'= {
+        }
+        &'bb-imager-cli;help;generate-completion'= {
+        }
+        &'bb-imager-cli;help;help'= {
+        }
+    ]
+    $completions[$command]
+}
+test list_destinations_pb2_mspm0_runs ... ok
+# Print an optspec for argparse to handle cmd's options that are independent of any subcommand.
+function __fish_bb_imager_cli_global_optspecs
+    string join \n verbose h/help V/version
+end
+
+function __fish_bb_imager_cli_needs_command
+    # Figure out if the current invocation already has a command.
+    set -l cmd (commandline -opc)
+    set -e cmd[1]
+    argparse -s (__fish_bb_imager_cli_global_optspecs) -- $cmd 2>/dev/null
+    or return
+    if set -q argv[1]
+        # Also print the command, so this can be used to figure out what it is.
+        echo $argv[1]
+        return 1
+    end
+    return 0
+end
+
+function __fish_bb_imager_cli_using_subcommand
+    set -l cmd (__fish_bb_imager_cli_needs_command)
+    test -z "$cmd"
+    and return 1
+    contains -- $cmd[1] $argv
+end
+
+complete -c bb-imager-cli -n "__fish_bb_imager_cli_needs_command" -l verbose -d 'Enable more logging'
+complete -c bb-imager-cli -n "__fish_bb_imager_cli_needs_command" -s h -l help -d 'Print help'
+complete -c bb-imager-cli -n "__fish_bb_imager_cli_needs_command" -s V -l version -d 'Print version'
+complete -c bb-imager-cli -n "__fish_bb_imager_cli_needs_command" -f -a "flash" -d 'Command to flash an image to a specific destination'
+complete -c bb-imager-cli -n "__fish_bb_imager_cli_needs_command" -f -a "list-destinations" -d 'Command to list available destinations for flashing based on the selected target'
+complete -c bb-imager-cli -n "__fish_bb_imager_cli_needs_command" -f -a "format" -d 'Command to format SD Card'
+complete -c bb-imager-cli -n "__fish_bb_imager_cli_needs_command" -f -a "generate-completion" -d 'Command to generate shell completion'
+complete -c bb-imager-cli -n "__fish_bb_imager_cli_needs_command" -f -a "help" -d 'Print this message or the help of the given subcommand(s)'
+complete -c bb-imager-cli -n "__fish_bb_imager_cli_using_subcommand flash; and not __fish_seen_subcommand_from bcf sd sd-boot-update pb2-mspm0 dfu zepto help" -l quiet -d 'Suppress standard output messages for a quieter experience'
+complete -c bb-imager-cli -n "__fish_bb_imager_cli_using_subcommand flash; and not __fish_seen_subcommand_from bcf sd sd-boot-update pb2-mspm0 dfu zepto help" -s h -l help -d 'Print help'
+complete -c bb-imager-cli -n "__fish_bb_imager_cli_using_subcommand flash; and not __fish_seen_subcommand_from bcf sd sd-boot-update pb2-mspm0 dfu zepto help" -f -a "bcf" -d 'Flash BeagleConnect Freedom'
+complete -c bb-imager-cli -n "__fish_bb_imager_cli_using_subcommand flash; and not __fish_seen_subcommand_from bcf sd sd-boot-update pb2-mspm0 dfu zepto help" -f -a "sd" -d 'Flash an SD card with customizable settings for BeagleBoard devices'
+complete -c bb-imager-cli -n "__fish_bb_imager_cli_using_subcommand flash; and not __fish_seen_subcommand_from bcf sd sd-boot-update pb2-mspm0 dfu zepto help" -f -a "sd-boot-update" -d 'Update boot partition with contents from archive'
+complete -c bb-imager-cli -n "__fish_bb_imager_cli_using_subcommand flash; and not __fish_seen_subcommand_from bcf sd sd-boot-update pb2-mspm0 dfu zepto help" -f -a "pb2-mspm0" -d 'Flash MSPM0 on Pocketbeagle2'
+complete -c bb-imager-cli -n "__fish_bb_imager_cli_using_subcommand flash; and not __fish_seen_subcommand_from bcf sd sd-boot-update pb2-mspm0 dfu zepto help" -f -a "dfu"
+complete -c bb-imager-cli -n "__fish_bb_imager_cli_using_subcommand flash; and not __fish_seen_subcommand_from bcf sd sd-boot-update pb2-mspm0 dfu zepto help" -f -a "zepto" -d 'Flash Zepto'
+complete -c bb-imager-cli -n "__fish_bb_imager_cli_using_subcommand flash; and not __fish_seen_subcommand_from bcf sd sd-boot-update pb2-mspm0 dfu zepto help" -f -a "help" -d 'Print this message or the help of the given subcommand(s)'
+complete -c bb-imager-cli -n "__fish_bb_imager_cli_using_subcommand flash; and __fish_seen_subcommand_from bcf" -l no-verify -d 'Disable checksum verification after flashing to speed up the process'
+complete -c bb-imager-cli -n "__fish_bb_imager_cli_using_subcommand flash; and __fish_seen_subcommand_from bcf" -s h -l help -d 'Print help'
+complete -c bb-imager-cli -n "__fish_bb_imager_cli_using_subcommand flash; and __fish_seen_subcommand_from sd" -l hostname -d 'Set a custom hostname for the device (e.g., "beaglebone")' -r
+complete -c bb-imager-cli -n "__fish_bb_imager_cli_using_subcommand flash; and __fish_seen_subcommand_from sd" -l timezone -d 'Set the timezone for the device (e.g., "America/New_York")' -r
+complete -c bb-imager-cli -n "__fish_bb_imager_cli_using_subcommand flash; and __fish_seen_subcommand_from sd" -l keymap -d 'Set the keyboard layout/keymap (e.g., "us" for the US layout)' -r
+complete -c bb-imager-cli -n "__fish_bb_imager_cli_using_subcommand flash; and __fish_seen_subcommand_from sd" -l user-name -d 'Set a username for the default user. Cannot be `root`. Requires `user_password`. Required to enter GUI session due to regulatory requirements.' -r
+complete -c bb-imager-cli -n "__fish_bb_imager_cli_using_subcommand flash; and __fish_seen_subcommand_from sd" -l user-password -d 'Set a password for the default user. Requires `user_name`. Required to enter GUI session due to regulatory requirements.' -r
+complete -c bb-imager-cli -n "__fish_bb_imager_cli_using_subcommand flash; and __fish_seen_subcommand_from sd" -l wifi-ssid -d 'Configure a Wi-Fi SSID for network access. Requires `wifi_password`' -r
+complete -c bb-imager-cli -n "__fish_bb_imager_cli_using_subcommand flash; and __fish_seen_subcommand_from sd" -l wifi-password -d 'Set the password for the specified Wi-Fi SSID. Requires `wifi_ssid`' -r
+complete -c bb-imager-cli -n "__fish_bb_imager_cli_using_subcommand flash; and __fish_seen_subcommand_from sd" -l ssh-key -d 'Set SSH public key for authentication' -r
+complete -c bb-imager-cli -n "__fish_bb_imager_cli_using_subcommand flash; and __fish_seen_subcommand_from sd" -l bmap -d 'Provide the bmap file for the image' -r
+complete -c bb-imager-cli -n "__fish_bb_imager_cli_using_subcommand flash; and __fish_seen_subcommand_from sd" -l usb-enable-dhcp -d 'Enable USB DHCP'
+complete -c bb-imager-cli -n "__fish_bb_imager_cli_using_subcommand flash; and __fish_seen_subcommand_from sd" -l cloud-init -d 'Generate clound-init config'
+complete -c bb-imager-cli -n "__fish_bb_imager_cli_using_subcommand flash; and __fish_seen_subcommand_from sd" -l sysconfig -d 'Generate sysconfig. Currently, sysconfig will be generated regardless if this flag is provides. However, this will change in future. So best to explicitly set the flag'
+complete -c bb-imager-cli -n "__fish_bb_imager_cli_using_subcommand flash; and __fish_seen_subcommand_from sd" -l file-destination -d 'The destination is a file instead of SD Card'
+complete -c bb-imager-cli -n "__fish_bb_imager_cli_using_subcommand flash; and __fish_seen_subcommand_from sd" -s h -l help -d 'Print help'
+complete -c bb-imager-cli -n "__fish_bb_imager_cli_using_subcommand flash; and __fish_seen_subcommand_from sd-boot-update" -s h -l help -d 'Print help'
+complete -c bb-imager-cli -n "__fish_bb_imager_cli_using_subcommand flash; and __fish_seen_subcommand_from pb2-mspm0" -l no-eeprom -d 'Do not persist EEPROM contents'
+complete -c bb-imager-cli -n "__fish_bb_imager_cli_using_subcommand flash; and __fish_seen_subcommand_from pb2-mspm0" -s h -l help -d 'Print help'
+complete -c bb-imager-cli -n "__fish_bb_imager_cli_using_subcommand flash; and __fish_seen_subcommand_from dfu" -s h -l help -d 'Print help'
+complete -c bb-imager-cli -n "__fish_bb_imager_cli_using_subcommand flash; and __fish_seen_subcommand_from zepto" -l no-verify -d 'Disable checksum verification after flashing to speed up the process'
+complete -c bb-imager-cli -n "__fish_bb_imager_cli_using_subcommand flash; and __fish_seen_subcommand_from zepto" -s h -l help -d 'Print help'
+complete -c bb-imager-cli -n "__fish_bb_imager_cli_using_subcommand flash; and __fish_seen_subcommand_from help" -f -a "bcf" -d 'Flash BeagleConnect Freedom'
+complete -c bb-imager-cli -n "__fish_bb_imager_cli_using_subcommand flash; and __fish_seen_subcommand_from help" -f -a "sd" -d 'Flash an SD card with customizable settings for BeagleBoard devices'
+complete -c bb-imager-cli -n "__fish_bb_imager_cli_using_subcommand flash; and __fish_seen_subcommand_from help" -f -a "sd-boot-update" -d 'Update boot partition with contents from archive'
+complete -c bb-imager-cli -n "__fish_bb_imager_cli_using_subcommand flash; and __fish_seen_subcommand_from help" -f -a "pb2-mspm0" -d 'Flash MSPM0 on Pocketbeagle2'
+complete -c bb-imager-cli -n "__fish_bb_imager_cli_using_subcommand flash; and __fish_seen_subcommand_from help" -f -a "dfu"
+complete -c bb-imager-cli -n "__fish_bb_imager_cli_using_subcommand flash; and __fish_seen_subcommand_from help" -f -a "zepto" -d 'Flash Zepto'
+complete -c bb-imager-cli -n "__fish_bb_imager_cli_using_subcommand flash; and __fish_seen_subcommand_from help" -f -a "help" -d 'Print this message or the help of the given subcommand(s)'
+complete -c bb-imager-cli -n "__fish_bb_imager_cli_using_subcommand list-destinations" -l no-frills -d 'Only print paths seperated by newline'
+complete -c bb-imager-cli -n "__fish_bb_imager_cli_using_subcommand list-destinations" -l no-filter -d 'Show all possible destinations without any sanity filters. Can be used when a device is not visible due to incorrect reporting by OS'
+complete -c bb-imager-cli -n "__fish_bb_imager_cli_using_subcommand list-destinations" -s h -l help -d 'Print help (see more with \'--help\')'
+complete -c bb-imager-cli -n "__fish_bb_imager_cli_using_subcommand format" -l quiet -d 'Suppress standard output messages for a quieter experience'
+complete -c bb-imager-cli -n "__fish_bb_imager_cli_using_subcommand format" -s h -l help -d 'Print help'
+complete -c bb-imager-cli -n "__fish_bb_imager_cli_using_subcommand generate-completion" -s h -l help -d 'Print help'
+complete -c bb-imager-cli -n "__fish_bb_imager_cli_using_subcommand help; and not __fish_seen_subcommand_from flash list-destinations format generate-completion help" -f -a "flash" -d 'Command to flash an image to a specific destination'
+complete -c bb-imager-cli -n "__fish_bb_imager_cli_using_subcommand help; and not __fish_seen_subcommand_from flash list-destinations format generate-completion help" -f -a "list-destinations" -d 'Command to list available destinations for flashing based on the selected target'
+complete -c bb-imager-cli -n "__fish_bb_imager_cli_using_subcommand help; and not __fish_seen_subcommand_from flash list-destinations format generate-completion help" -f -a "format" -d 'Command to format SD Card'
+complete -c bb-imager-cli -n "__fish_bb_imager_cli_using_subcommand help; and not __fish_seen_subcommand_from flash list-destinations format generate-completion help" -f -a "generate-completion" -d 'Command to generate shell completion'
+complete -c bb-imager-cli -n "__fish_bb_imager_cli_using_subcommand help; and not __fish_seen_subcommand_from flash list-destinations format generate-completion help" -f -a "help" -d 'Print this message or the help of the given subcommand(s)'
+complete -c bb-imager-cli -n "__fish_bb_imager_cli_using_subcommand help; and __fish_seen_subcommand_from flash" -f -a "bcf" -d 'Flash BeagleConnect Freedom'
+complete -c bb-imager-cli -n "__fish_bb_imager_cli_using_subcommand help; and __fish_seen_subcommand_from flash" -f -a "sd" -d 'Flash an SD card with customizable settings for BeagleBoard devices'
+complete -c bb-imager-cli -n "__fish_bb_imager_cli_using_subcommand help; and __fish_seen_subcommand_from flash" -f -a "sd-boot-update" -d 'Update boot partition with contents from archive'
+complete -c bb-imager-cli -n "__fish_bb_imager_cli_using_subcommand help; and __fish_seen_subcommand_from flash" -f -a "pb2-mspm0" -d 'Flash MSPM0 on Pocketbeagle2'
+complete -c bb-imager-cli -n "__fish_bb_imager_cli_using_subcommand help; and __fish_seen_subcommand_from flash" -f -a "dfu"
+complete -c bb-imager-cli -n "__fish_bb_imager_cli_using_subcommand help; and __fish_seen_subcommand_from flash" -f -a "zepto" -d 'Flash Zepto'
+
+using namespace System.Management.Automation
+using namespace System.Management.Automation.Language
+
+Register-ArgumentCompleter -Native -CommandName 'bb-imager-cli' -ScriptBlock {
+    param($wordToComplete, $commandAst, $cursorPosition)
+
+    $commandElements = $commandAst.CommandElements
+    $command = @(
+        'bb-imager-cli'
+        for ($i = 1; $i -lt $commandElements.Count; $i++) {
+            $element = $commandElements[$i]
+            if ($element -isnot [StringConstantExpressionAst] -or
+                $element.StringConstantType -ne [StringConstantType]::BareWord -or
+                $element.Value.StartsWith('-') -or
+                $element.Value -eq $wordToComplete) {
+                break
+        }
+        $element.Value
+    }) -join ';'
+
+    $completions = @(switch ($command) {
+        'bb-imager-cli' {
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Enable more logging')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('-V', '-V ', [CompletionResultType]::ParameterName, 'Print version')
+            [CompletionResult]::new('--version', '--version', [CompletionResultType]::ParameterName, 'Print version')
+            [CompletionResult]::new('flash', 'flash', [CompletionResultType]::ParameterValue, 'Command to flash an image to a specific destination')
+            [CompletionResult]::new('list-destinations', 'list-destinations', [CompletionResultType]::ParameterValue, 'Command to list available destinations for flashing based on the selected target')
+            [CompletionResult]::new('format', 'format', [CompletionResultType]::ParameterValue, 'Command to format SD Card')
+            [CompletionResult]::new('generate-completion', 'generate-completion', [CompletionResultType]::ParameterValue, 'Command to generate shell completion')
+            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
+            break
+        }
+        'bb-imager-cli;flash' {
+            [CompletionResult]::new('--quiet', '--quiet', [CompletionResultType]::ParameterName, 'Suppress standard output messages for a quieter experience')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('bcf', 'bcf', [CompletionResultType]::ParameterValue, 'Flash BeagleConnect Freedom')
+            [CompletionResult]::new('sd', 'sd', [CompletionResultType]::ParameterValue, 'Flash an SD card with customizable settings for BeagleBoard devices')
+            [CompletionResult]::new('sd-boot-update', 'sd-boot-update', [CompletionResultType]::ParameterValue, 'Update boot partition with contents from archive')
+            [CompletionResult]::new('pb2-mspm0', 'pb2-mspm0', [CompletionResultType]::ParameterValue, 'Flash MSPM0 on Pocketbeagle2')
+            [CompletionResult]::new('dfu', 'dfu', [CompletionResultType]::ParameterValue, 'dfu')
+            [CompletionResult]::new('zepto', 'zepto', [CompletionResultType]::ParameterValue, 'Flash Zepto')
+            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
+            break
+        }
+        'bb-imager-cli;flash;bcf' {
+            [CompletionResult]::new('--no-verify', '--no-verify', [CompletionResultType]::ParameterName, 'Disable checksum verification after flashing to speed up the process')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'bb-imager-cli;flash;sd' {
+            [CompletionResult]::new('--hostname', '--hostname', [CompletionResultType]::ParameterName, 'Set a custom hostname for the device (e.g., "beaglebone")')
+            [CompletionResult]::new('--timezone', '--timezone', [CompletionResultType]::ParameterName, 'Set the timezone for the device (e.g., "America/New_York")')
+            [CompletionResult]::new('--keymap', '--keymap', [CompletionResultType]::ParameterName, 'Set the keyboard layout/keymap (e.g., "us" for the US layout)')
+            [CompletionResult]::new('--user-name', '--user-name', [CompletionResultType]::ParameterName, 'Set a username for the default user. Cannot be `root`. Requires `user_password`. Required to enter GUI session due to regulatory requirements.')
+            [CompletionResult]::new('--user-password', '--user-password', [CompletionResultType]::ParameterName, 'Set a password for the default user. Requires `user_name`. Required to enter GUI session due to regulatory requirements.')
+            [CompletionResult]::new('--wifi-ssid', '--wifi-ssid', [CompletionResultType]::ParameterName, 'Configure a Wi-Fi SSID for network access. Requires `wifi_password`')
+            [CompletionResult]::new('--wifi-password', '--wifi-password', [CompletionResultType]::ParameterName, 'Set the password for the specified Wi-Fi SSID. Requires `wifi_ssid`')
+            [CompletionResult]::new('--ssh-key', '--ssh-key', [CompletionResultType]::ParameterName, 'Set SSH public key for authentication')
+            [CompletionResult]::new('--bmap', '--bmap', [CompletionResultType]::ParameterName, 'Provide the bmap file for the image')
+            [CompletionResult]::new('--usb-enable-dhcp', '--usb-enable-dhcp', [CompletionResultType]::ParameterName, 'Enable USB DHCP')
+            [CompletionResult]::new('--cloud-init', '--cloud-init', [CompletionResultType]::ParameterName, 'Generate clound-init config')
+            [CompletionResult]::new('--sysconfig', '--sysconfig', [CompletionResultType]::ParameterName, 'Generate sysconfig. Currently, sysconfig will be generated regardless if this flag is provides. However, this will change in future. So best to explicitly set the flag')
+            [CompletionResult]::new('--file-destination', '--file-destination', [CompletionResultType]::ParameterName, 'The destination is a file instead of SD Card')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'bb-imager-cli;flash;sd-boot-update' {
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'bb-imager-cli;flash;pb2-mspm0' {
+            [CompletionResult]::new('--no-eeprom', '--no-eeprom', [CompletionResultType]::ParameterName, 'Do not persist EEPROM contents')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'bb-imager-cli;flash;dfu' {
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'bb-imager-cli;flash;zepto' {
+            [CompletionResult]::new('--no-verify', '--no-verify', [CompletionResultType]::ParameterName, 'Disable checksum verification after flashing to speed up the process')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'bb-imager-cli;flash;help' {
+            [CompletionResult]::new('bcf', 'bcf', [CompletionResultType]::ParameterValue, 'Flash BeagleConnect Freedom')
+            [CompletionResult]::new('sd', 'sd', [CompletionResultType]::ParameterValue, 'Flash an SD card with customizable settings for BeagleBoard devices')
+            [CompletionResult]::new('sd-boot-update', 'sd-boot-update', [CompletionResultType]::ParameterValue, 'Update boot partition with contents from archive')
+            [CompletionResult]::new('pb2-mspm0', 'pb2-mspm0', [CompletionResultType]::ParameterValue, 'Flash MSPM0 on Pocketbeagle2')
+            [CompletionResult]::new('dfu', 'dfu', [CompletionResultType]::ParameterValue, 'dfu')
+            [CompletionResult]::new('zepto', 'zepto', [CompletionResultType]::ParameterValue, 'Flash Zepto')
+            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
+            break
+        }
+        'bb-imager-cli;flash;help;bcf' {
+            break
+        }
+        'bb-imager-cli;flash;help;sd' {
+            break
+        }
+        'bb-imager-cli;flash;help;sd-boot-update' {
+            break
+        }
+        'bb-imager-cli;flash;help;pb2-mspm0' {
+            break
+        }
+        'bb-imager-cli;flash;help;dfu' {
+            break
+        }
+        'bb-imager-cli;flash;help;zepto' {
+            break
+        }
+        'bb-imager-cli;flash;help;help' {
+            break
+        }
+        'bb-imager-cli;list-destinations' {
+            [CompletionResult]::new('--no-frills', '--no-frills', [CompletionResultType]::ParameterName, 'Only print paths seperated by newline')
+            [CompletionResult]::new('--no-filter', '--no-filter', [CompletionResultType]::ParameterName, 'Show all possible destinations without any sanity filters. Can be used when a device is not visible due to incorrect reporting by OS')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help (see more with ''--help'')')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help (see more with ''--help'')')
+            break
+        }
+        'bb-imager-cli;format' {
+            [CompletionResult]::new('--quiet', '--quiet', [CompletionResultType]::ParameterName, 'Suppress standard output messages for a quieter experience')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'bb-imager-cli;generate-completion' {
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            break
+        }
+        'bb-imager-cli;help' {
+            [CompletionResult]::new('flash', 'flash', [CompletionResultType]::ParameterValue, 'Command to flash an image to a specific destination')
+            [CompletionResult]::new('list-destinations', 'list-destinations', [CompletionResultType]::ParameterValue, 'Command to list available destinations for flashing based on the selected target')
+            [CompletionResult]::new('format', 'format', [CompletionResultType]::ParameterValue, 'Command to format SD Card')
+            [CompletionResult]::new('generate-completion', 'generate-completion', [CompletionResultType]::ParameterValue, 'Command to generate shell completion')
+            [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
+            break
+        }
+        'bb-imager-cli;help;flash' {
+            [CompletionResult]::new('bcf', 'bcf', [CompletionResultType]::ParameterValue, 'Flash BeagleConnect Freedom')
+            [CompletionResult]::new('sd', 'sd', [CompletionResultType]::ParameterValue, 'Flash an SD card with customizable settings for BeagleBoard devices')
+            [CompletionResult]::new('sd-boot-update', 'sd-boot-update', [CompletionResultType]::ParameterValue, 'Update boot partition with contents from archive')
+            [CompletionResult]::new('pb2-mspm0', 'pb2-mspm0', [CompletionResultType]::ParameterValue, 'Flash MSPM0 on Pocketbeagle2')
+            [CompletionResult]::new('dfu', 'dfu', [CompletionResultType]::ParameterValue, 'dfu')
+            [CompletionResult]::new('zepto', 'zepto', [CompletionResultType]::ParameterValue, 'Flash Zepto')
+            break
+        }
+        'bb-imager-cli;help;flash;bcf' {
+            break
+        }
+        'bb-imager-cli;help;flash;sd' {
+            break
+        }
+        'bb-imager-cli;help;flash;sd-boot-update' {
+            break
+        }
+        'bb-imager-cli;help;flash;pb2-mspm0' {
+            break
+        }
+        'bb-imager-cli;help;flash;dfu' {
+            break
+        }
+        'bb-imager-cli;help;flash;zepto' {
+            break
+        }
+        'bb-imager-cli;help;list-destinations' {
+            break
+        }
+        'bb-imager-cli;help;format' {
+            break
+        }
+        'bb-imager-cli;help;generate-completion' {
+            break
+        }
+        'bb-imager-cli;help;help' {
+            break
+        }
+    })
+
+    $completions.Where{ $_.CompletionText -like "$wordToComplete*" } |
+        Sort-Object -Property ListItemText
+}
+#compdef bb-imager-cli
+
+autoload -U is-at-least
+
+_bb-imager-cli() {
+    typeset -A opt_args
+    typeset -a _arguments_options
+    local ret=1
+
+    if is-at-least 5.2; then
+        _arguments_options=(-s -S -C)
+    else
+        _arguments_options=(-s -C)
+    fi
+
+    local context curcontext="$curcontext" state line
+    _arguments "${_arguments_options[@]}" : \
+'--verbose[Enable more logging]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'-V[Print version]' \
+'--version[Print version]' \
+":: :_bb-imager-cli_commands" \
+"*::: :->bb-imager-cli" \
+&& ret=0
+    case $state in
+    (bb-imager-cli)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:bb-imager-cli-command-$line[1]:"
+        case $line[1] in
+            (flash)
+_arguments "${_arguments_options[@]}" : \
+'--quiet[Suppress standard output messages for a quieter experience]' \
+'-h[Print help]' \
+'--help[Print help]' \
+":: :_bb-imager-cli__subcmd__flash_commands" \
+"*::: :->flash" \
+&& ret=0
+
+    case $state in
+    (flash)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:bb-imager-cli-flash-command-$line[1]:"
+        case $line[1] in
+            (bcf)
+_arguments "${_arguments_options[@]}" : \
+'--no-verify[Disable checksum verification after flashing to speed up the process]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':img -- Local path to image file. Can be compressed (xz) or extracted file:_default' \
+':dst -- The destination device (e.g., `/dev/sdX` or specific device identifiers):_default' \
+&& ret=0
+;;
+(sd)
+_arguments "${_arguments_options[@]}" : \
+'--hostname=[Set a custom hostname for the device (e.g., "beaglebone")]:HOSTNAME:_default' \
+'--timezone=[Set the timezone for the device (e.g., "America/New_York")]:TIMEZONE:_default' \
+'--keymap=[Set the keyboard layout/keymap (e.g., "us" for the US layout)]:KEYMAP:_default' \
+'--user-name=[Set a username for the default user. Cannot be \`root\`. Requires \`user_password\`. Required to enter GUI session due to regulatory requirements.]:USER_NAME:_default' \
+'--user-password=[Set a password for the default user. Requires \`user_name\`. Required to enter GUI session due to regulatory requirements.]:USER_PASSWORD:_default' \
+'--wifi-ssid=[Configure a Wi-Fi SSID for network access. Requires \`wifi_password\`]:WIFI_SSID:_default' \
+'--wifi-password=[Set the password for the specified Wi-Fi SSID. Requires \`wifi_ssid\`]:WIFI_PASSWORD:_default' \
+'--ssh-key=[Set SSH public key for authentication]:SSH_KEY:_default' \
+'--bmap=[Provide the bmap file for the image]:BMAP:_default' \
+'--usb-enable-dhcp[Enable USB DHCP]' \
+'--cloud-init[Generate clound-init config]' \
+'--sysconfig[Generate sysconfig. Currently, sysconfig will be generated regardless if this flag is provides. However, this will change in future. So best to explicitly set the flag]' \
+'--file-destination[The destination is a file instead of SD Card]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':img -- Local path to image file. Can be compressed (xz) or extracted file:_default' \
+':dst -- The destination device (e.g., `/dev/sdX` or specific device identifiers):_files' \
+&& ret=0
+;;
+(sd-boot-update)
+_arguments "${_arguments_options[@]}" : \
+'-h[Print help]' \
+'--help[Print help]' \
+':img -- Local path to bootfs archive:_default' \
+':dst -- The destination device (e.g., `/dev/sdX` or specific device identifiers):_files' \
+&& ret=0
+;;
+(pb2-mspm0)
+_arguments "${_arguments_options[@]}" : \
+'--no-eeprom[Do not persist EEPROM contents]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':img -- Local path to image file. Can be compressed (xz) or extracted file:_default' \
+&& ret=0
+;;
+(dfu)
+_arguments "${_arguments_options[@]}" : \
+'-h[Print help]' \
+'--help[Print help]' \
+':identifier -- Identifer is in the following format\: `{bus_num}\:{address}\:{vendor_id}\:{product_id}`. All fields are in hex:_default' \
+'*::imgs -- Format {name} followed by {path}. Any number of firmware can be specified, which will be flashed in a sequential order:_default' \
+&& ret=0
+;;
+(zepto)
+_arguments "${_arguments_options[@]}" : \
+'--no-verify[Disable checksum verification after flashing to speed up the process]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':img -- Local path to image file. Can be compressed (xz) or extracted file:_default' \
+':dst -- The destination device (e.g., `/dev/tty*` or `/dev/i2c-*` or specific device identifiers):_default' \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+":: :_bb-imager-cli__subcmd__flash__subcmd__help_commands" \
+"*::: :->help" \
+&& ret=0
+
+    case $state in
+    (help)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:bb-imager-cli-flash-help-command-$line[1]:"
+        case $line[1] in
+            (bcf)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(sd)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(sd-boot-update)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(pb2-mspm0)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(dfu)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(zepto)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+        esac
+    ;;
+esac
+;;
+(list-destinations)
+_arguments "${_arguments_options[@]}" : \
+'--no-frills[Only print paths seperated by newline]' \
+'--no-filter[Show all possible destinations without any sanity filters. Can be used when a device is not visible due to incorrect reporting by OS]' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+':target -- Specifies the target type for listing destinations:((bcf\:"BeagleConnect Freedom targets"
+sd\:"SD card targets for BeagleBoard devices"
+pb2-mspm0\:"Pocketbeagle2 MSPM0"
+dfu\:"USB DFU Target"
+zepto\:"Zepto Target"))' \
+&& ret=0
+;;
+(format)
+_arguments "${_arguments_options[@]}" : \
+'--quiet[Suppress standard output messages for a quieter experience]' \
+'-h[Print help]' \
+'--help[Print help]' \
+':dst -- The destination device (e.g., `/dev/sdX` or specific device identifiers):_files' \
+&& ret=0
+;;
+(generate-completion)
+_arguments "${_arguments_options[@]}" : \
+'-h[Print help]' \
+'--help[Print help]' \
+':shell -- Specifies the target shell type for completion:(bash elvish fish powershell zsh)' \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+":: :_bb-imager-cli__subcmd__help_commands" \
+"*::: :->help" \
+&& ret=0
+
+    case $state in
+    (help)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:bb-imager-cli-help-command-$line[1]:"
+        case $line[1] in
+            (flash)
+_arguments "${_arguments_options[@]}" : \
+":: :_bb-imager-cli__subcmd__help__subcmd__flash_commands" \
+"*::: :->flash" \
+&& ret=0
+
+    case $state in
+    (flash)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:bb-imager-cli-help-flash-command-$line[1]:"
+        case $line[1] in
+            (bcf)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(sd)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(sd-boot-update)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(pb2-mspm0)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(dfu)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(zepto)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+(list-destinations)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(format)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(generate-completion)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+        esac
+    ;;
+esac
+}
+
+(( $+functions[_bb-imager-cli_commands] )) ||
+_bb-imager-cli_commands() {
+    local commands; commands=(
+'flash:Command to flash an image to a specific destination' \
+'list-destinations:Command to list available destinations for flashing based on the selected target' \
+'format:Command to format SD Card' \
+'generate-completion:Command to generate shell completion' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'bb-imager-cli commands' commands "$@"
+}
+(( $+functions[_bb-imager-cli__subcmd__flash_commands] )) ||
+_bb-imager-cli__subcmd__flash_commands() {
+    local commands; commands=(
+'bcf:Flash BeagleConnect Freedom' \
+'sd:Flash an SD card with customizable settings for BeagleBoard devices' \
+'sd-boot-update:Update boot partition with contents from archive' \
+'pb2-mspm0:Flash MSPM0 on Pocketbeagle2' \
+'dfu:' \
+'zepto:Flash Zepto' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'bb-imager-cli flash commands' commands "$@"
+}
+(( $+functions[_bb-imager-cli__subcmd__flash__subcmd__bcf_commands] )) ||
+_bb-imager-cli__subcmd__flash__subcmd__bcf_commands() {
+    local commands; commands=()
+    _describe -t commands 'bb-imager-cli flash bcf commands' commands "$@"
+}
+(( $+functions[_bb-imager-cli__subcmd__flash__subcmd__dfu_commands] )) ||
+_bb-imager-cli__subcmd__flash__subcmd__dfu_commands() {
+    local commands; commands=()
+    _describe -t commands 'bb-imager-cli flash dfu commands' commands "$@"
+}
+(( $+functions[_bb-imager-cli__subcmd__flash__subcmd__help_commands] )) ||
+_bb-imager-cli__subcmd__flash__subcmd__help_commands() {
+    local commands; commands=(
+'bcf:Flash BeagleConnect Freedom' \
+'sd:Flash an SD card with customizable settings for BeagleBoard devices' \
+'sd-boot-update:Update boot partition with contents from archive' \
+'pb2-mspm0:Flash MSPM0 on Pocketbeagle2' \
+'dfu:' \
+'zepto:Flash Zepto' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'bb-imager-cli flash help commands' commands "$@"
+}
+(( $+functions[_bb-imager-cli__subcmd__flash__subcmd__help__subcmd__bcf_commands] )) ||
+_bb-imager-cli__subcmd__flash__subcmd__help__subcmd__bcf_commands() {
+    local commands; commands=()
+    _describe -t commands 'bb-imager-cli flash help bcf commands' commands "$@"
+}
+(( $+functions[_bb-imager-cli__subcmd__flash__subcmd__help__subcmd__dfu_commands] )) ||
+_bb-imager-cli__subcmd__flash__subcmd__help__subcmd__dfu_commands() {
+    local commands; commands=()
+    _describe -t commands 'bb-imager-cli flash help dfu commands' commands "$@"
+}
+(( $+functions[_bb-imager-cli__subcmd__flash__subcmd__help__subcmd__help_commands] )) ||
+_bb-imager-cli__subcmd__flash__subcmd__help__subcmd__help_commands() {
+    local commands; commands=()
+    _describe -t commands 'bb-imager-cli flash help help commands' commands "$@"
+}
+(( $+functions[_bb-imager-cli__subcmd__flash__subcmd__help__subcmd__pb2-mspm0_commands] )) ||
+_bb-imager-cli__subcmd__flash__subcmd__help__subcmd__pb2-mspm0_commands() {
+    local commands; commands=()
+    _describe -t commands 'bb-imager-cli flash help pb2-mspm0 commands' commands "$@"
+}
+(( $+functions[_bb-imager-cli__subcmd__flash__subcmd__help__subcmd__sd_commands] )) ||
+_bb-imager-cli__subcmd__flash__subcmd__help__subcmd__sd_commands() {
+    local commands; commands=()
+    _describe -t commands 'bb-imager-cli flash help sd commands' commands "$@"
+}
+(( $+functions[_bb-imager-cli__subcmd__flash__subcmd__help__subcmd__sd-boot-update_commands] )) ||
+_bb-imager-cli__subcmd__flash__subcmd__help__subcmd__sd-boot-update_commands() {
+    local commands; commands=()
+    _describe -t commands 'bb-imager-cli flash help sd-boot-update commands' commands "$@"
+}
+(( $+functions[_bb-imager-cli__subcmd__flash__subcmd__help__subcmd__zepto_commands] )) ||
+_bb-imager-cli__subcmd__flash__subcmd__help__subcmd__zepto_commands() {
+    local commands; commands=()
+    _describe -t commands 'bb-imager-cli flash help zepto commands' commands "$@"
+}
+(( $+functions[_bb-imager-cli__subcmd__flash__subcmd__pb2-mspm0_commands] )) ||
+_bb-imager-cli__subcmd__flash__subcmd__pb2-mspm0_commands() {
+    local commands; commands=()
+    _describe -t commands 'bb-imager-cli flash pb2-mspm0 commands' commands "$@"
+}
+(( $+functions[_bb-imager-cli__subcmd__flash__subcmd__sd_commands] )) ||
+_bb-imager-cli__subcmd__flash__subcmd__sd_commands() {
+    local commands; commands=()
+    _describe -t commands 'bb-imager-cli flash sd commands' commands "$@"
+}
+(( $+functions[_bb-imager-cli__subcmd__flash__subcmd__sd-boot-update_commands] )) ||
+_bb-imager-cli__subcmd__flash__subcmd__sd-boot-update_commands() {
+    local commands; commands=()
+    _describe -t commands 'bb-imager-cli flash sd-boot-update commands' commands "$@"
+}
+(( $+functions[_bb-imager-cli__subcmd__flash__subcmd__zepto_commands] )) ||
+_bb-imager-cli__subcmd__flash__subcmd__zepto_commands() {
+    local commands; commands=()
+    _describe -t commands 'bb-imager-cli flash zepto commands' commands "$@"
+}
+(( $+functions[_bb-imager-cli__subcmd__format_commands] )) ||
+_bb-imager-cli__subcmd__format_commands() {
+    local commands; commands=()
+    _describe -t commands 'bb-imager-cli format commands' commands "$@"
+}
+(( $+functions[_bb-imager-cli__subcmd__generate-completion_commands] )) ||
+_bb-imager-cli__subcmd__generate-completion_commands() {
+    local commands; commands=()
+    _describe -t commands 'bb-imager-cli generate-completion commands' commands "$@"
+}
+(( $+functions[_bb-imager-cli__subcmd__help_commands] )) ||
+_bb-imager-cli__subcmd__help_commands() {
+    local commands; commands=(
+'flash:Command to flash an image to a specific destination' \
+'list-destinations:Command to list available destinations for flashing based on the selected target' \
+'format:Command to format SD Card' \
+'generate-completion:Command to generate shell completion' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'bb-imager-cli help commands' commands "$@"
+}
+(( $+functions[_bb-imager-cli__subcmd__help__subcmd__flash_commands] )) ||
+_bb-imager-cli__subcmd__help__subcmd__flash_commands() {
+    local commands; commands=(
+'bcf:Flash BeagleConnect Freedom' \
+'sd:Flash an SD card with customizable settings for BeagleBoard devices' \
+'sd-boot-update:Update boot partition with contents from archive' \
+'pb2-mspm0:Flash MSPM0 on Pocketbeagle2' \
+'dfu:' \
+'zepto:Flash Zepto' \
+    )
+    _describe -t commands 'bb-imager-cli help flash commands' commands "$@"
+}
+(( $+functions[_bb-imager-cli__subcmd__help__subcmd__flash__subcmd__bcf_commands] )) ||
+_bb-imager-cli__subcmd__help__subcmd__flash__subcmd__bcf_commands() {
+    local commands; commands=()
+    _describe -t commands 'bb-imager-cli help flash bcf commands' commands "$@"
+}
+(( $+functions[_bb-imager-cli__subcmd__help__subcmd__flash__subcmd__dfu_commands] )) ||
+_bb-imager-cli__subcmd__help__subcmd__flash__subcmd__dfu_commands() {
+    local commands; commands=()
+    _describe -t commands 'bb-imager-cli help flash dfu commands' commands "$@"
+}
+(( $+functions[_bb-imager-cli__subcmd__help__subcmd__flash__subcmd__pb2-mspm0_commands] )) ||
+_bb-imager-cli__subcmd__help__subcmd__flash__subcmd__pb2-mspm0_commands() {
+    local commands; commands=()
+    _describe -t commands 'bb-imager-cli help flash pb2-mspm0 commands' commands "$@"
+}
+(( $+functions[_bb-imager-cli__subcmd__help__subcmd__flash__subcmd__sd_commands] )) ||
+_bb-imager-cli__subcmd__help__subcmd__flash__subcmd__sd_commands() {
+    local commands; commands=()
+    _describe -t commands 'bb-imager-cli help flash sd commands' commands "$@"
+}
+(( $+functions[_bb-imager-cli__subcmd__help__subcmd__flash__subcmd__sd-boot-update_commands] )) ||
+_bb-imager-cli__subcmd__help__subcmd__flash__subcmd__sd-boot-update_commands() {
+    local commands; commands=()
+    _describe -t commands 'bb-imager-cli help flash sd-boot-update commands' commands "$@"
+}
+(( $+functions[_bb-imager-cli__subcmd__help__subcmd__flash__subcmd__zepto_commands] )) ||
+_bb-imager-cli__subcmd__help__subcmd__flash__subcmd__zepto_commands() {
+    local commands; commands=()
+    _describe -t commands 'bb-imager-cli help flash zepto commands' commands "$@"
+}
+(( $+functions[_bb-imager-cli__subcmd__help__subcmd__format_commands] )) ||
+_bb-imager-cli__subcmd__help__subcmd__format_commands() {
+    local commands; commands=()
+    _describe -t commands 'bb-imager-cli help format commands' commands "$@"
+}
+(( $+functions[_bb-imager-cli__subcmd__help__subcmd__generate-completion_commands] )) ||
+_bb-imager-cli__subcmd__help__subcmd__generate-completion_commands() {
+    local commands; commands=()
+    _describe -t commands 'bb-imager-cli help generate-completion commands' commands "$@"
+}
+(( $+functions[_bb-imager-cli__subcmd__help__subcmd__help_commands] )) ||
+_bb-imager-cli__subcmd__help__subcmd__help_commands() {
+    local commands; commands=()
+    _describe -t commands 'bb-imager-cli help help commands' commands "$@"
+}
+(( $+functions[_bb-imager-cli__subcmd__help__subcmd__list-destinations_commands] )) ||
+_bb-imager-cli__subcmd__help__subcmd__list-destinations_commands() {
+    local commands; commands=()
+    _describe -t commands 'bb-imager-cli help list-destinations commands' commands "$@"
+}
+(( $+functions[_bb-imager-cli__subcmd__list-destinations_commands] )) ||
+_bb-imager-cli__subcmd__list-destinations_commands() {
+    local commands; commands=()
+    _describe -t commands 'bb-imager-cli list-destinations commands' commands "$@"
+}
+
+if [ "$funcstack[1]" = "_bb-imager-cli" ]; then
+    _bb-imager-cli "$@"
+else
+    compdef _bb-imager-cli bb-imager-cli
+fi
+test generate_completion_succeeds_for_every_shell ... ok
+test list_destinations_zepto_runs ... ok
++---------+------+-------------+
+| SD Card | Path | Size (in G) |
++---------+------+-------------+
++---------+------+-------------+
++------------------------+--------------------+-------------+
+| SD Card                | Path               | Size (in G) |
++------------------------+--------------------+-------------+
+| KIOXIA-EXCERIA PRO SSD | \\.\PhysicalDrive1 |        1863 |
+| CT1000P310SSD8         | \\.\PhysicalDrive0 |         931 |
++------------------------+--------------------+-------------+
+\\.\PhysicalDrive1
+\\.\PhysicalDrive0
+test list_destinations_sd_runs_in_every_output_mode ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.54s
+
+     Running tests\flash_sd.rs (target\debug\deps\flash_sd-574c01e5826a222a.exe)
+
+running 15 tests
+test flash_sd_missing_image_fails - should panic ... ok
+[1] Preparing  
+test flash_sd_unreadable_bmap_fails - should panic ... ok
+test flash_sd_customization_on_partitionless_image_fails - should panic ... ok
+test flash_sd_creates_missing_destination_file ... ok
+test flash_sd_file_destination_copies_image_verbatim ... ok
+test flash_sd_renders_progress_when_not_quiet ... ok
+[1] Preparing  
+test sd_boot_update_missing_archive_fails - should panic ... ok
+test sd_boot_update_renders_progress_when_not_quiet ... ok
+test sd_boot_update_writes_archive_into_boot_partition ... ok
+test flash_sd_without_customization_flags_writes_no_config ... ok
+test flash_sd_sysconfig_omits_unset_keys ... ok
+test flash_sd_sysconfig_writes_every_supplied_key ... ok
+test flash_sd_wifi_writes_psk_file_next_to_sysconfig ... ok
+test flash_sd_without_usb_dhcp_flag_omits_the_key ... ok
+test flash_sd_cloud_init_emits_both_configs ... ok
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.36s
+
+EXIT=0

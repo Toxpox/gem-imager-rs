@@ -1,0 +1,652 @@
+   Compiling unicode-ident v1.0.24
+   Compiling cfg-if v1.0.4
+   Compiling windows-link v0.2.1
+   Compiling log v0.4.33
+   Compiling memchr v2.8.2
+   Compiling pin-project-lite v0.2.17
+   Compiling bitflags v2.13.0
+   Compiling once_cell v1.21.4
+   Compiling smallvec v1.15.2
+   Compiling stable_deref_trait v1.2.1
+   Compiling arrayvec v0.7.8
+   Compiling futures-core v0.3.33
+   Compiling foldhash v0.2.0
+   Compiling futures-sink v0.3.33
+   Compiling serde_core v1.0.229
+   Compiling libm v0.2.16
+   Compiling libc v0.2.186
+   Compiling slab v0.4.12
+   Compiling futures-io v0.3.33
+   Compiling futures-task v0.3.33
+   Compiling crossbeam-utils v0.8.22
+   Compiling windows_x86_64_msvc v0.52.6
+   Compiling equivalent v1.0.2
+   Compiling simd-adler32 v0.3.9
+   Compiling proc-macro2 v1.0.106
+   Compiling windows-sys v0.61.2
+   Compiling getrandom v0.4.3
+   Compiling futures-channel v0.3.33
+   Compiling tracing-core v0.1.36
+   Compiling hashbrown v0.17.1
+   Compiling windows-targets v0.52.6
+   Compiling anyhow v1.0.104
+   Compiling jobserver v0.1.35
+   Compiling adler2 v2.0.1
+   Compiling itoa v1.0.18
+   Compiling fastrand v2.4.1
+   Compiling base64 v0.22.1
+   Compiling raw-window-handle v0.6.2
+   Compiling crc32fast v1.5.0
+   Compiling unicode-width v0.2.2
+   Compiling typenum v1.20.1
+   Compiling smol_str v0.2.2
+   Compiling miniz_oxide v0.8.9
+   Compiling either v1.16.0
+   Compiling rustc-hash v1.1.0
+   Compiling scopeguard v1.2.0
+   Compiling writeable v0.6.3
+   Compiling cc v1.2.66
+   Compiling crossbeam-epoch v0.9.20
+   Compiling quote v1.0.46
+   Compiling bitflags v1.3.2
+   Compiling litemap v0.8.2
+   Compiling tinyvec_macros v0.1.1
+   Compiling slotmap v1.1.1
+   Compiling windows-result v0.2.0
+   Compiling fdeflate v0.3.7
+   Compiling as-slice v0.2.1
+   Compiling tinyvec v1.11.0
+   Compiling weezl v0.1.12
+   Compiling syn v2.0.118
+   Compiling syn v3.0.2
+   Compiling crossbeam-deque v0.8.7
+   Compiling indexmap v2.14.0
+   Compiling flate2 v1.1.9
+   Compiling rustc-hash v2.1.3
+   Compiling web-time v1.1.0
+   Compiling quick-error v2.0.1
+   Compiling unicode-script v0.5.8
+   Compiling utf8_iter v1.0.4
+   Compiling rayon-core v1.13.0
+   Compiling memmap2 v0.9.11
+   Compiling num-traits v0.2.19
+   Compiling core_maths v0.1.1
+   Compiling generic-array v0.14.7
+   Compiling lilt v0.8.1
+   Compiling windows-strings v0.1.0
+   Compiling aligned v0.4.3
+   Compiling nom v8.0.0
+   Compiling no_std_io2 v0.9.4
+   Compiling windows-strings v0.5.1
+   Compiling ttf-parser v0.25.1
+   Compiling windows-result v0.4.1
+   Compiling color_quant v1.1.0
+   Compiling cmake v0.1.58
+   Compiling cpufeatures v0.2.17
+   Compiling glam v0.25.0
+   Compiling y4m v0.8.0
+   Compiling percent-encoding v2.3.2
+   Compiling rayon v1.12.0
+   Compiling unicode-bidi v0.3.18
+   Compiling bitstream-io v4.10.0
+   Compiling icu_properties_data v2.2.0
+   Compiling icu_normalizer_data v2.2.0
+   Compiling simd_helpers v0.1.0
+   Compiling itertools v0.14.0
+   Compiling libloading v0.8.9
+   Compiling crypto-common v0.1.7
+   Compiling block-buffer v0.10.4
+   Compiling euclid v0.22.14
+   Compiling num-integer v0.1.46
+   Compiling imgref v1.12.2
+   Compiling yazi v0.2.1
+   Compiling foldhash v0.1.5
+   Compiling digest v0.10.7
+   Compiling zeno v0.3.3
+   Compiling unicode-segmentation v1.13.3
+   Compiling new_debug_unreachable v1.0.6
+   Compiling zune-core v0.5.1
+   Compiling byteorder-lite v0.1.0
+   Compiling num-bigint v0.4.8
+   Compiling bit-vec v0.8.0
+   Compiling loop9 v0.1.5
+   Compiling hashbrown v0.15.5
+   Compiling parking_lot_core v0.9.12
+   Compiling codespan-reporting v0.12.0
+   Compiling zune-jpeg v0.5.15
+   Compiling lock_api v0.4.14
+   Compiling image-webp v0.2.4
+   Compiling bit-set v0.8.0
+   Compiling zune-inflate v0.2.54
+   Compiling lyon_geom v1.0.19
+   Compiling avif-serialize v0.8.9
+   Compiling hashbrown v0.16.1
+   Compiling spirv v0.3.0+sdk-1.3.268.0
+   Compiling gpu-descriptor-types v0.2.0
+   Compiling gpu-alloc-types v0.3.1
+   Compiling unicode-linebreak v0.1.5
+   Compiling hexf-parse v0.2.1
+   Compiling aws-lc-sys v0.42.0
+   Compiling presser v0.3.1
+   Compiling bit_field v0.10.3
+   Compiling rangemap v1.7.1
+   Compiling self_cell v1.2.2
+   Compiling float-cmp v0.9.0
+   Compiling lyon_path v1.0.19
+   Compiling fax v0.2.7
+   Compiling linebender_resource_handle v0.1.1
+   Compiling sys-locale v0.3.2
+   Compiling pxfm v0.1.30
+   Compiling lebe v0.5.3
+   Compiling fontdb v0.23.0
+   Compiling strict-num v0.1.1
+   Compiling gpu-alloc v0.6.2
+   Compiling num-rational v0.4.2
+   Compiling gpu-descriptor v0.3.2
+   Compiling parking_lot v0.12.5
+   Compiling glutin_wgl_sys v0.6.1
+   Compiling ash v0.38.0+1.3.281
+   Compiling khronos-egl v6.0.0
+   Compiling ordered-float v5.3.0
+   Compiling gif v0.14.2
+   Compiling png v0.18.1
+   Compiling windows-threading v0.2.1
+   Compiling maybe-rayon v0.1.1
+   Compiling arrayref v0.3.9
+   Compiling glow v0.16.0
+   Compiling renderdoc-sys v1.1.0
+   Compiling zeroize v1.9.0
+   Compiling mutate_once v0.1.2
+   Compiling range-alloc v0.1.5
+   Compiling form_urlencoded v1.2.2
+   Compiling aho-corasick v1.1.4
+   Compiling serde_derive v1.0.229
+   Compiling kurbo v0.11.3
+   Compiling kamadak-exif v0.6.1
+   Compiling atomic-waker v1.1.2
+   Compiling fnv v1.0.7
+   Compiling unicode-properties v0.1.4
+   Compiling siphasher v1.0.3
+   Compiling regex-syntax v0.8.11
+   Compiling tower-service v0.3.3
+   Compiling synstructure v0.13.2
+   Compiling unicode-ccc v0.4.0
+   Compiling unicode-bidi-mirroring v0.4.0
+   Compiling try-lock v0.2.5
+   Compiling httpdate v1.0.3
+   Compiling rustls-pki-types v1.15.0
+   Compiling want v0.3.1
+   Compiling zmij v1.0.21
+   Compiling httparse v1.10.1
+   Compiling png v0.17.16
+   Compiling simplecss v0.2.2
+   Compiling imagesize v0.13.0
+   Compiling unicode-vo v0.1.0
+   Compiling svg_fmt v0.4.5
+   Compiling zune-core v0.4.12
+   Compiling data-url v0.3.2
+   Compiling untrusted v0.9.0
+   Compiling svgtypes v0.15.3
+   Compiling xmlwriter v0.1.0
+   Compiling roxmltree v0.20.0
+   Compiling pico-args v0.5.0
+   Compiling zune-jpeg v0.4.21
+   Compiling serde_json v1.0.151
+   Compiling gif v0.13.3
+   Compiling ipnet v2.12.0
+   Compiling subtle v2.6.1
+   Compiling float_next_after v1.0.0
+   Compiling static_assertions v1.1.0
+   Compiling lyon_tessellation v1.0.20
+   Compiling etagere v0.2.15
+   Compiling moxcms v0.8.1
+   Compiling lyon_algorithms v1.0.20
+   Compiling concurrent-queue v2.5.0
+   Compiling windows-sys v0.52.0
+   Compiling lru v0.16.4
+   Compiling parking v2.2.1
+   Compiling tap v1.0.1
+   Compiling regex-automata v0.4.14
+   Compiling darling_core v0.23.0
+   Compiling lyon v1.0.19
+   Compiling wyz v0.5.1
+   Compiling event-listener v5.4.1
+   Compiling radium v0.7.0
+   Compiling guillotiere v0.6.2
+   Compiling const-hex v1.19.1
+   Compiling sha2 v0.10.9
+   Compiling kurbo v0.10.4
+   Compiling sync_wrapper v1.0.2
+   Compiling crc-catalog v2.5.0
+   Compiling tower-layer v0.3.3
+   Compiling unty v0.0.4
+   Compiling funty v2.0.0
+   Compiling mio v1.2.1
+   Compiling socket2 v0.6.4
+   Compiling tempfile v3.27.0
+   Compiling schannel v0.1.29
+   Compiling crc v3.4.0
+   Compiling event-listener-strategy v0.5.4
+   Compiling libusb1-sys v0.7.0
+   Compiling thiserror-impl v2.0.18
+   Compiling bytemuck_derive v1.10.2
+   Compiling tokio-macros v2.7.0
+   Compiling tracing-attributes v0.1.31
+   Compiling futures-macro v0.3.33
+   Compiling zerocopy-derive v0.8.54
+   Compiling zerofrom-derive v0.1.7
+   Compiling yoke-derive v0.8.2
+   Compiling displaydoc v0.2.6
+   Compiling zerovec-derive v0.11.3
+   Compiling profiling-procmacros v1.0.18
+   Compiling serde v1.0.229
+   Compiling equator-macro v0.4.2
+   Compiling windows-implement v0.60.2
+   Compiling arg_enum_proc_macro v0.3.4
+   Compiling futures-util v0.3.33
+   Compiling profiling v1.0.18
+   Compiling windows-implement v0.58.0
+   Compiling thiserror v2.0.18
+   Compiling bytemuck v1.25.0
+   Compiling windows-interface v0.58.0
+   Compiling bytes v1.12.0
+   Compiling windows-interface v0.59.3
+   Compiling tracing v0.1.44
+   Compiling thiserror-impl v1.0.69
+   Compiling num-derive v0.4.2
+   Compiling quick-xml v0.41.0
+   Compiling chrono v0.4.45
+   Compiling font-types v0.10.1
+   Compiling font-types v0.11.3
+   Compiling rgb v0.8.53
+   Compiling equator v0.4.2
+   Compiling qoi v0.4.1
+   Compiling wgpu-types v27.0.1
+   Compiling tokio v1.53.1
+   Compiling zerocopy v0.8.54
+   Compiling zerofrom v0.1.8
+   Compiling aligned-vec v0.6.4
+   Compiling http v1.4.2
+   Compiling read-fonts v0.39.2
+   Compiling read-fonts v0.35.0
+   Compiling windows-core v0.62.2
+   Compiling windows-core v0.58.0
+   Compiling iced_core v0.14.0
+   Compiling tiny-skia-path v0.11.4
+   Compiling yoke v0.8.3
+   Compiling v_frame v0.3.9
+   Compiling rustybuzz v0.20.1
+   Compiling regex v1.12.4
+   Compiling zerovec v0.11.6
+   Compiling zerotrie v0.2.4
+   Compiling av-scenechange v0.14.1
+   Compiling av1-grain v0.2.5
+   Compiling thiserror v1.0.69
+   Compiling windows v0.58.0
+   Compiling http-body v1.0.1
+   Compiling windows-collections v0.3.2
+   Compiling windows-numerics v0.3.1
+   Compiling windows-future v0.3.2
+   Compiling tiny-skia v0.11.4
+   Compiling tinystr v0.8.3
+   Compiling potential_utf v0.1.5
+   Compiling futures-executor v0.3.32
+   Compiling icu_locale_core v2.2.0
+   Compiling icu_collections v2.2.0
+   Compiling futures v0.3.32
+   Compiling iced_futures v0.14.0
+   Compiling rav1e v0.8.1
+   Compiling http-body-util v0.1.3
+   Compiling bb-bmap-parser v0.1.1 (C:\Users\Toxpo\Desktop\T3 Gemstone\imager-fork\bb-imager-rs\bb-bmap-parser)
+   Compiling windows v0.62.2
+   Compiling iced_debug v0.14.0
+   Compiling softbuffer v0.4.8
+   Compiling native-tls v0.2.18
+   Compiling usvg v0.45.1
+   Compiling darling_macro v0.23.0
+   Compiling serde-big-array v0.5.1
+   Compiling bincode v2.0.1
+   Compiling bitvec v1.1.1
+   Compiling libsqlite3-sys v0.38.1
+   Compiling icu_provider v2.2.0
+   Compiling uuid v1.23.4
+   Compiling byteorder v1.5.0
+   Compiling icu_normalizer v2.2.0
+   Compiling icu_properties v2.2.0
+   Compiling simple-bytes v0.2.14
+   Compiling fatfs v0.3.6
+   Compiling darling v0.23.0
+   Compiling gpt v4.1.0
+   Compiling headers-core v0.3.0
+   Compiling async-lock v3.4.2
+   Compiling ansic-macros v0.1.0
+   Compiling sha1 v0.10.6
+   Compiling half v2.7.1
+   Compiling bb-helper v1.0.13 (C:\Users\Toxpo\Desktop\T3 Gemstone\imager-fork\bb-imager-rs\bb-helper)
+   Compiling tokio-util v0.7.19
+   Compiling idna_adapter v1.2.2
+   Compiling resvg v0.45.1
+   Compiling tower v0.5.3
+   Compiling idna v1.1.0
+   Compiling exr v1.74.0
+   Compiling tiff v0.11.3
+   Compiling naga v27.0.3
+   Compiling h2 v0.4.15
+   Compiling tokio-native-tls v0.3.1
+   Compiling url v2.5.8
+   Compiling mbrman v0.6.1
+   Compiling fscommon v0.1.1
+   Compiling error-code v3.3.2
+   Compiling mime v0.3.17
+   Compiling async-object-pool v0.2.0
+   Compiling ansic v0.1.7
+   Compiling clipboard-win v5.4.1
+   Compiling headers v0.4.1
+   Compiling serde_with_macros v3.21.0
+   Compiling tower-http v0.6.11
+   Compiling skrifa v0.37.0
+   Compiling harfrust v0.3.2
+   Compiling iced_runtime v0.14.0
+   Compiling skrifa v0.42.1
+   Compiling serde_regex v1.2.0
+   Compiling ravif v0.13.0
+   Compiling assert-json-diff v2.0.2
+   Compiling async-trait v0.1.89
+   Compiling hashlink v0.12.1
+   Compiling tabwriter v1.4.1
+   Compiling path-tree v0.8.3
+   Compiling bytesize v2.4.2
+   Compiling fallible-streaming-iterator v0.1.9
+   Compiling elf v0.8.0
+   Compiling dpi v0.1.2
+   Compiling spin v0.10.0
+   Compiling futures-timer v3.0.4
+   Compiling image v0.25.10
+   Compiling stringmetrics v2.2.2
+   Compiling cursor-icon v1.2.0
+   Compiling fallible-iterator v0.3.0
+   Compiling similar v2.7.0
+   Compiling bin_file v0.2.1
+   Compiling iced_fonts_macros v0.3.0
+   Compiling bb-drivelist v1.0.0 (C:\Users\Toxpo\Desktop\T3 Gemstone\imager-fork\bb-imager-rs\bb-drivelist)
+   Compiling winit v0.30.13
+   Compiling crc-fast v1.10.0
+   Compiling rusqlite v0.40.1
+   Compiling serde_with v3.21.0
+   Compiling bb-flasher-sd v3.0.0 (C:\Users\Toxpo\Desktop\T3 Gemstone\imager-fork\bb-imager-rs\bb-flasher-sd)
+   Compiling swash v0.2.9
+   Compiling hyper v1.10.1
+   Compiling window_clipboard v0.5.1
+   Compiling serialport v4.9.0
+   Compiling pretty-hex v0.4.2
+   Compiling bb-flasher-pb2-mspm0 v0.1.0 (C:\Users\Toxpo\Desktop\T3 Gemstone\imager-fork\bb-imager-rs\bb-flasher-pb2-mspm0)
+   Compiling dfu-core v0.11.1
+   Compiling rusb v0.9.4
+   Compiling bb-config v0.1.0 (C:\Users\Toxpo\Desktop\T3 Gemstone\imager-fork\bb-imager-rs\bb-config)
+   Compiling gpu-allocator v0.27.0
+   Compiling hyper-util v0.1.20
+   Compiling bb-flasher-mspm0 v1.0.13 (C:\Users\Toxpo\Desktop\T3 Gemstone\imager-fork\bb-imager-rs\bb-flasher-mspm0)
+   Compiling dfu-libusb v0.6.2
+   Compiling bb-flasher-dfu v1.0.13 (C:\Users\Toxpo\Desktop\T3 Gemstone\imager-fork\bb-imager-rs\bb-flasher-dfu)
+   Compiling cosmic-text v0.15.0
+   Compiling hyper-tls v0.6.0
+   Compiling httpmock v0.8.3
+   Compiling iced_graphics v0.14.0
+   Compiling wgpu-hal v27.0.4
+   Compiling iced_tiny_skia v0.14.0
+   Compiling iced_program v0.14.0
+   Compiling iced_winit v0.14.0
+   Compiling wgpu-core-deps-windows-linux-android v27.0.0
+   Compiling wgpu-core v27.0.3
+   Compiling wgpu v27.0.1
+   Compiling cryoglyph v0.1.0
+   Compiling iced_wgpu v0.14.0
+   Compiling aws-lc-rs v1.17.1
+   Compiling rustls v0.23.41
+   Compiling iced_renderer v0.14.0
+   Compiling iced_widget v0.14.2
+   Compiling rustls-webpki v0.103.13
+   Compiling iced_fonts v0.3.0
+   Compiling iced v0.14.0
+   Compiling iced_aw v0.14.1
+   Compiling tokio-rustls v0.26.4
+   Compiling rustls-platform-verifier v0.7.0
+   Compiling hyper-rustls v0.27.9
+   Compiling reqwest v0.13.4
+   Compiling bb-downloader v0.2.0 (C:\Users\Toxpo\Desktop\T3 Gemstone\imager-fork\bb-imager-rs\bb-downloader)
+   Compiling bb-iced-widgets v1.0.13 (C:\Users\Toxpo\Desktop\T3 Gemstone\imager-fork\bb-imager-rs\bb-iced-widgets)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 27s
+     Running unittests src\lib.rs (target\debug\deps\bb_bmap_parser-b808a38a6dda3281.exe)
+
+running 1 test
+test bmap::test::hashes ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\builder.rs (target\debug\deps\builder-67a40c0a843b923f.exe)
+
+running 7 tests
+test builder_missing_field_matrix ... ok
+test builder_happy_path ... ok
+test from_xml_rejects_malformed_xml ... ok
+test from_xml_rejects_unknown_checksum_type ... ok
+test from_xml_rejects_non_hex_checksum ... ok
+test from_xml_rejects_wrong_length_checksum ... ok
+test from_xml_single_block_range ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\parse.rs (target\debug\deps\parse-17d2306af8855524.exe)
+
+running 1 test
+test parse ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\bb_config-ada668a8af94c945.exe)
+
+running 1 test
+test tests::basic ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\config.rs (target\debug\deps\config-395bcebba1bce118.exe)
+
+running 8 tests
+test flasher_serde_strings ... ok
+test init_format_serde_strings ... ok
+test vec_skip_error_drops_malformed_items ... ok
+test os_list_item_untagged_disambiguation ... ok
+test full_config_round_trip ... ok
+test sqlite_invalid_discriminant_errors ... ok
+test flasher_sqlite_round_trip ... ok
+test init_format_sqlite_round_trip ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\bb_downloader-22f446aa0962ee21.exe)
+
+running 3 tests
+test tests::test_downloader_new_creates_dir ... ok
+test helpers::tests::test_sha256_from_path ... ok
+test tests::test_check_cache_from_sha ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests\stream.rs (target\debug\deps\stream-6083cf8e405bd1bf.exe)
+
+running 2 tests
+test download_to_stream_rejects_sha_mismatch ... ok
+test download_to_stream_persists_on_sha_match ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+
+     Running tests\test.rs (target\debug\deps\test-0f2bee641aac0155.exe)
+
+running 4 tests
+test test_downloader_new_fails_if_path_is_file ... ok
+test test_download_json_no_cache_rejects_malformed_json ... ok
+test test_download_json_no_cache ... ok
+test test_download_and_cache_by_url ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+
+     Running unittests src\lib.rs (target\debug\deps\bb_drivelist-02afe46c27fddfdb.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\main.rs (target\debug\deps\bb_drivelist-10a87e2738e46b03.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\run.rs (target\debug\deps\run-3bf83162abe2ebc3.exe)
+
+running 1 test
+test drive_list_succeeds_and_descriptors_are_well_formed ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.54s
+
+     Running unittests src\lib.rs (target\debug\deps\bb_flasher_dfu-39e8bc58bb31e3b9.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\bb_flasher_mspm0-3e173c3096299224.exe)
+
+running 12 tests
+test helpers::tests::test_flash_prep_hook_fails ... ok
+test bsl::tests::unlock_req_test ... ok
+test helpers::tests::from_binary_skip_ff_block ... ok
+test helpers::tests::from_binary_mixed_blocks ... ok
+test helpers::tests::from_binary_multiple_blocks ... ok
+test helpers::tests::from_binary_single_block ... ok
+test helpers::tests::basic_flash ... ok
+test helpers::tests::from_binary_with_remainder ... ok
+test helpers::tests::test_flash_success_without_verify ... ok
+test helpers::tests::test_flash_cancelled_early ... ok
+test helpers::tests::test_flash_large_firmware_chunks ... ok
+test helpers::tests::test_flash_skips_when_crc_matches ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests\basic.rs (target\debug\deps\basic-7cfc9e89663d8f4a.exe)
+
+running 1 test
+test serial_ports ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running unittests src\lib.rs (target\debug\deps\bb_flasher_pb2_mspm0-c7c89ec64a4fb754.exe)
+
+running 5 tests
+test tests::flash_fw_api_missing_loading_entry_fails_to_open ... ok
+test tests::flash_fw_api_empty_error_is_success ... ok
+test tests::flash_fw_api_firmware_invalid_is_skipped ... ok
+test tests::flash_fw_api_surfaces_flashing_error ... ok
+test tests::flash_fw_api_writes_firmware_and_reports_success ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests\basic.rs (target\debug\deps\basic-56d499a9c920f443.exe)
+
+running 2 tests
+test device_reports_expected_metadata ... ok
+test flash_rejects_oversize_firmware ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\bb_flasher_sd-17ad2bf782837d95.exe)
+
+running 15 tests
+test flashing::tests::test_writer_task_success ... ok
+test flashing::tests::test_cancellation_token ... ok
+test flashing::tests::test_read_aligned_exact_multiple ... ok
+test flashing::tests::test_read_aligned_padding_needed ... ok
+test flashing::tests::test_reader_task_stops_at_eof ... ok
+test flashing::tests::sd_write ... ok
+test helpers::tests::dev_wrapper_read ... ok
+test helpers::tests::sd_card_wrapper ... ok
+test helpers::tests::dev_wrapper_write ... ok
+test flashing::tests::sd_write_bmap ... ok
+test bootfs_update::test::test_mid_flight_storage_failure ... ok
+test bootfs_update::test::test_cancellation_respected ... ok
+test bootfs_update::test::test_immediate_storage_failure ... ok
+test bootfs_update::test::test_image_closure_error ... ok
+test bootfs_update::test::basic ... ok
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+
+     Running tests\bootfs_update.rs (target\debug\deps\bootfs_update-eb8088b38bcf3612.exe)
+
+running 1 test
+test test_flash_workflow_with_helper_inspection ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+
+     Running tests\customize.rs (target\debug\deps\customize-794148e10ba847cc.exe)
+
+running 1 test
+test flash_applies_customization_through_public_api ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.46s
+
+     Running tests\flashing.rs (target\debug\deps\flashing-d2beb109a03d21b4.exe)
+
+running 3 tests
+test flash_aborts_with_cancelled_token ... ok
+test test_public_flash_with_temp_file ... ok
+test destinations ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.03s
+
+     Running unittests src\lib.rs (target\debug\deps\bb_helper-b03710372dd376ff.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\cancel.rs (target\debug\deps\cancel-01d14751f78b091b.exe)
+
+running 4 tests
+test test_cloned_tokens_share_state ... ok
+test test_default_state ... ok
+test test_drop_guard_cancels ... ok
+test test_cross_thread_cancellation ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests\file_stream.rs (target\debug\deps\file_stream-e07765f4f87f1f53.exe)
+
+running 7 tests
+test invalid_negative_seek_fails ... ok
+test seek_from_end_works_after_writer_drop ... ok
+test seek_from_end_fails_while_writer_alive ... ok
+test seek_from_current_works ... ok
+test blocking_read_receives_all_data_then_eof_on_writer_drop ... ok
+test seek_from_start_works ... ok
+test persist_writes_byte_exact_file ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests\reader_progress.rs (target\debug\deps\reader_progress-e4737b69956f8019.exe)
+
+running 4 tests
+test test_zero_size_handling ... ok
+test test_happy_path_progress ... ok
+test test_dropped_receiver_does_not_panic ... ok
+test test_progress_tracks_absolute_position_after_seek ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\bb_iced_widgets-f35a6dc276d91303.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+EXIT=0

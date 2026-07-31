@@ -1,0 +1,24 @@
+    Checking memchr v2.8.2
+    Checking bb-helper v1.0.13 (C:\Users\Toxpo\Desktop\T3 Gemstone\imager-fork\bb-imager-rs\bb-helper)
+   Compiling cc v1.2.66
+    Checking windows-sys v0.61.2
+   Compiling syn v2.0.118
+    Checking crypto-common v0.1.7
+    Checking windows-sys v0.52.0
+    Checking digest v0.10.7
+    Checking crc-fast v1.10.0
+    Checking aho-corasick v1.1.4
+   Compiling hidapi v2.6.6
+    Checking regex-automata v0.4.14
+    Checking regex v1.12.4
+    Checking serialport v4.9.0
+   Compiling ansic-macros v0.1.0
+   Compiling thiserror-impl v2.0.18
+   Compiling tracing-attributes v0.1.31
+    Checking ansic v0.1.7
+    Checking bin_file v0.2.1
+    Checking tracing v0.1.44
+    Checking thiserror v2.0.18
+    Checking bb-flasher-bcf v1.0.2 (C:\Users\Toxpo\Desktop\T3 Gemstone\imager-fork\bb-imager-rs\bb-flasher-bcf)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 7.02s
+EXIT=0

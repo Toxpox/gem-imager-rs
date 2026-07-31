@@ -1,0 +1,39 @@
+{
+  "imager": {
+    "devices": [
+      {
+        "description": "T3 Gemstone Obsidian",
+        "emmc": true,
+        "matching_type": "exclusive",
+        "name": "T3-GEM-O1",
+        "tags": ["t3-gem-o1"]
+      }
+    ],
+    "latest_version": "1.1.1"
+  },
+  "os_list": [
+    {
+      "description": "Fixture: extract_sha256 is absent",
+      "devices": ["t3-gem-o1"],
+      "extract_size": 1024000000,
+      "image_download_sha256": "13e237518eee97dead84f2d8009a6d875516e1ab2eb800c90fe44f5ff49774c7",
+      "image_download_size": 138737372,
+      "init_format": "systemd",
+      "name": "Broken (missing extract_sha256)",
+      "release_date": "2026-03-26",
+      "url": "https://packages.t3gemstone.org/images/broken.img.xz"
+    },
+    {
+      "description": "Valid neighbour, must survive",
+      "devices": ["t3-gem-o1"],
+      "extract_sha256": "9c991802d2ceff5a80cfd3e822f9cd2f9730cee59759714ba7530c81a824c92d",
+      "extract_size": 1024000000,
+      "image_download_sha256": "13e237518eee97dead84f2d8009a6d875516e1ab2eb800c90fe44f5ff49774c7",
+      "image_download_size": 138737372,
+      "init_format": "systemd",
+      "name": "T3 Gemstone OS (Minimal)",
+      "release_date": "2026-03-26",
+      "url": "https://packages.t3gemstone.org/images/good.img.xz"
+    }
+  ]
+}

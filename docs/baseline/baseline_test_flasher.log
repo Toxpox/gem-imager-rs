@@ -1,0 +1,89 @@
+    Blocking waiting for file lock on build directory
+   Compiling windows-sys v0.61.2
+   Compiling log v0.4.33
+   Compiling simd-adler32 v0.3.9
+   Compiling num-traits v0.2.19
+   Compiling hashbrown v0.17.1
+   Compiling serde v1.0.229
+   Compiling tokio v1.53.1
+   Compiling windows-core v0.62.2
+   Compiling hidapi v2.6.6
+   Compiling bin_file v0.2.1
+   Compiling slab v0.4.12
+   Compiling zerocopy v0.8.54
+   Compiling bb-flasher-pb2-mspm0 v0.1.0 (C:\Users\Toxpo\Desktop\T3 Gemstone\imager-fork\bb-imager-rs\bb-flasher-pb2-mspm0)
+   Compiling typed-path v0.12.3
+   Compiling ownable v0.6.2
+   Compiling miniz_oxide v0.8.9
+   Compiling dfu-core v0.11.1
+   Compiling fscommon v0.1.1
+   Compiling futures-util v0.3.33
+   Compiling dfu-libusb v0.6.2
+   Compiling windows-numerics v0.3.1
+   Compiling windows-future v0.3.2
+   Compiling windows-collections v0.3.2
+   Compiling flate2 v1.1.9
+   Compiling serde-big-array v0.5.1
+   Compiling quick-xml v0.41.0
+   Compiling bincode v2.0.1
+   Compiling indexmap v2.14.0
+   Compiling chrono v0.4.45
+   Compiling tempfile v3.27.0
+   Compiling windows v0.62.2
+   Compiling qcow2-core v0.3.0 (https://github.com/Ayush1325/qcow2-forensic.git?branch=core-reader#0a95ca91)
+   Compiling yaml_serde v0.10.4
+   Compiling zip v8.6.0
+   Compiling rc-zip v5.4.1
+   Compiling fatfs v0.3.6
+   Compiling mbrman v0.6.1
+   Compiling bb-bmap-parser v0.1.1 (C:\Users\Toxpo\Desktop\T3 Gemstone\imager-fork\bb-imager-rs\bb-bmap-parser)
+   Compiling rc-zip-sync v4.4.2
+   Compiling bb-helper v1.0.13 (C:\Users\Toxpo\Desktop\T3 Gemstone\imager-fork\bb-imager-rs\bb-helper)
+   Compiling tokio-util v0.7.19
+   Compiling bb-flasher-bcf v1.0.2 (C:\Users\Toxpo\Desktop\T3 Gemstone\imager-fork\bb-imager-rs\bb-flasher-bcf)
+   Compiling bb-flasher-dfu v1.0.13 (C:\Users\Toxpo\Desktop\T3 Gemstone\imager-fork\bb-imager-rs\bb-flasher-dfu)
+   Compiling bb-flasher-mspm0 v1.0.13 (C:\Users\Toxpo\Desktop\T3 Gemstone\imager-fork\bb-imager-rs\bb-flasher-mspm0)
+   Compiling bb-drivelist v1.0.0 (C:\Users\Toxpo\Desktop\T3 Gemstone\imager-fork\bb-imager-rs\bb-drivelist)
+   Compiling bb-flasher-sd v3.0.0 (C:\Users\Toxpo\Desktop\T3 Gemstone\imager-fork\bb-imager-rs\bb-flasher-sd)
+   Compiling bb-flasher v0.1.0 (C:\Users\Toxpo\Desktop\T3 Gemstone\imager-fork\bb-imager-rs\bb-flasher)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 44.00s
+     Running unittests src\lib.rs (target\debug\deps\bb_flasher-7745ecc2a61832c1.exe)
+
+running 13 tests
+test flasher::sd::cloud_init::tests::keyboard ... ok
+test flasher::sd::cloud_init::tests::network ... ok
+test flasher::sd::cloud_init::tests::hostname ... ok
+test flasher::sd::cloud_init::tests::timezone ... ok
+test flasher::sd::cloud_init::tests::user ... ok
+test img::test::rejects_empty_file_during_format_detection ... ok
+test img::test::file_stream_uncompressed_image_reads_contents ... ok
+test img::test::file_stream_zip_image_reads_first_entry_contents ... ok
+test img::test::file_stream_xz_image_reports_uncompressed_size_and_reads_contents ... ok
+test img::test::rejects_truncated_xz_header ... ok
+test img::test::detects_uncompressed_image_and_reads_contents ... ok
+test img::test::detects_zip_compressed_image_and_reads_first_entry_contents ... ok
+test img::test::detects_xz_compressed_image_and_reports_uncompressed_size ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests\image.rs (target\debug\deps\image-7a5f72c90b93a77b.exe)
+
+running 4 tests
+test local_image_accessors_and_display ... ok
+test os_archive_iterates_plain_tar ... ok
+test local_image_into_image_fn_reads_uncompressed_contents ... ok
+test os_archive_iterates_tar_xz ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests\sd.rs (target\debug\deps\sd-6cfa70cb1f14805e.exe)
+
+running 4 tests
+test flash_progress ... ok
+test flash_cancel ... ok
+test flash_no_progress ... ok
+test destinations ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.53s
+
+EXIT=0

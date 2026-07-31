@@ -1,0 +1,216 @@
+ Downloading crates ...
+  Downloaded hyper-tls v0.6.0
+  Downloaded native-tls v0.2.18
+  Downloaded tokio-native-tls v0.3.1
+    Checking windows-sys v0.61.2
+    Checking tracing-core v0.1.36
+   Compiling syn v3.0.2
+    Checking windows-core v0.62.2
+    Checking regex-automata v0.4.14
+   Compiling native-tls v0.2.18
+    Checking bb-flasher-pb2-mspm0 v0.1.0 (C:\Users\Toxpo\Desktop\T3 Gemstone\imager-fork\bb-imager-rs\bb-flasher-pb2-mspm0)
+    Checking rusqlite v0.40.1
+    Checking tracing v0.1.44
+    Checking windows-numerics v0.3.1
+    Checking windows-collections v0.3.2
+    Checking windows-future v0.3.2
+    Checking winit v0.30.13
+    Checking windows v0.62.2
+    Checking regex v1.12.4
+    Checking bin_file v0.2.1
+   Compiling serde_derive v1.0.229
+    Checking serde v1.0.229
+    Checking bytes v1.12.0
+    Checking url v2.5.8
+    Checking quick-xml v0.41.0
+    Checking chrono v0.4.45
+    Checking serde-big-array v0.5.1
+    Checking bincode v2.0.1
+    Checking assert-json-diff v2.0.2
+    Checking serde_regex v1.2.0
+    Checking http v1.4.2
+    Checking iced_core v0.14.0
+    Checking dfu-core v0.11.1
+    Checking dfu-libusb v0.6.2
+    Checking mbrman v0.6.1
+    Checking fatfs v0.3.6
+    Checking bb-config v0.1.0 (C:\Users\Toxpo\Desktop\T3 Gemstone\imager-fork\bb-imager-rs\bb-config)
+    Checking http-body v1.0.1
+    Checking headers-core v0.3.0
+    Checking bb-bmap-parser v0.1.1 (C:\Users\Toxpo\Desktop\T3 Gemstone\imager-fork\bb-imager-rs\bb-bmap-parser)
+    Checking headers v0.4.1
+    Checking http-body-util v0.1.3
+    Checking bb-drivelist v1.0.0 (C:\Users\Toxpo\Desktop\T3 Gemstone\imager-fork\bb-imager-rs\bb-drivelist)
+    Checking iced_futures v0.14.0
+warning: very complex type used. Consider factoring parts into `type` definitions
+  --> bb-bmap-parser\tests\builder.rs:53:16
+   |
+53 |     let cases: Vec<(&str, Box<dyn Fn(&mut bb_bmap_parser::BmapBuilder)>, BmapBuilderError)> = vec![
+   |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#type_complexity
+   = note: `#[warn(clippy::type_complexity)]` on by default
+
+warning: `bb-bmap-parser` (test "builder") generated 1 warning
+warning: the function `get_friendly_name` doesn't need a mutable reference
+  --> bb-drivelist\src\pal\windows.rs:62:66
+   |
+62 |             let friendly_name = get_friendly_name(h_device_info, &mut device_info_data);
+   |                                                                  ^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#unnecessary_mut_passed
+   = note: `#[warn(clippy::unnecessary_mut_passed)]` on by default
+help: remove this `mut`
+   |
+62 -             let friendly_name = get_friendly_name(h_device_info, &mut device_info_data);
+62 +             let friendly_name = get_friendly_name(h_device_info, &device_info_data);
+   |
+
+warning: the function `is_removable` doesn't need a mutable reference
+  --> bb-drivelist\src\pal\windows.rs:71:59
+   |
+71 |                 is_removable: is_removable(h_device_info, &mut device_info_data),
+   |                                                           ^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#unnecessary_mut_passed
+help: remove this `mut`
+   |
+71 -                 is_removable: is_removable(h_device_info, &mut device_info_data),
+71 +                 is_removable: is_removable(h_device_info, &device_info_data),
+   |
+
+warning: the function `get_detail_data` doesn't need a mutable reference
+  --> bb-drivelist\src\pal\windows.rs:75:55
+   |
+75 |             get_detail_data(&mut item, h_device_info, &mut device_info_data).unwrap();
+   |                                                       ^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#unnecessary_mut_passed
+help: remove this `mut`
+   |
+75 -             get_detail_data(&mut item, h_device_info, &mut device_info_data).unwrap();
+75 +             get_detail_data(&mut item, h_device_info, &device_info_data).unwrap();
+   |
+
+warning: `to_string` applied to a type that implements `Display` in `format!` args
+   --> bb-drivelist\src\pal\windows.rs:239:20
+    |
+239 |                 err.to_string()
+    |                    ^^^^^^^^^^^^ help: remove this
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#to_string_in_format_args
+    = note: `#[warn(clippy::to_string_in_format_args)]` on by default
+
+warning: `to_string` applied to a type that implements `Display` in `format!` args
+   --> bb-drivelist\src\pal\windows.rs:246:20
+    |
+246 |                 err.to_string()
+    |                    ^^^^^^^^^^^^ help: remove this
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#to_string_in_format_args
+
+warning: `to_string` applied to a type that implements `Display` in `format!` args
+   --> bb-drivelist\src\pal\windows.rs:253:20
+    |
+253 |                 err.to_string()
+    |                    ^^^^^^^^^^^^ help: remove this
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#to_string_in_format_args
+
+warning: `to_string` applied to a type that implements `Display` in `format!` args
+   --> bb-drivelist\src\pal\windows.rs:260:20
+    |
+260 |                 err.to_string()
+    |                    ^^^^^^^^^^^^ help: remove this
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#to_string_in_format_args
+
+warning: this `if` statement can be collapsed
+   --> bb-drivelist\src\pal\windows.rs:521:5
+    |
+521 | /     if res.is_ok() {
+522 | |         if disk_extents.NumberOfDiskExtents >= 2 {
+523 | |             return None;
+524 | |         }
+525 | |     }
+    | |_____^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#collapsible_if
+    = note: `#[warn(clippy::collapsible_if)]` on by default
+help: collapse nested if block
+    |
+521 ~     if res.is_ok()
+522 ~         && disk_extents.NumberOfDiskExtents >= 2 {
+523 |             return None;
+524 ~         }
+    |
+
+warning: `bb-drivelist` (lib) generated 8 warnings (run `cargo clippy --fix --lib -p bb-drivelist -- ` to apply 8 suggestions)
+warning: `bb-drivelist` (lib test) generated 8 warnings (8 duplicates)
+    Checking iced_graphics v0.14.0
+    Checking iced_debug v0.14.0
+    Checking iced_runtime v0.14.0
+    Checking socket2 v0.6.4
+    Checking mio v1.2.1
+    Checking tempfile v3.27.0
+    Checking schannel v0.1.29
+    Checking softbuffer v0.4.8
+    Checking rustls-platform-verifier v0.7.0
+    Checking tokio v1.53.1
+    Checking iced_tiny_skia v0.14.0
+    Checking iced_wgpu v0.14.0
+    Checking iced_program v0.14.0
+    Checking iced_winit v0.14.0
+    Checking iced_renderer v0.14.0
+    Checking iced_widget v0.14.2
+    Checking iced_fonts v0.3.0
+    Checking iced v0.14.0
+    Checking bb-helper v1.0.13 (C:\Users\Toxpo\Desktop\T3 Gemstone\imager-fork\bb-imager-rs\bb-helper)
+    Checking tokio-util v0.7.19
+    Checking tokio-rustls v0.26.4
+    Checking tower v0.5.3
+    Checking tokio-native-tls v0.3.1
+    Checking iced_aw v0.14.1
+    Checking bb-flasher-sd v3.0.0 (C:\Users\Toxpo\Desktop\T3 Gemstone\imager-fork\bb-imager-rs\bb-flasher-sd)
+    Checking bb-flasher-mspm0 v1.0.13 (C:\Users\Toxpo\Desktop\T3 Gemstone\imager-fork\bb-imager-rs\bb-flasher-mspm0)
+    Checking bb-flasher-dfu v1.0.13 (C:\Users\Toxpo\Desktop\T3 Gemstone\imager-fork\bb-imager-rs\bb-flasher-dfu)
+    Checking bb-iced-widgets v1.0.13 (C:\Users\Toxpo\Desktop\T3 Gemstone\imager-fork\bb-imager-rs\bb-iced-widgets)
+    Checking tower-http v0.6.11
+    Checking h2 v0.4.15
+warning: the borrowed expression implements the required traits
+   --> bb-flasher-sd\src\pal\windows.rs:132:15
+    |
+132 |           .args(&[
+    |  _______________^
+133 | |             "Clear-Disk",
+134 | |             "-Number",
+135 | |             disk_num,
+136 | |             "-RemoveData",
+137 | |             "-Confirm:$false",
+138 | |         ])
+    | |_________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#needless_borrows_for_generic_args
+    = note: `#[warn(clippy::needless_borrows_for_generic_args)]` on by default
+help: change this to
+    |
+132 ~         .args([
+133 +             "Clear-Disk",
+134 +             "-Number",
+135 +             disk_num,
+136 +             "-RemoveData",
+137 +             "-Confirm:$false",
+138 ~         ])
+    |
+
+warning: `bb-flasher-sd` (lib) generated 1 warning (run `cargo clippy --fix --lib -p bb-flasher-sd -- ` to apply 1 suggestion)
+warning: `bb-flasher-sd` (lib test) generated 1 warning (1 duplicate)
+    Checking hyper v1.10.1
+    Checking hyper-util v0.1.20
+    Checking hyper-rustls v0.27.9
+    Checking hyper-tls v0.6.0
+    Checking httpmock v0.8.3
+    Checking reqwest v0.13.4
+    Checking bb-downloader v0.2.0 (C:\Users\Toxpo\Desktop\T3 Gemstone\imager-fork\bb-imager-rs\bb-downloader)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 17.88s
+EXIT=0
