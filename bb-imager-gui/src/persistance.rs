@@ -12,8 +12,6 @@ pub(crate) struct GuiConfiguration {
     pub(crate) sd_customization: Option<SdCustomization>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) bcf_customization: Option<BcfCustomization>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) zepto_customization: Option<BcfCustomization>,
 }
 
 impl GuiConfiguration {
@@ -56,10 +54,6 @@ impl GuiConfiguration {
 
     pub(crate) fn update_bcf_customization(&mut self, t: BcfCustomization) {
         self.bcf_customization = Some(t)
-    }
-
-    pub(crate) fn update_zepto_customization(&mut self, t: BcfCustomization) {
-        self.zepto_customization = Some(t)
     }
 }
 
@@ -356,15 +350,12 @@ mod tests {
         let mut gui = GuiConfiguration::default();
         assert!(gui.sd_customization.is_none());
         assert!(gui.bcf_customization.is_none());
-        assert!(gui.zepto_customization.is_none());
 
         gui.update_sd_customization(SdCustomization::default());
-        gui.update_bcf_customization(BcfCustomization::default());
-        gui.update_zepto_customization(BcfCustomization::default().update_verify(false));
+        gui.update_bcf_customization(BcfCustomization::default().update_verify(false));
 
         assert!(gui.sd_customization.is_some());
-        assert!(gui.bcf_customization.is_some());
-        assert_eq!(gui.zepto_customization.map(|z| z.verify), Some(false));
+        assert_eq!(gui.bcf_customization.map(|b| b.verify), Some(false));
     }
 
     #[test]

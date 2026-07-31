@@ -221,8 +221,6 @@ pub enum Flasher {
     BeagleConnectFreedom,
     /// BeagleConnect Freedom Msp430 Firmware
     Msp430Usb,
-    /// MSPM0 flasher
-    Mspm0,
 }
 
 impl rusqlite::ToSql for Flasher {
@@ -232,7 +230,6 @@ impl rusqlite::ToSql for Flasher {
             Flasher::SdCardBootfs => 2,
             Flasher::BeagleConnectFreedom => 3,
             Flasher::Msp430Usb => 4,
-            Flasher::Mspm0 => 6,
         };
 
         Ok(rusqlite::types::ToSqlOutput::from(val))
@@ -246,7 +243,6 @@ impl rusqlite::types::FromSql for Flasher {
             2 => Ok(Flasher::SdCardBootfs),
             3 => Ok(Flasher::BeagleConnectFreedom),
             4 => Ok(Flasher::Msp430Usb),
-            6 => Ok(Flasher::Mspm0),
             _ => Err(rusqlite::types::FromSqlError::Other(
                 format!("Invalid Flasher discriminant: {}", val).into(),
             )),

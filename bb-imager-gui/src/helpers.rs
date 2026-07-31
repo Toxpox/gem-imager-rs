@@ -523,22 +523,6 @@ pub(crate) async fn flash(
             .await
             .unwrap()
         }
-        #[cfg(any(feature = "zepto_uart", feature = "zepto_i2c"))]
-        (
-            BoardImage::Image { img, .. },
-            FlashingCustomization::Zepto(customization),
-            Destination::Mspm0(t),
-        ) => tokio::task::spawn_blocking(move || {
-            bb_flasher::mspm0::Flasher::no_prep(
-                img.into_image_fn(),
-                t,
-                customization.verify,
-                Some(cancel_sync),
-            )
-            .flash(Some(chan))
-        })
-        .await
-        .unwrap(),
         _ => unimplemented!(),
     }
 }
@@ -552,8 +536,6 @@ pub(crate) enum Destination {
     BeagleConnectFreedom(bb_flasher::bcf::cc1352p7::Target),
     #[cfg(feature = "bcf_msp430")]
     Msp430(bb_flasher::bcf::msp430::Target),
-    #[cfg(any(feature = "zepto_uart", feature = "zepto_i2c"))]
-    Mspm0(bb_flasher::mspm0::Target),
 }
 
 impl Display for Destination {
@@ -566,8 +548,6 @@ impl Display for Destination {
             Destination::BeagleConnectFreedom(target) => target.fmt(f),
             #[cfg(feature = "bcf_msp430")]
             Destination::Msp430(target) => target.fmt(f),
-            #[cfg(any(feature = "zepto_uart", feature = "zepto_i2c"))]
-            Destination::Mspm0(target) => target.fmt(f),
         }
     }
 }
@@ -599,8 +579,6 @@ impl Destination {
             Self::BeagleConnectFreedom(t) => vec![("Path", t.path().to_string())],
             #[cfg(feature = "bcf_msp430")]
             Self::Msp430(t) => vec![("Path", t.path().to_string())],
-            #[cfg(any(feature = "zepto_uart", feature = "zepto_i2c"))]
-            Self::Mspm0(t) => vec![("Path", t.path().to_string())],
         }
     }
 }
@@ -626,11 +604,6 @@ pub(crate) fn destinations(flasher: config::Flasher, filter: bool) -> Vec<Destin
             .into_iter()
             .map(Destination::Msp430)
             .collect(),
-        #[cfg(any(feature = "zepto_uart", feature = "zepto_i2c"))]
-        config::Flasher::Mspm0 => bb_flasher::mspm0::Target::destinations(filter)
-            .into_iter()
-            .map(Destination::Mspm0)
-            .collect(),
         _ => unimplemented!(),
     }
 }
@@ -645,8 +618,6 @@ pub(crate) fn file_filter(flasher: config::Flasher) -> &'static [&'static str] {
         config::Flasher::BeagleConnectFreedom => bb_flasher::bcf::cc1352p7::Target::FILE_TYPES,
         #[cfg(feature = "bcf_msp430")]
         config::Flasher::Msp430Usb => bb_flasher::bcf::msp430::Target::FILE_TYPES,
-        #[cfg(any(feature = "zepto_uart", feature = "zepto_i2c"))]
-        config::Flasher::Mspm0 => bb_flasher::mspm0::Target::FILE_TYPES,
         _ => unimplemented!(),
     }
 }
@@ -659,8 +630,6 @@ pub(crate) const fn flasher_supported(flasher: config::Flasher) -> bool {
         config::Flasher::BeagleConnectFreedom => true,
         #[cfg(feature = "bcf_msp430")]
         config::Flasher::Msp430Usb => true,
-        #[cfg(any(feature = "zepto_uart", feature = "zepto_i2c"))]
-        config::Flasher::Mspm0 => true,
         _ => false,
     }
 }
@@ -672,7 +641,6 @@ pub(crate) enum FlashingCustomization {
     LinuxSdCloudInit(crate::persistance::SdSysconfCustomization),
     Bcf(crate::persistance::BcfCustomization),
     Msp430,
-    Zepto(crate::persistance::BcfCustomization),
 }
 
 impl FlashingCustomization {
@@ -705,9 +673,6 @@ impl FlashingCustomization {
                 Self::Bcf(app_config.bcf_customization.clone().unwrap_or_default())
             }
             config::Flasher::Msp430Usb => Self::Msp430,
-            config::Flasher::Mspm0 => {
-                Self::Zepto(app_config.zepto_customization.clone().unwrap_or_default())
-            }
             _ => unimplemented!(),
         }
     }
@@ -719,9 +684,6 @@ impl FlashingCustomization {
             }
             Self::Bcf(_) => {
                 *self = Self::Bcf(Default::default());
-            }
-            Self::Zepto(_) => {
-                *self = Self::Zepto(Default::default());
             }
             _ => {}
         };
@@ -742,9 +704,7 @@ impl FlashingCustomization {
             FlashingCustomization::LinuxSdSysconfig(c) => c.sysconfig(),
             FlashingCustomization::LinuxSdCloudInit(c) => c.cloudinit(),
             FlashingCustomization::NoneSd => bb_flasher::sd::FlashingSdLinuxConfig::none(),
-            FlashingCustomization::Bcf(_)
-            | FlashingCustomization::Msp430
-            | FlashingCustomization::Zepto(_) => unreachable!(),
+            FlashingCustomization::Bcf(_) | FlashingCustomization::Msp430 => unreachable!(),
         }
     }
 }
@@ -1114,10 +1074,6 @@ mod tests {
             flasher_supported(config::Flasher::Msp430Usb),
             cfg!(feature = "bcf_msp430")
         );
-        assert_eq!(
-            flasher_supported(config::Flasher::Mspm0),
-            cfg!(any(feature = "zepto_uart", feature = "zepto_i2c"))
-        );
     }
 
     #[test]
@@ -1173,10 +1129,6 @@ mod tests {
         assert!(matches!(
             FlashingCustomization::new(config::Flasher::Msp430Usb, &img, &cfg),
             FlashingCustomization::Msp430
-        ));
-        assert!(matches!(
-            FlashingCustomization::new(config::Flasher::Mspm0, &img, &cfg),
-            FlashingCustomization::Zepto(_)
         ));
     }
 

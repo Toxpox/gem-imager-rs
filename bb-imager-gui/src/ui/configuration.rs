@@ -38,7 +38,6 @@ fn customization_pane<'a>(state: &'a crate::state::CustomizeState) -> Element<'a
         FlashingCustomization::LinuxSdSysconfig(inner) => linux_sd_card_sysconfig(state, inner),
         FlashingCustomization::LinuxSdCloudInit(inner) => linux_sd_card_cloudinit(state, inner),
         FlashingCustomization::Bcf(inner) => verify_toggle(inner, FlashingCustomization::Bcf),
-        FlashingCustomization::Zepto(inner) => verify_toggle(inner, FlashingCustomization::Zepto),
         _ => panic!("No customization"),
     }
 }

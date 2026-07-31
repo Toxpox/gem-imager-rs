@@ -155,7 +155,6 @@ fn flasher_serde_strings() {
         (Flasher::SdCardBootfs, "\"SdCardBootfs\""),
         (Flasher::BeagleConnectFreedom, "\"BeagleConnectFreedom\""),
         (Flasher::Msp430Usb, "\"Msp430Usb\""),
-        (Flasher::Mspm0, "\"Mspm0\""),
     ];
     for (variant, expected) in cases {
         assert_eq!(serde_json::to_string(&variant).unwrap(), expected);
@@ -173,7 +172,6 @@ fn flasher_sqlite_round_trip() {
         Flasher::SdCardBootfs,
         Flasher::BeagleConnectFreedom,
         Flasher::Msp430Usb,
-        Flasher::Mspm0,
     ];
     for (i, variant) in variants.iter().enumerate() {
         conn.execute(

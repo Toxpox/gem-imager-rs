@@ -4,7 +4,7 @@ _HOST_TARGET = $(shell rustc --print host-tuple)
 _CARGO_TOML_VERSION = $(shell grep 'version =' Cargo.toml | sed 's/version = "\(.*\)"/\1/')
 _DATE = $(shell date +%F)
 _RUST_ARGS_BASE = --locked
-_RUST_ARGS = ${_RUST_ARGS_BASE} --features bcf_cc1352p7,zepto_uart
+_RUST_ARGS = ${_RUST_ARGS_BASE} --features bcf_cc1352p7
 _RUST_ARGS_CLI = ${_RUST_ARGS} --features dfu
 _RUST_ARGS_GUI = ${_RUST_ARGS} --features sd
 _PACKAGER_ARGS = -r -vvv --verbose
@@ -61,8 +61,6 @@ DESKTOP_DIR ?= $(PREFIX)/share/applications
 METAINFO_DIR ?= $(PREFIX)/share/metainfo
 ## variable: TARGET: Compilation Target. Default = host
 TARGET ?= $(_HOST_TARGET)
-## variable: ZEPTO_I2C: Enable zepto_i2c feature. Only supported in GUI.
-ZEPTO_I2C ?= $(if $(findstring linux,$(TARGET)),1)
 ## variable: BCF_MSP430: Enable bcf_msp430 feature. Only disabled in snap package.
 BCF_MSP430 ?= 1
 ## variable: SYSTEM_DEPS: Use system dependencies. Mainly for linux.
@@ -88,11 +86,6 @@ endif
 # Add verbose flag is needed
 ifeq ($(VERBOSE),1)
 	_RUST_ARGS_BASE += --verbose
-endif
-
-# Add zepto_i2c feature
-ifeq ($(ZEPTO_I2C),1)
-	_RUST_ARGS += --features zepto_i2c
 endif
 
 # Add bcf_msp430 feature
@@ -180,13 +173,13 @@ _check_common:
 	$(_CARGO_CHECK) --all-targets --all-features --workspace --exclude bb-flasher-bcf \
 		--exclude bb-flasher --exclude bb-imager-gui --exclude bb-imager-cli
 	$(_CARGO_CHECK) --all-targets -p bb-flasher-bcf -F msp430,static
-	$(_CARGO_CHECK) --all-targets -p bb-flasher -F bcf,bcf_msp430,dfu,static,mspm0_uart,mspm0_i2c,piped_image,sd
+	$(_CARGO_CHECK) --all-targets -p bb-flasher -F bcf,bcf_msp430,dfu,static,piped_image,sd
 
 _check_cli:
-	$(_CARGO_CHECK) --all-targets -p bb-imager-cli ${_RUST_ARGS_CLI} -F zepto_i2c
+	$(_CARGO_CHECK) --all-targets -p bb-imager-cli ${_RUST_ARGS_CLI}
 
 _check_gui:
-	$(_CARGO_CHECK) --all-targets -p bb-imager-gui ${_RUST_ARGS_GUI} -F updater,zepto_i2c,pre-release
+	$(_CARGO_CHECK) --all-targets -p bb-imager-gui ${_RUST_ARGS_GUI} -F updater,pre-release
 	
 ## housekeeping: check: Run code quality checks.
 .PHONY: check

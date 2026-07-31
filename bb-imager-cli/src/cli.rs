@@ -161,25 +161,6 @@ pub enum TargetCommands {
         /// be flashed in a sequential order.
         imgs: Vec<String>,
     },
-    /// Flash Zepto
-    #[cfg(any(feature = "zepto_uart", feature = "zepto_i2c"))]
-    Zepto {
-        /// Local path to image file. Can be compressed (xz) or extracted file
-        img: Box<Path>,
-        /// The destination device (e.g., `/dev/tty*` or `/dev/i2c-*` or specific device identifiers).
-        dst: String,
-        #[arg(long)]
-        /// Disable checksum verification after flashing to speed up the process.
-        no_verify: bool,
-        #[cfg(target_os = "linux")]
-        #[arg(long, requires = "bsl_gpio")]
-        /// RESET GPIO for MSPM0.
-        reset_gpio: Option<String>,
-        #[cfg(target_os = "linux")]
-        #[arg(long, requires = "reset_gpio")]
-        /// BSL GPIO for MSPM0.
-        bsl_gpio: Option<String>,
-    },
 }
 
 #[derive(ValueEnum, Clone, Copy, Debug)]
@@ -195,9 +176,6 @@ pub enum DestinationsTarget {
     /// USB DFU Target
     #[cfg(feature = "dfu")]
     Dfu,
-    /// Zepto Target
-    #[cfg(any(feature = "zepto_uart", feature = "zepto_i2c"))]
-    Zepto,
 }
 
 #[cfg(test)]
@@ -407,5 +385,4 @@ mod tests {
             other => panic!("expected Flash, got {other:?}"),
         }
     }
-
 }

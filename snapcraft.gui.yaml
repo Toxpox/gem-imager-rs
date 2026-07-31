@@ -54,6 +54,6 @@ apps:
       - mount-observe
       # Used for opening SD card device.
       - udisks2
-      # BCF and Zepto UART
+      # BCF UART
       - serial-port
     extensions: [gnome]

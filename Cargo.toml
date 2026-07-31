@@ -11,8 +11,7 @@ members = [
 	"bb-config",
 	"bb-helper",
 	"bb-flasher-dfu",
-        "bb-drivelist", 
-        "bb-flasher-mspm0",
+        "bb-drivelist",
         "bb-bmap-parser",
         "bb-iced-widgets"
 ]

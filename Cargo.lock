@@ -545,11 +545,9 @@ dependencies = [
  "anyhow",
  "bb-flasher-bcf",
  "bb-flasher-dfu",
- "bb-flasher-mspm0",
  "bb-flasher-sd",
  "bb-helper",
  "liblzma",
- "nix 0.31.3",
  "qcow2-core",
  "rc-zip-sync",
  "serde",
@@ -584,22 +582,6 @@ dependencies = [
  "dfu-libusb",
  "rusb",
  "thiserror 2.0.18",
-]
-
-[[package]]
-name = "bb-flasher-mspm0"
-version = "1.0.13"
-dependencies = [
- "bb-helper",
- "bin_file",
- "crc-fast",
- "gpiocdev",
- "i2cdev",
- "nix 0.31.3",
- "serialport",
- "thiserror 2.0.18",
- "tracing",
- "zerocopy",
 ]
 
 [[package]]
@@ -2267,28 +2249,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "gpiocdev"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4a6009ef6766dd62a7f5933d379d357ae89eaee4e9c2455b6596f359627660a1"
-dependencies = [
- "gpiocdev-uapi",
- "thiserror 2.0.18",
-]
-
-[[package]]
-name = "gpiocdev-uapi"
-version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cb1a3ace06ef708255a33e738ec7a5e7718fe8e53bd9a39299b4f1cd4b13e9a3"
-dependencies = [
- "bitflags 2.13.0",
- "ioctl-sys",
- "libc",
- "thiserror 2.0.18",
-]
-
-[[package]]
 name = "gpt"
 version = "4.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2661,18 +2621,6 @@ dependencies = [
  "tokio",
  "tower-service",
  "tracing",
-]
-
-[[package]]
-name = "i2cdev"
-version = "0.6.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9b940f7497c4f95b863b21cd34c3737b53a67d80d94cf29055d7f7eeca6ffdb4"
-dependencies = [
- "bitflags 2.13.0",
- "byteorder",
- "libc",
- "nix 0.26.4",
 ]
 
 [[package]]
@@ -3170,12 +3118,6 @@ dependencies = [
  "core-foundation-sys",
  "mach2",
 ]
-
-[[package]]
-name = "ioctl-sys"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8bd11f3a29434026f5ff98c730b668ba74b1033637b8817940b54d040696133c"
 
 [[package]]
 name = "ipnet"

@@ -4,5 +4,3 @@ pub mod bcf;
 pub mod dfu;
 #[cfg(feature = "sd")]
 pub mod sd;
-#[cfg(any(feature = "mspm0_uart", feature = "mspm0_i2c"))]
-pub mod mspm0;

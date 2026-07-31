@@ -248,50 +248,6 @@ fn flash_internal(
                 .unwrap()
                 .flash(chan)
         }
-        #[cfg(all(
-            any(feature = "zepto_uart", feature = "zepto_i2c"),
-            not(target_os = "linux")
-        ))]
-        TargetCommands::Zepto {
-            img,
-            dst,
-            no_verify,
-        } => bb_flasher::mspm0::Flasher::no_prep(
-            LocalImage::new(img).into_image_fn(),
-            dst.into(),
-            !no_verify,
-            None,
-        )
-        .flash(chan),
-        #[cfg(all(
-            any(feature = "zepto_uart", feature = "zepto_i2c"),
-            target_os = "linux"
-        ))]
-        TargetCommands::Zepto {
-            img,
-            dst,
-            no_verify,
-            reset_gpio,
-            bsl_gpio,
-        } => match (reset_gpio, bsl_gpio) {
-            (Some(reset), Some(bsl)) => bb_flasher::mspm0::Flasher::gpio_by_name(
-                LocalImage::new(img).into_image_fn(),
-                dst.into(),
-                !no_verify,
-                None,
-                reset,
-                bsl,
-            )
-            .flash(chan),
-            (None, None) => bb_flasher::mspm0::Flasher::no_prep(
-                LocalImage::new(img).into_image_fn(),
-                dst.into(),
-                !no_verify,
-                None,
-            )
-            .flash(chan),
-            _ => panic!("Invalid arguments"),
-        },
     }
 }
 
@@ -376,10 +332,6 @@ fn list_destinations(target: DestinationsTarget, no_frills: bool, no_filter: boo
             #[cfg(feature = "bcf_msp430")]
             DestinationsTarget::Msp430 => {
                 no_frills_list_destinations::<bb_flasher::bcf::msp430::Target>(no_filter)
-            }
-            #[cfg(any(feature = "zepto_uart", feature = "zepto_i2c"))]
-            DestinationsTarget::Zepto => {
-                no_frills_list_destinations::<bb_flasher::mspm0::Target>(no_filter)
             }
         }
         return;
@@ -542,10 +494,6 @@ fn list_destinations(target: DestinationsTarget, no_frills: bool, no_filter: boo
         #[cfg(feature = "bcf_cc1352p7")]
         DestinationsTarget::Bcf => {
             no_frills_list_destinations::<bb_flasher::bcf::cc1352p7::Target>(no_filter)
-        }
-        #[cfg(any(feature = "zepto_uart", feature = "zepto_i2c"))]
-        DestinationsTarget::Zepto => {
-            no_frills_list_destinations::<bb_flasher::mspm0::Target>(no_filter)
         }
     }
 }

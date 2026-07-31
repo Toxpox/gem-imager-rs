@@ -41,10 +41,3 @@ fn list_destinations_sd_runs_in_every_output_mode() {
         "--no-filter",
     ]);
 }
-
-#[cfg(any(feature = "zepto_uart", feature = "zepto_i2c"))]
-#[test]
-fn list_destinations_zepto_runs() {
-    run_cli(&["bb-imager-cli", "list-destinations", "zepto"]);
-    run_cli(&["bb-imager-cli", "list-destinations", "zepto", "--no-frills"]);
-}

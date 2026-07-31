@@ -24,7 +24,6 @@ bb-helper = { path = "../bb-helper", features = ["cancel"] }
 rc-zip-sync = { version = "4.4", default-features = false, features = ["deflate"] }
 bb-flasher-dfu = { path = "../bb-flasher-dfu", optional = true }
 anyhow = "1.0"
-bb-flasher-mspm0 = { path = "../bb-flasher-mspm0", optional = true }
 tar = "0.4"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
@@ -47,12 +46,7 @@ dfu = ["bb-flasher-dfu"]
 static = ["liblzma/static", "static_hidraw"]
 static_hidraw = ["bb-flasher-bcf?/static"]
 shared_hidraw = ["bb-flasher-bcf?/shared_hidraw"]
-mspm0_uart = ["bb-flasher-mspm0/uart"]
-mspm0_i2c = ["bb-flasher-mspm0/i2c", "dep:nix"]
 piped_image = ["dep:tokio-util", "bb-helper/file_stream"]
 
 [package.metadata.docs.rs]
 all-features = true
-
-[target.'cfg(target_os = "linux")'.dependencies]
-nix = { version = "0.31", features = ["fs"], optional = true }
