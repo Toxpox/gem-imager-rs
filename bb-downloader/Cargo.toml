@@ -15,7 +15,9 @@ reqwest = { version = "0.13", default-features = false, features = ["stream", "h
 sha2 = "0.10"
 tracing = "0.1"
 serde = { version = "1.0", optional = true }
-tokio = { version = "1.52", default-features = false, features = ["fs"] }
+serde_json = { version = "1.0", optional = true }
+thiserror = "2.0"
+tokio = { version = "1.52", default-features = false, features = ["fs", "sync", "rt"] }
 const-hex = "1.19"
 tempfile = "3.27"
 bb-helper = { path = "../bb-helper", features = ["file_stream"] }
@@ -23,7 +25,7 @@ futures-util = "0.3"
 
 [features]
 default = ["rustls"]
-json = ["reqwest/json", "dep:serde"]
+json = ["dep:serde", "dep:serde_json"]
 native-tls = ["reqwest/native-tls"]
 rustls = ["reqwest/rustls"]
 
