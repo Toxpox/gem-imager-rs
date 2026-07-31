@@ -152,16 +152,6 @@ pub enum TargetCommands {
         /// The destination device (e.g., `/dev/sdX` or specific device identifiers).
         dst: String,
     },
-    /// Flash MSPM0 on Pocketbeagle2.
-    #[cfg(feature = "pb2_mspm0")]
-    Pb2Mspm0 {
-        /// Local path to image file. Can be compressed (xz) or extracted file
-        img: Box<Path>,
-
-        /// Do not persist EEPROM contents
-        #[arg(long)]
-        no_eeprom: bool,
-    },
     #[cfg(feature = "dfu")]
     Dfu {
         /// Identifer is in the following format: `{bus_num}:{address}:{vendor_id}:{product_id}`.
@@ -202,9 +192,6 @@ pub enum DestinationsTarget {
     /// MSP430 targets
     #[cfg(feature = "bcf_msp430")]
     Msp430,
-    /// Pocketbeagle2 MSPM0
-    #[cfg(feature = "pb2_mspm0")]
-    Pb2Mspm0,
     /// USB DFU Target
     #[cfg(feature = "dfu")]
     Dfu,
@@ -421,26 +408,4 @@ mod tests {
         }
     }
 
-    #[cfg(feature = "pb2_mspm0")]
-    #[test]
-    fn pb2_mspm0_variant_parses() {
-        let opt = Opt::try_parse_from([
-            "bb-imager-cli",
-            "flash",
-            "pb2-mspm0",
-            "fw.bin",
-            "--no-eeprom",
-        ])
-        .expect("valid pb2-mspm0 flash");
-        match opt.command {
-            Commands::Flash { target, .. } => match *target {
-                TargetCommands::Pb2Mspm0 { no_eeprom, img } => {
-                    assert!(no_eeprom);
-                    assert_eq!(img.as_ref(), Path::new("fw.bin"));
-                }
-                other => panic!("expected Pb2Mspm0, got {other:?}"),
-            },
-            other => panic!("expected Flash, got {other:?}"),
-        }
-    }
 }

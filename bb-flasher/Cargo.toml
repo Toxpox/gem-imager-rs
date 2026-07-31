@@ -17,10 +17,8 @@ serde = { version = "1.0", features = ["derive"], optional = true }
 yaml_serde = { version = "0.10", optional = true }
 thiserror = { version = "2.0" }
 tracing = "0.1"
-bb-flasher-pb2-mspm0 = { path = "../bb-flasher-pb2-mspm0", optional = true }
 bb-flasher-bcf = { path = "../bb-flasher-bcf", optional = true }
 bb-flasher-sd = { path = "../bb-flasher-sd", optional = true }
-bin_file = { version = "0.2", optional = true }
 tokio-util = { version = "0.7", optional = true, features = ["rt"] }
 bb-helper = { path = "../bb-helper", features = ["cancel"] }
 rc-zip-sync = { version = "4.4", default-features = false, features = ["deflate"] }
@@ -45,7 +43,6 @@ sd_linux_udev = ["bb-flasher-sd?/udev"]
 sd_macos_authopen = ["bb-flasher-sd?/macos_authopen"]
 bcf = ["bb-flasher-bcf/cc1352p7"]
 bcf_msp430 = ["bb-flasher-bcf/msp430"]
-pb2_mspm0 = ["bb-flasher-pb2-mspm0", "dep:bin_file"]
 dfu = ["bb-flasher-dfu"]
 static = ["liblzma/static", "static_hidraw"]
 static_hidraw = ["bb-flasher-bcf?/static"]

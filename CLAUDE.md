@@ -39,7 +39,7 @@ cargo test -p bb-imager-gui <test_name>
 cargo test -p bb-flasher -F sd <test_name>
 ```
 
-`make help` lists all Makefile targets and tunable variables (`TARGET`, feature toggles like `PB2_MSPM0`/`ZEPTO_I2C`/`UPDATER`, packaging vars). Packaging targets (`package-<triple>`) and installs live in the Makefile too.
+`make help` lists all Makefile targets and tunable variables (`TARGET`, feature toggles like `ZEPTO_I2C`/`UPDATER`, packaging vars). Packaging targets (`package-<triple>`) and installs live in the Makefile too.
 
 ## Contribution conventions
 
@@ -62,7 +62,7 @@ The workspace is layered: **front-ends → `bb-flasher` façade → per-target f
 - Per-target flasher crates, pulled in optionally by `bb-flasher`:
   - `bb-flasher-sd` — OS images to SD card (Linux udev / macOS authopen backends).
   - `bb-flasher-bcf` — BeagleConnect Freedom main proc (CC1352P7) and its MSP430 USB-UART bridge.
-  - `bb-flasher-mspm0` / `bb-flasher-pb2-mspm0` — MSPM0 co-processor (e.g. PocketBeagle 2), UART/I2C.
+  - `bb-flasher-mspm0` — MSPM0 co-processor, UART/I2C.
   - `bb-flasher-dfu` — DFU flashing.
 
 ### Support crates
@@ -79,5 +79,5 @@ Because features cascade from front-end → `bb-flasher` → concrete flasher cr
 
 - GUI links statically by default (`static` → bundled sqlite, static lzma/hidraw, rustls). `system-deps` switches to native TLS/system libs.
 - `static-hidraw` vs `shared-hidraw` selects USB HID linking (CLI defaults to static because distro hidraw is often too old).
-- Board/firmware support (`bcf_cc1352p7`, `bcf_msp430`, `pb2_mspm0`, `zepto_uart`/`zepto_i2c`, `dfu`) is opt-in per binary.
+- Board/firmware support (`bcf_cc1352p7`, `bcf_msp430`, `zepto_uart`/`zepto_i2c`, `dfu`) is opt-in per binary.
 - The `_check_common`/`_check_cli`/`_check_gui` recipes in the Makefile are the source of truth for which feature combinations must compile.

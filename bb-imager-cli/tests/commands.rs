@@ -42,18 +42,6 @@ fn list_destinations_sd_runs_in_every_output_mode() {
     ]);
 }
 
-#[cfg(feature = "pb2_mspm0")]
-#[test]
-fn list_destinations_pb2_mspm0_runs() {
-    run_cli(&["bb-imager-cli", "list-destinations", "pb2-mspm0"]);
-    run_cli(&[
-        "bb-imager-cli",
-        "list-destinations",
-        "pb2-mspm0",
-        "--no-frills",
-    ]);
-}
-
 #[cfg(any(feature = "zepto_uart", feature = "zepto_i2c"))]
 #[test]
 fn list_destinations_zepto_runs() {

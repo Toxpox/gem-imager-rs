@@ -228,11 +228,6 @@ fn flash_internal(
             bb_flasher::bcf::msp430::Flasher::new(LocalImage::new(img).into_image_fn(), dst.into())
                 .flash(chan)
         }
-        #[cfg(feature = "pb2_mspm0")]
-        TargetCommands::Pb2Mspm0 { no_eeprom, img } => {
-            bb_flasher::pb2::mspm0::Flasher::new(LocalImage::new(img).into_image_fn(), !no_eeprom)
-                .flash(chan)
-        }
         #[cfg(feature = "dfu")]
         TargetCommands::Dfu { identifier, imgs } => {
             if imgs.len() % 2 == 1 {
@@ -381,10 +376,6 @@ fn list_destinations(target: DestinationsTarget, no_frills: bool, no_filter: boo
             #[cfg(feature = "bcf_msp430")]
             DestinationsTarget::Msp430 => {
                 no_frills_list_destinations::<bb_flasher::bcf::msp430::Target>(no_filter)
-            }
-            #[cfg(feature = "pb2_mspm0")]
-            DestinationsTarget::Pb2Mspm0 => {
-                no_frills_list_destinations::<bb_flasher::pb2::mspm0::Target>(no_filter)
             }
             #[cfg(any(feature = "zepto_uart", feature = "zepto_i2c"))]
             DestinationsTarget::Zepto => {
@@ -551,10 +542,6 @@ fn list_destinations(target: DestinationsTarget, no_frills: bool, no_filter: boo
         #[cfg(feature = "bcf_cc1352p7")]
         DestinationsTarget::Bcf => {
             no_frills_list_destinations::<bb_flasher::bcf::cc1352p7::Target>(no_filter)
-        }
-        #[cfg(feature = "pb2_mspm0")]
-        DestinationsTarget::Pb2Mspm0 => {
-            no_frills_list_destinations::<bb_flasher::pb2::mspm0::Target>(no_filter)
         }
         #[cfg(any(feature = "zepto_uart", feature = "zepto_i2c"))]
         DestinationsTarget::Zepto => {

@@ -546,10 +546,8 @@ dependencies = [
  "bb-flasher-bcf",
  "bb-flasher-dfu",
  "bb-flasher-mspm0",
- "bb-flasher-pb2-mspm0",
  "bb-flasher-sd",
  "bb-helper",
- "bin_file",
  "liblzma",
  "nix 0.31.3",
  "qcow2-core",
@@ -602,14 +600,6 @@ dependencies = [
  "thiserror 2.0.18",
  "tracing",
  "zerocopy",
-]
-
-[[package]]
-name = "bb-flasher-pb2-mspm0"
-version = "0.1.0"
-dependencies = [
- "tempfile",
- "thiserror 2.0.18",
 ]
 
 [[package]]

@@ -61,8 +61,6 @@ DESKTOP_DIR ?= $(PREFIX)/share/applications
 METAINFO_DIR ?= $(PREFIX)/share/metainfo
 ## variable: TARGET: Compilation Target. Default = host
 TARGET ?= $(_HOST_TARGET)
-## variable: PB2_MSPM0: Enable pb2_mspm0 feature. Only used in CLI.
-PB2_MSPM0 ?= 0
 ## variable: ZEPTO_I2C: Enable zepto_i2c feature. Only supported in GUI.
 ZEPTO_I2C ?= $(if $(findstring linux,$(TARGET)),1)
 ## variable: BCF_MSP430: Enable bcf_msp430 feature. Only disabled in snap package.
@@ -118,11 +116,6 @@ endif
 # Add offline flag is needed
 ifeq ($(OFFLINE),1)
 	_RUST_ARGS_BASE += --offline
-endif
-
-# Add pb2_mspm0 feature
-ifeq ($(PB2_MSPM0),1)
-	_RUST_ARGS_CLI += --features pb2_mspm0
 endif
 
 # Add updater feature
@@ -187,10 +180,10 @@ _check_common:
 	$(_CARGO_CHECK) --all-targets --all-features --workspace --exclude bb-flasher-bcf \
 		--exclude bb-flasher --exclude bb-imager-gui --exclude bb-imager-cli
 	$(_CARGO_CHECK) --all-targets -p bb-flasher-bcf -F msp430,static
-	$(_CARGO_CHECK) --all-targets -p bb-flasher -F bcf,bcf_msp430,pb2_mspm0,dfu,static,mspm0_uart,mspm0_i2c,piped_image,sd
+	$(_CARGO_CHECK) --all-targets -p bb-flasher -F bcf,bcf_msp430,dfu,static,mspm0_uart,mspm0_i2c,piped_image,sd
 
 _check_cli:
-	$(_CARGO_CHECK) --all-targets -p bb-imager-cli ${_RUST_ARGS_CLI} -F pb2_mspm0,zepto_i2c
+	$(_CARGO_CHECK) --all-targets -p bb-imager-cli ${_RUST_ARGS_CLI} -F zepto_i2c
 
 _check_gui:
 	$(_CARGO_CHECK) --all-targets -p bb-imager-gui ${_RUST_ARGS_GUI} -F updater,zepto_i2c,pre-release
@@ -341,7 +334,7 @@ package-x86_64-unknown-linux-gnu: package-checks
 .PHONY: package-aarch64-unknown-linux-gnu
 package-aarch64-unknown-linux-gnu: package-checks
 	$(call package-linux-x86_64_aarch64,aarch64-unknown-linux-gnu)
-	$(MAKE) package-cli-deb package-cli-pacman TARGET=aarch64-unknown-linux-gnu PB2_MSPM0=1
+	$(MAKE) package-cli-deb package-cli-pacman TARGET=aarch64-unknown-linux-gnu
 
 ## package: package-x86_64-apple-darwin: Create all packages for x86_64-apple-darwin
 .PHONY: package-x86_64-apple-darwin
