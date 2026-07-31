@@ -105,13 +105,12 @@ pub(crate) struct ChooseOsState {
 
 impl ChooseOsState {
     pub(crate) fn update_images(&mut self, mut imgs: Vec<OsImageItem>, pos: Option<i64>) {
-        match self.flasher {
-            config::Flasher::SdCard => imgs.extend([
-                OsImageItem::format("Format SD Card".into()),
-                OsImageItem::local(config::Flasher::SdCard),
-            ]),
-            _ => imgs.push(OsImageItem::local(self.flasher)),
-        }
+        // `Flasher` only has `SdCard` now, so every board offers the format and
+        // local-image entries.
+        imgs.extend([
+            OsImageItem::format("Format SD Card".into()),
+            OsImageItem::local(config::Flasher::SdCard),
+        ]);
 
         self.images = imgs;
         self.pos = pos;

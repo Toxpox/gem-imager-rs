@@ -634,7 +634,6 @@ pub(crate) fn no_customization(
             None
         }
         config::Flasher::SdCard => Some(FlashingCustomization::NoneSd),
-        _ => None,
     }
 }
 
