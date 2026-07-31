@@ -21,6 +21,8 @@ bb-flasher-sd = { path = "../bb-flasher-sd", optional = true }
 tokio-util = { version = "0.7", optional = true, features = ["rt"] }
 bb-helper = { path = "../bb-helper", features = ["cancel"] }
 rc-zip-sync = { version = "4.4", default-features = false, features = ["deflate"] }
+sha2 = "0.10"
+const-hex = "1.19"
 bb-flasher-dfu = { path = "../bb-flasher-dfu", optional = true }
 anyhow = "1.0"
 

@@ -26,7 +26,7 @@ fn mock_img() -> OsImage {
     std::io::copy(&mut data.as_slice(), &mut f).unwrap();
     f.flush().unwrap();
 
-    OsImage::from_path(f.path()).unwrap()
+    OsImage::from_path(f.path(), bb_flasher::img::ExtractGate::LocalFile).unwrap()
 }
 
 #[test]

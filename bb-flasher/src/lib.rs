@@ -57,9 +57,14 @@ impl LocalImage {
         self.0.file_name().unwrap()
     }
 
+    /// Open the image for flashing.
+    ///
+    /// The extract gate is [`img::ExtractGate::LocalFile`]: the user picked this file themselves,
+    /// so there is no published digest to hold it to. Nothing downstream may call such a write
+    /// "verified".
     pub fn into_image_fn(self) -> impl FnOnce() -> std::io::Result<(img::OsImage, u64)> {
         move || {
-            let img = img::OsImage::from_path(&self.0)?;
+            let img = img::OsImage::from_path(&self.0, img::ExtractGate::LocalFile)?;
             let size = img.size();
 
             Ok((img, size))
