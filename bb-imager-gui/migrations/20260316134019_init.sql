@@ -65,6 +65,9 @@ CREATE TABLE os_images(
 	url TEXT NOT NULL,
 	image_download_size INTEGER,
 	image_download_sha256 BLOB NOT NULL,
+	-- Nullable: only catalogs that publish an extracted digest can fill it. A NULL here means
+	-- "this entry cannot be verified after extraction", not "it verified".
+	extract_sha256 BLOB,
 	extract_size INTEGER NOT NULL,
 	release_date TEXT NOT NULL,
 	init_format INTEGER NOT NULL,

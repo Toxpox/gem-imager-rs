@@ -75,6 +75,8 @@ impl BoardImage {
                 image.name.into(),
                 Box::new(image.url),
                 image.image_download_sha256,
+                image.image_download_size.map(|x| x as u64),
+                image.extract_sha256,
                 image.extract_size as u64,
                 downloader.clone(),
             )
@@ -227,12 +229,23 @@ pub(crate) fn system_keymap() -> &'static str {
     (*SYSTEM_KEYMAP).unwrap_or("us")
 }
 
+/// A catalog image, with the integrity values the catalog published for it.
+///
+/// The two hashes are *not* interchangeable and never share a name (`instruction.md` §6.2):
+/// `archive_sha256` covers the compressed download and is what the cache is addressed by;
+/// `extract_sha256` covers the bytes that reach the board. Before Faz 3 this struct called the
+/// archive hash `extract_sha256` while being handed `image_download_sha256`, so the extracted
+/// bytes were never checked at all.
 #[derive(Debug, Clone, serde::Serialize)]
 pub(crate) struct RemoteImage {
     name: Box<str>,
     url: Box<url::Url>,
     #[serde(with = "const_hex")]
-    extract_sha256: [u8; 32],
+    archive_sha256: [u8; 32],
+    archive_size: Option<u64>,
+    /// `None` when the catalog entry predates the extracted-digest contract.
+    #[serde(skip)]
+    extract_sha256: Option<[u8; 32]>,
     extract_size: u64,
     #[serde(skip)]
     downloader: bb_downloader::Downloader,
@@ -242,16 +255,33 @@ impl RemoteImage {
     pub(crate) fn new(
         name: Box<str>,
         url: Box<url::Url>,
-        extract_sha256: [u8; 32],
+        archive_sha256: [u8; 32],
+        archive_size: Option<u64>,
+        extract_sha256: Option<[u8; 32]>,
         extract_size: u64,
         downloader: bb_downloader::Downloader,
     ) -> Self {
         Self {
             name,
             url,
+            archive_sha256,
+            archive_size,
             extract_sha256,
             extract_size,
             downloader,
+        }
+    }
+
+    /// The extracted-side gate for this image.
+    ///
+    /// A catalog entry that publishes an extracted digest is held to it; one that does not is
+    /// marked as such rather than quietly treated as verified.
+    fn extract_gate(&self) -> bb_flasher::img::ExtractGate {
+        match self.extract_sha256 {
+            Some(sha256) => bb_flasher::img::ExtractGate::Declared(
+                bb_flasher::img::ExtractedIntegrity::new(self.extract_size, sha256),
+            ),
+            None => bb_flasher::img::ExtractGate::UndeclaredLegacyCatalog,
         }
     }
 
@@ -267,7 +297,8 @@ impl RemoteImage {
         let rt = tokio::runtime::Handle::current();
         move || {
             let downloader = self.downloader.clone();
-            let cache = downloader.check_cache_from_sha(self.extract_sha256);
+            // The cache is addressed by the *archive* hash, because the archive is what is stored.
+            let cache = downloader.check_cache_from_sha(self.archive_sha256);
 
             if let Some(path) = cache {
                 tracing::info!("Found the remote image in cache");
@@ -278,11 +309,14 @@ impl RemoteImage {
             let (tx_stream, rx) = bb_helper::file_stream::file_stream()?;
             let downloader = self.downloader.clone();
             let url = self.url.clone();
-            let sha = self.extract_sha256;
+            let integrity = bb_downloader::ArchiveIntegrity {
+                sha256: self.archive_sha256,
+                size: self.archive_size,
+            };
 
             let t: tokio::task::JoinHandle<io::Result<()>> = rt.spawn(async move {
                 downloader
-                    .download_to_stream(*url, sha, tx_stream)
+                    .download_to_stream(*url, integrity, tx_stream)
                     .await
                     .map_err(|e| {
                         let msg = format!("Error while downloading Os Image: {e}");
@@ -299,10 +333,13 @@ impl RemoteImage {
 
     fn into_image_fn(self) -> impl FnOnce() -> io::Result<(OsImage, u64)> {
         let extract_size = self.extract_size;
+        // Captured before `self` is consumed; the gate is the same whether the archive comes from
+        // the cache or straight off the wire.
+        let gate = self.extract_gate();
         self.open(
-            move |p| Ok((OsImage::from_path(p)?, extract_size)),
+            move |p| Ok((OsImage::from_path(p, gate)?, extract_size)),
             move |rx, abort, es| {
-                let img = OsImage::from_piped(rx, abort, es)?;
+                let img = OsImage::from_piped(rx, abort, es, gate)?;
                 Ok((img, es))
             },
         )
@@ -318,7 +355,9 @@ impl std::fmt::Display for RemoteImage {
 #[derive(Debug, Clone, serde::Serialize)]
 pub(crate) enum SelectedImage {
     LocalImage(bb_flasher::LocalImage),
-    RemoteImage(RemoteImage),
+    /// Boxed because a remote image carries the whole published integrity set while a local one is
+    /// just a path; inlining it would make every `SelectedImage` pay for the larger variant.
+    RemoteImage(Box<RemoteImage>),
 }
 
 impl SelectedImage {
@@ -332,7 +371,7 @@ impl SelectedImage {
     fn into_image_fn(self) -> Box<dyn FnOnce() -> io::Result<(OsImage, u64)> + Send> {
         match self {
             SelectedImage::LocalImage(x) => Box::new(x.into_image_fn()),
-            SelectedImage::RemoteImage(x) => Box::new(x.into_image_fn()),
+            SelectedImage::RemoteImage(x) => Box::new((*x).into_image_fn()),
         }
     }
 }
@@ -348,7 +387,7 @@ impl std::fmt::Display for SelectedImage {
 
 impl From<RemoteImage> for SelectedImage {
     fn from(value: RemoteImage) -> Self {
-        Self::RemoteImage(value)
+        Self::RemoteImage(Box::new(value))
     }
 }
 
