@@ -47,9 +47,16 @@ fn unmount_disk(path: &str) -> std::io::Result<()> {
         .map(|_| ())
 }
 
+impl crate::helpers::Commit for MacOSFile {
+    fn commit(&mut self) -> std::io::Result<()> {
+        self.inner.flush()?;
+        self.inner.sync_all()
+    }
+}
+
 impl crate::helpers::Eject for MacOSFile {
-    fn eject(self) -> std::io::Result<()> {
-        self.inner.sync_all()?;
+    fn eject(mut self) -> std::io::Result<()> {
+        crate::helpers::Commit::commit(&mut self)?;
         let _ = unmount_disk(&self.path.to_string_lossy());
 
         Ok(())

@@ -167,6 +167,73 @@ impl FormatFlasher {
     }
 }
 
+/// Map the SD backend's stages onto the front-end progress vocabulary.
+///
+/// When the destination is a plain file the "write" stage is really the download/extract that
+/// produced it, which is why it is reported as `DownloadingProgress` there. The verify stage keeps
+/// its own fraction in both cases — it is a separate pass over the whole image, not a tail of the
+/// write.
+const fn translate_status(
+    status: bb_flasher_sd::Status,
+    is_file_dest: bool,
+) -> DownloadFlashingStatus {
+    match status {
+        bb_flasher_sd::Status::Preparing => DownloadFlashingStatus::Preparing,
+        bb_flasher_sd::Status::Writing(x) => {
+            if is_file_dest {
+                DownloadFlashingStatus::DownloadingProgress(x)
+            } else {
+                DownloadFlashingStatus::FlashingProgress(x)
+            }
+        }
+        bb_flasher_sd::Status::Verifying(x) => DownloadFlashingStatus::Verifying(x),
+        bb_flasher_sd::Status::Customizing => DownloadFlashingStatus::Customizing,
+    }
+}
+
+#[cfg(test)]
+mod status_tests {
+    use super::*;
+
+    #[test]
+    fn writing_to_a_device_is_flashing_and_to_a_file_is_downloading() {
+        assert_eq!(
+            translate_status(bb_flasher_sd::Status::Writing(0.5), false),
+            DownloadFlashingStatus::FlashingProgress(0.5)
+        );
+        assert_eq!(
+            translate_status(bb_flasher_sd::Status::Writing(0.5), true),
+            DownloadFlashingStatus::DownloadingProgress(0.5)
+        );
+    }
+
+    /// Verification must never be folded back into the write bar: the user has to be able to see
+    /// that a distinct read-back pass ran.
+    #[test]
+    fn verification_keeps_its_own_stage_and_fraction() {
+        assert_eq!(
+            translate_status(bb_flasher_sd::Status::Verifying(0.25), false),
+            DownloadFlashingStatus::Verifying(0.25)
+        );
+        assert_eq!(
+            translate_status(bb_flasher_sd::Status::Verifying(0.25), true),
+            DownloadFlashingStatus::Verifying(0.25)
+        );
+    }
+
+    #[test]
+    fn preparing_and_customizing_pass_through() {
+        assert_eq!(
+            translate_status(bb_flasher_sd::Status::Preparing, false),
+            DownloadFlashingStatus::Preparing
+        );
+        assert_eq!(
+            translate_status(bb_flasher_sd::Status::Customizing, false),
+            DownloadFlashingStatus::Customizing
+        );
+    }
+}
+
 /// Flasher of flashing Os Images to SD Card
 ///
 /// # Supported Images
@@ -230,13 +297,7 @@ where
                     // Should run until tx is dropped, i.e. flasher task is done.
                     // If it is aborted, then cancel should be dropped, thereby signaling the flasher task to abort
                     while let Ok(x) = rx.recv() {
-                        let _ = chan.try_send(if x == 0.0 {
-                            DownloadFlashingStatus::Preparing
-                        } else if is_file_dest {
-                            DownloadFlashingStatus::DownloadingProgress(x)
-                        } else {
-                            DownloadFlashingStatus::FlashingProgress(x)
-                        });
+                        let _ = chan.try_send(translate_status(x, is_file_dest));
                     }
                 });
 

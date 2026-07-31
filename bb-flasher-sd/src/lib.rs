@@ -30,7 +30,7 @@ pub mod mock_sd;
 pub(crate) mod pal;
 
 pub use customization::{ContentType, Customization, ParitionType};
-pub use flashing::flash;
+pub use flashing::{Status, flash};
 
 pub(crate) type Result<T, E = Error> = std::result::Result<T, E>;
 
@@ -71,6 +71,40 @@ pub enum Error {
     #[error("Writer thread has been closed.")]
     WriterClosed,
 
+    /// The image stream ended before the declared size was written.
+    ///
+    /// Silently succeeding here produces a card that flashes "successfully" and then fails to
+    /// boot, which is the hardest failure for a user to attribute.
+    #[error("Only {written} of {expected} bytes reached the destination.")]
+    ShortWrite { expected: u64, written: u64 },
+
+    /// The device gave back something other than what was written to it.
+    #[error(
+        "Read-back verification failed: the destination holds different data than was written \
+         (expected sha256 {expected}, device returned {actual}). The card may be faulty, \
+         counterfeit, or was disconnected during writing."
+    )]
+    ReadBackMismatch {
+        expected: Box<str>,
+        actual: Box<str>,
+    },
+
+    #[error(
+        "Destination is too small: the image needs {required} bytes but the device has only {available}."
+    )]
+    InsufficientCapacity { required: u64, available: u64 },
+
+    #[error("Refusing to write to \"{name}\": it is reported as a system disk.")]
+    SystemDisk { name: Box<str> },
+
+    /// Buffers could not be made durable. Never downgraded to a warning: an unsynced tail is
+    /// indistinguishable from a successful flash until the board fails to boot.
+    #[error("Failed to flush written data to the destination.")]
+    SyncFailed {
+        #[source]
+        source: io::Error,
+    },
+
     #[cfg(windows)]
     #[error("Failed to clear SD Card.")]
     WindowsCleanError(std::process::Output),
@@ -88,7 +122,14 @@ pub fn devices(filter: bool) -> Vec<Device> {
                 true
             }
         })
-        .map(|x| Device::new(x.description, x.raw.into(), x.size.unwrap_or_default()))
+        .map(|x| {
+            Device::new(
+                x.description,
+                x.raw.into(),
+                x.size.unwrap_or_default(),
+                x.is_system,
+            )
+        })
         .collect()
 }
 
@@ -98,11 +139,22 @@ pub struct Device {
     pub name: String,
     pub path: PathBuf,
     pub size: u64,
+    /// Whether the platform reports this as a disk the running system depends on.
+    ///
+    /// Carried on the device rather than filtered away at enumeration so callers that list
+    /// unfiltered destinations can still show it and refuse it, instead of it quietly reappearing
+    /// as a selectable target.
+    pub is_system: bool,
 }
 
 impl Device {
-    const fn new(name: String, path: PathBuf, size: u64) -> Self {
-        Self { name, path, size }
+    const fn new(name: String, path: PathBuf, size: u64, is_system: bool) -> Self {
+        Self {
+            name,
+            path,
+            size,
+            is_system,
+        }
     }
 }
 

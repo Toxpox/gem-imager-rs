@@ -10,7 +10,11 @@ pub enum DownloadFlashingStatus {
     Preparing,
     DownloadingProgress(f32),
     FlashingProgress(f32),
-    Verifying,
+    /// Reading the written data back off the destination and comparing it.
+    ///
+    /// Carries its own fraction rather than being a bare marker: a full read-back takes about as
+    /// long as the write it verifies, and a UI that shows no movement for minutes reads as a hang.
+    Verifying(f32),
     Customizing,
 }
 

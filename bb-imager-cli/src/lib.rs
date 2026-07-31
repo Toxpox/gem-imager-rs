@@ -57,12 +57,17 @@ fn flash(target: TargetCommands, quite: bool) {
                         | (
                             DownloadFlashingStatus::FlashingProgress(p),
                             DownloadFlashingStatus::FlashingProgress(_),
+                        )
+                        | (
+                            DownloadFlashingStatus::Verifying(p),
+                            DownloadFlashingStatus::Verifying(_),
                         ) => {
                             last_bar.as_ref().unwrap().set_position((p * 100.0) as u64);
                         }
                         // Create new bar when stage has changed
                         (DownloadFlashingStatus::DownloadingProgress(p), _)
-                        | (DownloadFlashingStatus::FlashingProgress(p), _) => {
+                        | (DownloadFlashingStatus::FlashingProgress(p), _)
+                        | (DownloadFlashingStatus::Verifying(p), _) => {
                             if let Some(b) = last_bar.take() {
                                 b.finish();
                             }
@@ -76,8 +81,7 @@ fn flash(target: TargetCommands, quite: bool) {
                             last_bar = Some(temp_bar);
                         }
                         // Print stage when entering a new stage without progress
-                        (DownloadFlashingStatus::Verifying, _)
-                        | (DownloadFlashingStatus::Customizing, _)
+                        (DownloadFlashingStatus::Customizing, _)
                         | (DownloadFlashingStatus::Preparing, _) => {
                             if let Some(b) = last_bar.take() {
                                 b.finish();
@@ -438,7 +442,7 @@ const fn progress_msg(status: DownloadFlashingStatus) -> &'static str {
         DownloadFlashingStatus::Preparing => "Preparing  ",
         DownloadFlashingStatus::DownloadingProgress(_) => "Downloading",
         DownloadFlashingStatus::FlashingProgress(_) => "Flashing",
-        DownloadFlashingStatus::Verifying => "Verifying",
+        DownloadFlashingStatus::Verifying(_) => "Verifying",
         DownloadFlashingStatus::Customizing => "Customizing",
     }
 }
@@ -472,7 +476,10 @@ mod tests {
             progress_msg(DownloadFlashingStatus::FlashingProgress(0.5)),
             "Flashing"
         );
-        assert_eq!(progress_msg(DownloadFlashingStatus::Verifying), "Verifying");
+        assert_eq!(
+            progress_msg(DownloadFlashingStatus::Verifying(0.5)),
+            "Verifying"
+        );
         assert_eq!(
             progress_msg(DownloadFlashingStatus::Customizing),
             "Customizing"
@@ -486,7 +493,7 @@ mod tests {
             "[3] Preparing  "
         );
         assert_eq!(
-            stage_msg(DownloadFlashingStatus::Verifying, 1),
+            stage_msg(DownloadFlashingStatus::Verifying(0.0), 1),
             "[1] Verifying"
         );
     }

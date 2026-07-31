@@ -610,7 +610,7 @@ mod tests {
         );
         assert_eq!(
             time_remaining_from(
-                DownloadFlashingStatus::Verifying,
+                DownloadFlashingStatus::Verifying(0.5),
                 Some(Duration::from_secs(5))
             ),
             None

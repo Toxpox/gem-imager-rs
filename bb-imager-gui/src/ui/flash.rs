@@ -23,7 +23,8 @@ fn progress_view(state: &FlashingState) -> Element<'_, BBImagerMessage> {
         bb_flasher::DownloadFlashingStatus::Preparing => (0.0, "Preparing ..."),
         bb_flasher::DownloadFlashingStatus::DownloadingProgress(x) => (x, "Downloading ..."),
         bb_flasher::DownloadFlashingStatus::FlashingProgress(x) => (x, "Flashing Image ..."),
-        bb_flasher::DownloadFlashingStatus::Verifying => (0.99, "Verifying ..."),
+        // Its own pass with its own fraction — not a "nearly done" placeholder pinned at 99%.
+        bb_flasher::DownloadFlashingStatus::Verifying(x) => (x, "Verifying written data ..."),
         bb_flasher::DownloadFlashingStatus::Customizing => (0.99, "Customizing ..."),
     };
 
