@@ -27,6 +27,7 @@
 //! # }
 //! ```
 
+pub mod boot_manifest;
 pub mod canonical;
 pub mod diagnostic;
 pub mod raw;
@@ -34,6 +35,9 @@ pub mod sha256;
 pub mod store;
 pub mod validate;
 
+pub use boot_manifest::{
+    BootArtifact, BootManifestError, VerifiedBootManifest, parse_boot_manifest,
+};
 pub use canonical::{
     BEAGLEY_BOARD_TAG, Board, BoardCapabilities, CustomizationProfile, DfuProfile, DfuStageSpec,
     Image, ImageIntegrity, MatchingType, ProductScope, T3_BOARD_TAG, T3_BOOT_MANIFEST_URL,

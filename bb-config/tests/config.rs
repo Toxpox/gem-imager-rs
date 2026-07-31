@@ -229,3 +229,88 @@ fn sqlite_invalid_discriminant_errors() {
         "an out-of-range discriminant must fail FromSql for InitFormat"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Extracted-side digest (`instruction.md` §8.1)
+// ---------------------------------------------------------------------------
+
+/// The T3 catalog publishes `extract_sha256`; the legacy schema never did. Both have to survive
+/// the same parser, and "absent" must stay distinguishable from "present", because an all-zero
+/// default would turn a missing gate into a gate that can never pass.
+#[test]
+fn the_extracted_digest_is_carried_when_the_catalog_publishes_it() {
+    let with_digest = config_with_os_list(
+        r#"[{
+            "name": "T3 Gemstone OS (Minimal)",
+            "description": "A port of Ubuntu 22.04",
+            "icon": "https://packages.t3gemstone.org/images/icons/ubuntu.svg",
+            "url": "https://packages.t3gemstone.org/images/os.img.xz",
+            "image_download_size": 138737372,
+            "image_download_sha256": "13e237518eee97dead84f2d8009a6d875516e1ab2eb800c90fe44f5ff49774c7",
+            "extract_sha256": "9c991802d2ceff5a80cfd3e822f9cd2f9730cee59759714ba7530c81a824c92d",
+            "extract_size": 1024000000,
+            "release_date": "2026-03-26",
+            "devices": ["t3-gem-o1"]
+        }]"#,
+    );
+
+    let OsListItem::Image(image) = &with_digest.os_list[0] else {
+        panic!("expected an image entry");
+    };
+
+    let extract_sha256 = image.extract_sha256.expect("the digest must be carried");
+    assert_eq!(
+        const_hex::encode(extract_sha256),
+        "9c991802d2ceff5a80cfd3e822f9cd2f9730cee59759714ba7530c81a824c92d"
+    );
+    // The two digests are distinct values and must never be conflated.
+    assert_ne!(extract_sha256, image.image_download_sha256);
+}
+
+#[test]
+fn a_catalog_entry_without_an_extracted_digest_parses_as_absent() {
+    let without_digest = config_with_os_list(
+        r#"[{
+            "name": "Legacy image",
+            "description": "No extracted digest published",
+            "icon": "https://example.com/icon.png",
+            "url": "https://example.com/os.img.xz",
+            "image_download_sha256": "13e237518eee97dead84f2d8009a6d875516e1ab2eb800c90fe44f5ff49774c7",
+            "extract_size": 1024,
+            "release_date": "2026-03-26",
+            "devices": ["beagley-ai"]
+        }]"#,
+    );
+
+    let OsListItem::Image(image) = &without_digest.os_list[0] else {
+        panic!("expected an image entry");
+    };
+
+    assert_eq!(image.extract_sha256, None);
+}
+
+/// An unusable digest makes the whole entry unparsable — and the legacy list drops unparsable
+/// entries silently, which is precisely the behaviour `instruction.md` §6.1 forbids for the T3
+/// adapter. Documented here so the difference between the two parsers stays visible: an image
+/// whose digest cannot be read simply disappears from this one.
+#[test]
+fn an_unusable_extracted_digest_makes_the_legacy_parser_drop_the_entry() {
+    let broken = config_with_os_list(
+        r#"[{
+            "name": "Broken image",
+            "description": "Digest is not hex",
+            "icon": "https://example.com/icon.png",
+            "url": "https://example.com/os.img.xz",
+            "image_download_sha256": "13e237518eee97dead84f2d8009a6d875516e1ab2eb800c90fe44f5ff49774c7",
+            "extract_sha256": "definitely not a sha256",
+            "extract_size": 1024,
+            "release_date": "2026-03-26",
+            "devices": ["t3-gem-o1"]
+        }]"#,
+    );
+
+    assert!(
+        broken.os_list.is_empty(),
+        "the legacy list skips entries it cannot parse"
+    );
+}

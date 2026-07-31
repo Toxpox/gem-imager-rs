@@ -21,6 +21,7 @@ use chrono::NaiveDate;
 use rusqlite::{Connection, OptionalExtension, params};
 use url::Url;
 
+use crate::t3::boot_manifest::{BootArtifact, VerifiedBootManifest};
 use crate::t3::canonical::{
     Board, BoardCapabilities, CustomizationProfile, DfuProfile, DfuStageSpec, Image,
     ImageIntegrity, MatchingType, ProductScope, T3InitFormat,
@@ -29,14 +30,14 @@ use crate::t3::sha256::Sha256;
 use crate::t3::validate::{CatalogProvenance, ValidatedT3Catalog};
 
 /// Schema version this build writes and expects.
-pub const CURRENT_SCHEMA_VERSION: u32 = 1;
+pub const CURRENT_SCHEMA_VERSION: u32 = 2;
 
 /// Ordered schema migrations.
 ///
 /// Each entry is `(target_version, sql)` and is applied inside a transaction when the database's
 /// `user_version` is below `target_version`. Adding a migration means appending here and bumping
 /// [`CURRENT_SCHEMA_VERSION`]; existing rows must be preserved by the SQL, never recreated.
-pub const MIGRATIONS: &[(u32, &str)] = &[(1, SCHEMA_V1)];
+pub const MIGRATIONS: &[(u32, &str)] = &[(1, SCHEMA_V1), (2, SCHEMA_V2)];
 
 const SCHEMA_V1: &str = r#"
 CREATE TABLE catalog_provenance (
@@ -106,6 +107,53 @@ CREATE TABLE image_devices (
 CREATE INDEX idx_board_tags_tag    ON board_tags(tag);
 CREATE INDEX idx_image_devices_tag ON image_devices(tag);
 "#;
+
+/// v2 (`instruction.md` §8.3): remember *how* the last-known-good documents were fetched, and keep
+/// a verified boot manifest across restarts.
+///
+/// `ALTER TABLE ... ADD COLUMN` is used rather than a table rebuild so the catalog a user already
+/// has on disk survives the upgrade — the whole point of a last-known-good cache.
+const SCHEMA_V2: &str = r#"
+ALTER TABLE catalog_provenance ADD COLUMN etag TEXT;
+ALTER TABLE catalog_provenance ADD COLUMN last_modified TEXT;
+
+CREATE TABLE boot_manifests (
+    board_tag     TEXT PRIMARY KEY,
+    source_url    TEXT NOT NULL,
+    fetched_at    TEXT NOT NULL,
+    etag          TEXT,
+    last_modified TEXT
+);
+
+-- One row per artifact, ordered. A manifest is only ever written whole, inside the same
+-- transaction as its parent row, so a partially stored manifest cannot be read back.
+CREATE TABLE boot_manifest_artifacts (
+    board_tag TEXT    NOT NULL REFERENCES boot_manifests(board_tag) ON DELETE CASCADE,
+    position  INTEGER NOT NULL,
+    name      TEXT    NOT NULL,
+    sha256    TEXT    NOT NULL,
+    PRIMARY KEY (board_tag, position)
+);
+"#;
+
+/// The HTTP cache validators a document was last fetched with (`instruction.md` §8.2).
+///
+/// Storing them is what makes a refresh conditional: the client can ask "has this changed?" and
+/// keep the verified copy it already has when the answer is no.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct HttpValidators {
+    /// `ETag` response header, verbatim.
+    pub etag: Option<String>,
+    /// `Last-Modified` response header, verbatim.
+    pub last_modified: Option<String>,
+}
+
+impl HttpValidators {
+    /// Whether a conditional request can be made at all.
+    pub const fn is_empty(&self) -> bool {
+        self.etag.is_none() && self.last_modified.is_none()
+    }
+}
 
 /// Why a catalog store operation failed.
 #[derive(Debug)]
@@ -230,6 +278,21 @@ impl T3CatalogStore {
         scope: ProductScope,
         fetched_at: NaiveDate,
     ) -> Result<(), StoreError> {
+        self.save_with_validators(catalog, scope, fetched_at, &HttpValidators::default())
+    }
+
+    /// Replace the stored catalog and remember the HTTP validators it arrived with.
+    ///
+    /// Only a catalog that has already been through [`crate::t3::validate`] can be passed here, so
+    /// "stored" and "validated" cannot drift apart: an unparsable refresh never reaches this
+    /// method and therefore never displaces the last-known-good copy (`instruction.md` §8.3).
+    pub fn save_with_validators(
+        &mut self,
+        catalog: &ValidatedT3Catalog,
+        scope: ProductScope,
+        fetched_at: NaiveDate,
+        validators: &HttpValidators,
+    ) -> Result<(), StoreError> {
         let tx = self.connection.transaction()?;
 
         tx.execute("DELETE FROM images", [])?;
@@ -238,13 +301,15 @@ impl T3CatalogStore {
 
         tx.execute(
             "INSERT INTO catalog_provenance
-                 (id, source_url, latest_version, fetched_at, product_scope)
-             VALUES (1, ?1, ?2, ?3, ?4)",
+                 (id, source_url, latest_version, fetched_at, product_scope, etag, last_modified)
+             VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6)",
             params![
                 catalog.provenance.source_url,
                 catalog.provenance.latest_version,
                 fetched_at.to_string(),
                 scope_to_str(scope),
+                validators.etag,
+                validators.last_modified,
             ],
         )?;
 
@@ -270,6 +335,146 @@ impl T3CatalogStore {
             images: self.load_images()?,
             provenance,
         }))
+    }
+
+    /// Date the stored catalog was fetched, for the "showing a catalog from …" UI state.
+    pub fn stored_fetched_at(&self) -> Result<Option<NaiveDate>, StoreError> {
+        let raw: Option<String> = self
+            .connection
+            .query_row(
+                "SELECT fetched_at FROM catalog_provenance WHERE id = 1",
+                [],
+                |row| row.get(0),
+            )
+            .optional()?;
+
+        raw.map(|value| {
+            value
+                .parse::<NaiveDate>()
+                .map_err(|err| StoreError::Corrupt {
+                    table: "catalog_provenance",
+                    reason: format!("fetched_at `{value}` is not a date: {err}"),
+                })
+        })
+        .transpose()
+    }
+
+    /// HTTP validators the stored catalog was fetched with, if any.
+    pub fn stored_validators(&self) -> Result<Option<HttpValidators>, StoreError> {
+        Ok(self
+            .connection
+            .query_row(
+                "SELECT etag, last_modified FROM catalog_provenance WHERE id = 1",
+                [],
+                |row| {
+                    Ok(HttpValidators {
+                        etag: row.get(0)?,
+                        last_modified: row.get(1)?,
+                    })
+                },
+            )
+            .optional()?)
+    }
+
+    /// Store a boot manifest that has already been verified.
+    ///
+    /// The type system carries the guarantee: a [`VerifiedBootManifest`] cannot be built from a
+    /// manifest that is missing a stage, so nothing incomplete can be written here.
+    pub fn save_boot_manifest(
+        &mut self,
+        board_tag: &str,
+        source_url: &str,
+        manifest: &VerifiedBootManifest,
+        fetched_at: NaiveDate,
+        validators: &HttpValidators,
+    ) -> Result<(), StoreError> {
+        let tx = self.connection.transaction()?;
+
+        tx.execute(
+            "DELETE FROM boot_manifests WHERE board_tag = ?1",
+            params![board_tag],
+        )?;
+        tx.execute(
+            "INSERT INTO boot_manifests (board_tag, source_url, fetched_at, etag, last_modified)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![
+                board_tag,
+                source_url,
+                fetched_at.to_string(),
+                validators.etag,
+                validators.last_modified,
+            ],
+        )?;
+
+        for (position, artifact) in manifest.artifacts().iter().enumerate() {
+            tx.execute(
+                "INSERT INTO boot_manifest_artifacts (board_tag, position, name, sha256)
+                 VALUES (?1, ?2, ?3, ?4)",
+                params![
+                    board_tag,
+                    position as i64,
+                    artifact.name,
+                    artifact.sha256.to_string(),
+                ],
+            )?;
+        }
+
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Load the last-known-good boot manifest for a board.
+    ///
+    /// Returns `Ok(None)` when nothing has been stored, and an error when what is stored no longer
+    /// satisfies `required`. Neither result is a manifest, and `instruction.md` §8.3 is explicit
+    /// that without a verified manifest DFU does not start — there is deliberately no way to get a
+    /// partial one out of this method.
+    pub fn load_boot_manifest(
+        &self,
+        board_tag: &str,
+        required: &[&str],
+    ) -> Result<Option<VerifiedBootManifest>, StoreError> {
+        let exists: Option<i64> = self
+            .connection
+            .query_row(
+                "SELECT 1 FROM boot_manifests WHERE board_tag = ?1",
+                params![board_tag],
+                |row| row.get(0),
+            )
+            .optional()?;
+
+        if exists.is_none() {
+            return Ok(None);
+        }
+
+        let mut stmt = self.connection.prepare(
+            "SELECT name, sha256 FROM boot_manifest_artifacts
+             WHERE board_tag = ?1 ORDER BY position",
+        )?;
+        let stored = stmt
+            .query_map(params![board_tag], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let artifacts = stored
+            .into_iter()
+            .map(|(name, sha256)| {
+                Sha256::parse(&sha256)
+                    .map(|sha256| BootArtifact { name, sha256 })
+                    .map_err(|err| StoreError::Corrupt {
+                        table: "boot_manifest_artifacts",
+                        reason: format!("sha256 `{sha256}` is unusable: {err}"),
+                    })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        VerifiedBootManifest::from_stored(artifacts, required)
+            .map(Some)
+            .map_err(|err| StoreError::Corrupt {
+                table: "boot_manifest_artifacts",
+                reason: err.to_string(),
+            })
     }
 
     /// Product scope the stored catalog was validated against.

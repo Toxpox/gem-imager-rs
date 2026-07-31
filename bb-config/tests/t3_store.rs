@@ -1,6 +1,6 @@
 //! Persistence and migration tests for the T3 catalog store (`instruction.md` §6.4, §6.5).
 
-use bb_config::t3::store::{CURRENT_SCHEMA_VERSION, StoreError, T3CatalogStore};
+use bb_config::t3::store::{CURRENT_SCHEMA_VERSION, HttpValidators, StoreError, T3CatalogStore};
 use bb_config::t3::{ProductScope, ValidatedT3Catalog, parse_catalog};
 use chrono::NaiveDate;
 
@@ -297,4 +297,187 @@ fn a_corrupt_hash_column_is_reported_instead_of_being_silently_accepted() {
         }
         other => panic!("expected Corrupt, got {other:?}"),
     }
+}
+
+// ---------------------------------------------------------------------------
+// Last-known-good behaviour (`instruction.md` §8.3)
+// ---------------------------------------------------------------------------
+
+const LIVE_BOOT_MANIFEST: &[u8] = include_bytes!("fixtures/t3/boot_manifest.json");
+const BOOT_MANIFEST_URL: &str = "https://packages.t3gemstone.org/images/boot/t3-gem-o1/list.json";
+
+fn required_artifacts() -> Vec<&'static str> {
+    // The stage contract, not a hand-typed list.
+    ["tiboot3.bin", "tispl.bin", "u-boot.img"].to_vec()
+}
+
+fn live_boot_manifest() -> bb_config::t3::VerifiedBootManifest {
+    bb_config::t3::parse_boot_manifest(LIVE_BOOT_MANIFEST, &required_artifacts())
+        .expect("the fixture manifest is complete")
+}
+
+#[test]
+fn the_http_validators_of_the_stored_catalog_are_remembered() {
+    let catalog = live_catalog(ProductScope::T3Only);
+    let mut store = T3CatalogStore::open_in_memory().expect("store opens");
+
+    let validators = HttpValidators {
+        etag: Some("\"a1b2c3\"".to_owned()),
+        last_modified: Some("Wed, 29 Jul 2026 10:00:00 GMT".to_owned()),
+    };
+    store
+        .save_with_validators(&catalog, ProductScope::T3Only, fetched_at(), &validators)
+        .expect("save succeeds");
+
+    assert_eq!(
+        store.stored_validators().expect("validators readable"),
+        Some(validators)
+    );
+    assert_eq!(
+        store.stored_fetched_at().expect("date readable"),
+        Some(fetched_at())
+    );
+}
+
+#[test]
+fn a_catalog_saved_without_validators_reports_none_rather_than_empty_strings() {
+    let catalog = live_catalog(ProductScope::T3Only);
+    let mut store = T3CatalogStore::open_in_memory().expect("store opens");
+    store
+        .save(&catalog, ProductScope::T3Only, fetched_at())
+        .expect("save succeeds");
+
+    let validators = store
+        .stored_validators()
+        .expect("validators readable")
+        .expect("a catalog was saved");
+    assert!(validators.is_empty());
+}
+
+/// The point of the cache: a machine that starts up offline still has the catalog it validated
+/// last time, on disk, across a restart.
+#[test]
+fn a_saved_catalog_survives_reopening_the_database() {
+    let dir = tempfile::TempDir::new().expect("temp dir");
+    let path = dir.path().join("catalog.sqlite3");
+    let catalog = live_catalog(ProductScope::T3Only);
+
+    {
+        let mut store = T3CatalogStore::open(&path).expect("store opens");
+        store
+            .save(&catalog, ProductScope::T3Only, fetched_at())
+            .expect("save succeeds");
+    }
+
+    let reopened = T3CatalogStore::open(&path).expect("store reopens");
+    let loaded = reopened
+        .load()
+        .expect("load succeeds")
+        .expect("the previous catalog is still there");
+    assert_eq!(loaded.images, catalog.images);
+}
+
+/// A v1 database written by an older build must be carried forward, not discarded. If the upgrade
+/// dropped the rows, the first launch after an update would present an empty catalog offline.
+#[test]
+fn a_v1_database_is_migrated_forward_with_its_rows_intact() {
+    let dir = tempfile::TempDir::new().expect("temp dir");
+    let path = dir.path().join("catalog.sqlite3");
+    let catalog = live_catalog(ProductScope::T3Only);
+
+    {
+        // Build a v1 database by hand: schema v1 SQL, user_version pinned to 1.
+        let conn = rusqlite::Connection::open(&path).expect("sqlite opens");
+        conn.execute_batch(bb_config::t3::store::MIGRATIONS[0].1)
+            .expect("v1 schema applies");
+        conn.pragma_update(None, "user_version", 1i64)
+            .expect("version set");
+    }
+
+    {
+        // The current build opens it, migrates to v2, and writes a catalog.
+        let mut store = T3CatalogStore::open(&path).expect("store migrates");
+        assert_eq!(
+            store.schema_version().expect("version readable"),
+            CURRENT_SCHEMA_VERSION
+        );
+        store
+            .save(&catalog, ProductScope::T3Only, fetched_at())
+            .expect("save succeeds");
+    }
+
+    let reopened = T3CatalogStore::open(&path).expect("store reopens");
+    assert_eq!(
+        reopened
+            .load()
+            .expect("load succeeds")
+            .expect("catalog present")
+            .images
+            .len(),
+        catalog.images.len()
+    );
+}
+
+#[test]
+fn a_verified_boot_manifest_round_trips() {
+    let mut store = T3CatalogStore::open_in_memory().expect("store opens");
+    let manifest = live_boot_manifest();
+
+    store
+        .save_boot_manifest(
+            "t3-gem-o1",
+            BOOT_MANIFEST_URL,
+            &manifest,
+            fetched_at(),
+            &HttpValidators::default(),
+        )
+        .expect("save succeeds");
+
+    let loaded = store
+        .load_boot_manifest("t3-gem-o1", &required_artifacts())
+        .expect("load succeeds")
+        .expect("a manifest was saved");
+
+    assert_eq!(loaded, manifest);
+    assert_eq!(loaded.artifacts()[0].name, "tiboot3.bin");
+}
+
+#[test]
+fn a_board_with_no_stored_manifest_yields_nothing_to_start_dfu_with() {
+    let store = T3CatalogStore::open_in_memory().expect("store opens");
+
+    assert!(
+        store
+            .load_boot_manifest("t3-gem-o1", &required_artifacts())
+            .expect("load succeeds")
+            .is_none()
+    );
+}
+
+/// If the stage contract grows an artifact the cached manifest never carried, the cache must fail
+/// closed rather than hand back a boot chain that is one stage short.
+#[test]
+fn a_stored_manifest_that_no_longer_covers_the_stage_contract_is_refused() {
+    let mut store = T3CatalogStore::open_in_memory().expect("store opens");
+    store
+        .save_boot_manifest(
+            "t3-gem-o1",
+            BOOT_MANIFEST_URL,
+            &live_boot_manifest(),
+            fetched_at(),
+            &HttpValidators::default(),
+        )
+        .expect("save succeeds");
+
+    let mut extended = required_artifacts();
+    extended.push("a-future-stage.bin");
+
+    let err = store
+        .load_boot_manifest("t3-gem-o1", &extended)
+        .expect_err("an incomplete manifest must not be returned");
+
+    assert!(
+        matches!(err, StoreError::Corrupt { table, .. } if table == "boot_manifest_artifacts"),
+        "unexpected error: {err}"
+    );
 }

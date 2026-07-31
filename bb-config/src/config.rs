@@ -191,6 +191,14 @@ pub struct OsImage {
     pub image_download_sha256: [u8; 32],
     /// Os Image size after extraction
     pub extract_size: u64,
+    /// Os Image sha256 *after* extraction, when the catalog publishes it.
+    ///
+    /// The T3 catalog always publishes this; the legacy BeagleBoard schema never did, which is why
+    /// it is optional here. Together with [`Self::extract_size`] it forms the extracted-side pair
+    /// of the four independent integrity gates in `instruction.md` §8.1 — the pair that decides
+    /// what is allowed to reach the board.
+    #[serde(default, with = "hex_option")]
+    pub extract_sha256: Option<[u8; 32]>,
     /// Os Image release date
     pub release_date: chrono::NaiveDate,
     /// Devices the Os Image can be used with
@@ -205,6 +213,37 @@ pub struct OsImage {
     pub info_text: Option<String>,
     /// URL to support page for image. This is where issues should be reported.
     pub support: Option<Url>,
+}
+
+/// Hex serde for an optional 32-byte digest.
+///
+/// `const_hex`'s serde support covers `[u8; 32]` but not `Option<[u8; 32]>`, and an absent
+/// `extract_sha256` has to stay distinguishable from a present one — treating "missing" as
+/// "all zeroes" would turn a missing gate into a gate that always fails.
+mod hex_option {
+    use serde::{Deserialize as _, Deserializer, Serializer};
+
+    pub(super) fn serialize<S: Serializer>(
+        value: &Option<[u8; 32]>,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error> {
+        match value {
+            Some(bytes) => serializer.serialize_str(&const_hex::encode(bytes)),
+            None => serializer.serialize_none(),
+        }
+    }
+
+    pub(super) fn deserialize<'de, D: Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<Option<[u8; 32]>, D::Error> {
+        let Some(raw) = Option::<String>::deserialize(deserializer)? else {
+            return Ok(None);
+        };
+
+        let mut out = [0u8; 32];
+        const_hex::decode_to_slice(raw.as_str(), &mut out).map_err(serde::de::Error::custom)?;
+        Ok(Some(out))
+    }
 }
 
 /// Types of flashers Os Image(s) support
