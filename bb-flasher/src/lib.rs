@@ -65,14 +65,6 @@ impl LocalImage {
             Ok((img, size))
         }
     }
-
-    #[cfg(feature = "sd")]
-    pub fn into_archive_fn(
-        self,
-        tx: Option<std::sync::mpsc::SyncSender<f32>>,
-    ) -> impl FnOnce() -> std::io::Result<img::OsArchive> {
-        move || img::OsArchive::from_path(&self.0, tx)
-    }
 }
 
 impl std::fmt::Display for LocalImage {

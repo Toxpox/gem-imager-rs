@@ -7,9 +7,7 @@ use crate::{
     BBImagerMessage,
     helpers::{self, FlashingCustomization},
     persistance,
-    ui::helpers::{
-        VIEW_COL_PADDING, detail_pane, element_with_element, element_with_label, page_type2,
-    },
+    ui::helpers::{detail_pane, element_with_element, element_with_label, page_type2},
 };
 
 const INPUT_WIDTH: u32 = 200;

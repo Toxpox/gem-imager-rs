@@ -248,35 +248,3 @@ where
         bb_flasher_sd::flash(self.img, self.dst, tx, customization, cancel).map_err(Into::into)
     }
 }
-
-/// Flasher of updaing BOOT partition on pre-flashed SD Card
-pub struct UpdateBootFlasher<I> {
-    img: I,
-    dst: bb_flasher_sd::Destination,
-    cancel: Option<CancellationToken>,
-}
-
-impl<F> UpdateBootFlasher<F>
-where
-    F: FnOnce() -> std::io::Result<crate::img::OsArchive>,
-{
-    pub fn new(img: F, dst: Target, cancel: Option<CancellationToken>) -> Self {
-        Self {
-            img,
-            dst: bb_flasher_sd::Destination::SdCard(dst.0.path.into_boxed_path()),
-            cancel,
-        }
-    }
-
-    pub fn with_file_dest(img: F, dst: PathBuf, cancel: Option<CancellationToken>) -> Self {
-        Self {
-            img,
-            dst: bb_flasher_sd::Destination::File(dst.into_boxed_path()),
-            cancel,
-        }
-    }
-
-    pub fn flash(self) -> anyhow::Result<()> {
-        bb_flasher_sd::bootfs_update::flash(self.img, self.dst, self.cancel).map_err(Into::into)
-    }
-}

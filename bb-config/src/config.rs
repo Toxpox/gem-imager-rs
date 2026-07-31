@@ -213,15 +213,12 @@ pub enum Flasher {
     #[default]
     /// Image needs to be written to SD Card
     SdCard,
-    /// Archive for updated bootfs
-    SdCardBootfs,
 }
 
 impl rusqlite::ToSql for Flasher {
     fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
         let val: u8 = match self {
             Flasher::SdCard => 1,
-            Flasher::SdCardBootfs => 2,
         };
 
         Ok(rusqlite::types::ToSqlOutput::from(val))
@@ -232,7 +229,6 @@ impl rusqlite::types::FromSql for Flasher {
     fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
         value.as_i64().and_then(|val| match val {
             1 => Ok(Flasher::SdCard),
-            2 => Ok(Flasher::SdCardBootfs),
             _ => Err(rusqlite::types::FromSqlError::Other(
                 format!("Invalid Flasher discriminant: {}", val).into(),
             )),

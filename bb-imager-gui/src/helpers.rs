@@ -3,8 +3,6 @@ use std::{borrow::Cow, fmt::Display, path::PathBuf, sync::LazyLock, time::Durati
 
 use crate::{BBImagerMessage, PACKAGE_QUALIFIER, constants};
 use bb_config::config;
-#[cfg(feature = "sd")]
-use bb_flasher::img::OsArchive;
 use bb_flasher::img::OsImage;
 use bb_flasher::{BBFlasherTarget, DownloadFlashingStatus};
 use bb_helper::file_stream::ReaderFileStream;
@@ -299,18 +297,6 @@ impl RemoteImage {
         }
     }
 
-    #[cfg(feature = "sd")]
-    fn into_archive_fn(
-        self,
-        tx: Option<mpsc::SyncSender<f32>>,
-    ) -> impl FnOnce() -> io::Result<OsArchive> {
-        let tx_clone = tx.clone();
-        self.open(
-            move |p| OsArchive::from_path(p, tx_clone),
-            move |rx, abort, es| OsArchive::from_piped(rx, abort, es, tx),
-        )
-    }
-
     fn into_image_fn(self) -> impl FnOnce() -> io::Result<(OsImage, u64)> {
         let extract_size = self.extract_size;
         self.open(
@@ -340,17 +326,6 @@ impl SelectedImage {
         match self {
             Self::LocalImage(x) => x.file_name().to_string_lossy().to_string(),
             Self::RemoteImage(x) => x.file_name().to_string(),
-        }
-    }
-
-    #[cfg(feature = "sd")]
-    fn into_archive_fn(
-        self,
-        tx: Option<mpsc::SyncSender<f32>>,
-    ) -> Box<dyn FnOnce() -> io::Result<OsArchive>> {
-        match self {
-            SelectedImage::LocalImage(x) => Box::new(x.into_archive_fn(tx)),
-            SelectedImage::RemoteImage(x) => Box::new(x.into_archive_fn(tx)),
         }
     }
 
@@ -427,48 +402,6 @@ pub(crate) async fn flash(
             .await
             .unwrap()
         }
-        #[cfg(feature = "sd")]
-        (BoardImage::Image { img, flasher, .. }, _, Destination::SdCard(t))
-            if flasher == config::Flasher::SdCardBootfs =>
-        {
-            let (tx, rx) = std::sync::mpsc::sync_channel(4);
-            tokio::task::spawn_blocking(move || {
-                while let Ok(msg) = rx.recv() {
-                    let _ = chan.try_send(DownloadFlashingStatus::FlashingProgress(msg));
-                }
-            });
-            tokio::task::spawn_blocking(move || {
-                bb_flasher::sd::UpdateBootFlasher::new(
-                    img.into_archive_fn(Some(tx)),
-                    t,
-                    Some(cancel_sync),
-                )
-                .flash()
-            })
-            .await
-            .unwrap()
-        }
-        #[cfg(feature = "sd")]
-        (BoardImage::Image { img, flasher, .. }, _, Destination::LocalFile(t))
-            if flasher == config::Flasher::SdCardBootfs =>
-        {
-            let (tx, rx) = std::sync::mpsc::sync_channel(4);
-            tokio::task::spawn_blocking(move || {
-                while let Ok(msg) = rx.recv() {
-                    let _ = chan.try_send(DownloadFlashingStatus::FlashingProgress(msg));
-                }
-            });
-            tokio::task::spawn_blocking(move || {
-                bb_flasher::sd::UpdateBootFlasher::with_file_dest(
-                    img.into_archive_fn(Some(tx)),
-                    t,
-                    Some(cancel_sync),
-                )
-                .flash()
-            })
-            .await
-            .unwrap()
-        }
         _ => unimplemented!(),
     }
 }
@@ -520,12 +453,12 @@ impl Destination {
 pub(crate) fn destinations(flasher: config::Flasher, filter: bool) -> Vec<Destination> {
     match flasher {
         #[cfg(feature = "sd")]
-        config::Flasher::SdCard | config::Flasher::SdCardBootfs => {
-            bb_flasher::sd::Target::destinations(filter)
-                .into_iter()
-                .map(Destination::SdCard)
-                .collect()
-        }
+        config::Flasher::SdCard => bb_flasher::sd::Target::destinations(filter)
+            .into_iter()
+            .map(Destination::SdCard)
+            .collect(),
+        // Only reachable when the crate is built without the `sd` feature.
+        #[allow(unreachable_patterns)]
         _ => unimplemented!(),
     }
 }
@@ -533,9 +466,9 @@ pub(crate) fn destinations(flasher: config::Flasher, filter: bool) -> Vec<Destin
 pub(crate) fn file_filter(flasher: config::Flasher) -> &'static [&'static str] {
     match flasher {
         #[cfg(feature = "sd")]
-        config::Flasher::SdCard | config::Flasher::SdCardBootfs => {
-            bb_flasher::sd::Target::FILE_TYPES
-        }
+        config::Flasher::SdCard => bb_flasher::sd::Target::FILE_TYPES,
+        // Only reachable when the crate is built without the `sd` feature.
+        #[allow(unreachable_patterns)]
         _ => unimplemented!(),
     }
 }
@@ -543,7 +476,9 @@ pub(crate) fn file_filter(flasher: config::Flasher) -> &'static [&'static str] {
 pub(crate) const fn flasher_supported(flasher: config::Flasher) -> bool {
     match flasher {
         #[cfg(feature = "sd")]
-        config::Flasher::SdCard | config::Flasher::SdCardBootfs => true,
+        config::Flasher::SdCard => true,
+        // Only reachable when the crate is built without the `sd` feature.
+        #[allow(unreachable_patterns)]
         _ => false,
     }
 }
@@ -580,19 +515,16 @@ impl FlashingCustomization {
                         .unwrap_or_default(),
                 )
             }
-            config::Flasher::SdCard | config::Flasher::SdCardBootfs => Self::NoneSd,
+            config::Flasher::SdCard => Self::NoneSd,
             #[allow(unreachable_patterns)]
             _ => unimplemented!(),
         }
     }
 
     pub(crate) fn reset(&mut self) {
-        match self {
-            Self::LinuxSdSysconfig(_) => {
-                *self = Self::LinuxSdSysconfig(Default::default());
-            }
-            _ => {}
-        };
+        if matches!(self, Self::LinuxSdSysconfig(_)) {
+            *self = Self::LinuxSdSysconfig(Default::default());
+        }
     }
 
     pub(crate) fn validate(&self) -> bool {
@@ -701,9 +633,7 @@ pub(crate) fn no_customization(
         {
             None
         }
-        config::Flasher::SdCard | config::Flasher::SdCardBootfs => {
-            Some(FlashingCustomization::NoneSd)
-        }
+        config::Flasher::SdCard => Some(FlashingCustomization::NoneSd),
         _ => None,
     }
 }
@@ -965,10 +895,6 @@ mod tests {
             flasher_supported(config::Flasher::SdCard),
             cfg!(feature = "sd")
         );
-        assert_eq!(
-            flasher_supported(config::Flasher::SdCardBootfs),
-            cfg!(feature = "sd")
-        );
     }
 
     #[test]
@@ -994,10 +920,6 @@ mod tests {
         let img = BoardImage::format();
         assert!(matches!(
             no_customization(config::Flasher::SdCard, &img),
-            Some(FlashingCustomization::NoneSd)
-        ));
-        assert!(matches!(
-            no_customization(config::Flasher::SdCardBootfs, &img),
             Some(FlashingCustomization::NoneSd)
         ));
     }

@@ -179,33 +179,6 @@ fn flash_internal(
             }
             .flash(chan, None)
         }
-        TargetCommands::SdBootUpdate { img, dst } => {
-            std::thread::scope(|s| {
-                let tx = if let Some(chan) = chan {
-                    let (tx, rx) = mpsc::sync_channel(4);
-                    s.spawn(move || {
-                        let _ = chan.try_send(DownloadFlashingStatus::Preparing);
-                        while let Ok(msg) = rx.recv() {
-                            // Safeguard for initial rewinds
-                            if msg > 0.01 {
-                                let _ =
-                                    chan.try_send(DownloadFlashingStatus::FlashingProgress(msg));
-                            }
-                        }
-                    });
-                    Some(tx)
-                } else {
-                    None
-                };
-
-                bb_flasher::sd::UpdateBootFlasher::with_file_dest(
-                    LocalImage::new(img).into_archive_fn(tx),
-                    dst,
-                    None,
-                )
-                .flash()
-            })
-        }
         #[cfg(feature = "dfu")]
         TargetCommands::Dfu { identifier, imgs } => {
             if imgs.len() % 2 == 1 {

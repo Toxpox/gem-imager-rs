@@ -1,4 +1,4 @@
-//! End-to-end tests for the `flash sd` / `flash sd-boot-update` subcommands.
+//! End-to-end tests for the `flash sd` subcommand.
 //!
 //! These drive the real entry point (`Opt::try_parse_from` -> `run`) instead of
 //! calling the flasher directly, so argv parsing, the argument -> customization
@@ -373,75 +373,5 @@ fn flash_sd_missing_image_fails() {
         "/nonexistent/image.img",
         dst.path().to_str().unwrap(),
         "--file-destination",
-    ]);
-}
-
-/// Build a tar archive containing `entries`, as consumed by `sd-boot-update`.
-fn tar_archive(entries: &[(&str, &str)]) -> NamedTempFile {
-    let file = NamedTempFile::new().unwrap();
-    {
-        let mut builder = tar::Builder::new(file.reopen().unwrap());
-        for (name, contents) in entries {
-            let mut header = tar::Header::new_gnu();
-            header.set_size(contents.len() as u64);
-            header.set_mode(0o644);
-            header.set_cksum();
-            builder
-                .append_data(&mut header, name, contents.as_bytes())
-                .unwrap();
-        }
-        builder.finish().unwrap();
-    }
-    file
-}
-
-#[test]
-fn sd_boot_update_writes_archive_into_boot_partition() {
-    let mut fixture = SdFixture::new();
-    let archive = tar_archive(&[("extlinux.conf", "LABEL Linux\n")]);
-
-    run_cli([
-        "bb-imager-cli",
-        "flash",
-        "--quiet",
-        "sd-boot-update",
-        archive.path().to_str().unwrap(),
-        fixture.dst(),
-    ]);
-
-    assert_eq!(fixture.boot_file("extlinux.conf").unwrap(), "LABEL Linux\n");
-}
-
-/// The non-quiet path for `sd-boot-update` runs its own progress-forwarding
-/// thread (which rewrites archive progress into `FlashingProgress`), so it
-/// needs separate coverage from the quiet path.
-#[test]
-fn sd_boot_update_renders_progress_when_not_quiet() {
-    let mut fixture = SdFixture::new();
-    let archive = tar_archive(&[("uEnv.txt", "console=ttyS2\n")]);
-
-    run_cli([
-        "bb-imager-cli",
-        "flash",
-        "sd-boot-update",
-        archive.path().to_str().unwrap(),
-        fixture.dst(),
-    ]);
-
-    assert_eq!(fixture.boot_file("uEnv.txt").unwrap(), "console=ttyS2\n");
-}
-
-#[test]
-#[should_panic(expected = "Failed to flash")]
-fn sd_boot_update_missing_archive_fails() {
-    let fixture = SdFixture::new();
-
-    run_cli([
-        "bb-imager-cli",
-        "flash",
-        "--quiet",
-        "sd-boot-update",
-        "/nonexistent/boot.tar",
-        fixture.dst(),
     ]);
 }

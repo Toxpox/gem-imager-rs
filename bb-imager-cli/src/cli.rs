@@ -119,14 +119,6 @@ pub enum TargetCommands {
         #[arg(long)]
         file_destination: bool,
     },
-    /// Update boot partition with contents from archive
-    SdBootUpdate {
-        /// Local path to bootfs archive.
-        img: Box<Path>,
-
-        /// The destination device (e.g., `/dev/sdX` or specific device identifiers).
-        dst: PathBuf,
-    },
     #[cfg(feature = "dfu")]
     Dfu {
         /// Identifer is in the following format: `{bus_num}:{address}:{vendor_id}:{product_id}`.
@@ -334,24 +326,18 @@ mod tests {
     }
 
     #[test]
-    fn sd_boot_update_parses() {
-        let opt = Opt::try_parse_from([
-            "bb-imager-cli",
-            "flash",
-            "sd-boot-update",
-            "boot.tar",
-            "/dev/sdX",
-        ])
-        .expect("valid sd-boot-update");
-        match opt.command {
-            Commands::Flash { target, .. } => match *target {
-                TargetCommands::SdBootUpdate { img, dst } => {
-                    assert_eq!(img.as_ref(), Path::new("boot.tar"));
-                    assert_eq!(dst, PathBuf::from("/dev/sdX"));
-                }
-                other => panic!("expected SdBootUpdate, got {other:?}"),
-            },
-            other => panic!("expected Flash, got {other:?}"),
-        }
+    fn sd_boot_update_is_no_longer_a_subcommand() {
+        // The boot-archive path was removed with `SdCardBootfs`; the old
+        // invocation must fail to parse rather than silently do something else.
+        assert!(
+            Opt::try_parse_from([
+                "bb-imager-cli",
+                "flash",
+                "sd-boot-update",
+                "boot.tar",
+                "/dev/sdX",
+            ])
+            .is_err()
+        );
     }
 }

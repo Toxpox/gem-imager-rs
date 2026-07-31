@@ -150,10 +150,7 @@ fn init_format_serde_strings() {
 #[test]
 fn flasher_serde_strings() {
     // Flasher has no rename attribute: it serializes as the variant identifier.
-    let cases = [
-        (Flasher::SdCard, "\"SdCard\""),
-        (Flasher::SdCardBootfs, "\"SdCardBootfs\""),
-    ];
+    let cases = [(Flasher::SdCard, "\"SdCard\"")];
     for (variant, expected) in cases {
         assert_eq!(serde_json::to_string(&variant).unwrap(), expected);
         assert_eq!(serde_json::from_str::<Flasher>(expected).unwrap(), variant);
@@ -165,7 +162,7 @@ fn flasher_sqlite_round_trip() {
     let conn = rusqlite::Connection::open_in_memory().unwrap();
     conn.execute("CREATE TABLE t (id INTEGER, f)", []).unwrap();
 
-    let variants = [Flasher::SdCard, Flasher::SdCardBootfs];
+    let variants = [Flasher::SdCard];
     for (i, variant) in variants.iter().enumerate() {
         conn.execute(
             "INSERT INTO t (id, f) VALUES (?1, ?2)",
