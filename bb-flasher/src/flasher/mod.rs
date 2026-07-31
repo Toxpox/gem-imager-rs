@@ -1,5 +1,3 @@
-#[cfg(any(feature = "bcf_msp430", feature = "bcf"))]
-pub mod bcf;
 #[cfg(feature = "dfu")]
 pub mod dfu;
 #[cfg(feature = "sd")]

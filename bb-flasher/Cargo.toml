@@ -17,7 +17,6 @@ serde = { version = "1.0", features = ["derive"], optional = true }
 yaml_serde = { version = "0.10", optional = true }
 thiserror = { version = "2.0" }
 tracing = "0.1"
-bb-flasher-bcf = { path = "../bb-flasher-bcf", optional = true }
 bb-flasher-sd = { path = "../bb-flasher-sd", optional = true }
 tokio-util = { version = "0.7", optional = true, features = ["rt"] }
 bb-helper = { path = "../bb-helper", features = ["cancel"] }
@@ -40,12 +39,8 @@ serde = ["dep:serde"]
 sd = ["bb-flasher-sd", "serde", "dep:yaml_serde", "bb-helper/reader_progress"]
 sd_linux_udev = ["bb-flasher-sd?/udev"]
 sd_macos_authopen = ["bb-flasher-sd?/macos_authopen"]
-bcf = ["bb-flasher-bcf/cc1352p7"]
-bcf_msp430 = ["bb-flasher-bcf/msp430"]
 dfu = ["bb-flasher-dfu"]
-static = ["liblzma/static", "static_hidraw"]
-static_hidraw = ["bb-flasher-bcf?/static"]
-shared_hidraw = ["bb-flasher-bcf?/shared_hidraw"]
+static = ["liblzma/static"]
 piped_image = ["dep:tokio-util", "bb-helper/file_stream"]
 
 [package.metadata.docs.rs]

@@ -16,7 +16,7 @@ source-code:
 summary: Tool for creating, flashing, and managing OS images for BeagleBoard devices.
 description: |
   A streamlined command line tool to flash SD cards and boards such as
-  BeagleConnect Freedom, BeagleConnect Zepto, etc.
+  etc.
 
 grade: stable
 confinement: classic

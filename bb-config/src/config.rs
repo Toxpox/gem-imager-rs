@@ -217,10 +217,6 @@ pub enum Flasher {
     SdCard,
     /// Archive for updated bootfs
     SdCardBootfs,
-    /// BeagleConnect Freedom CC1352P7 Firmware
-    BeagleConnectFreedom,
-    /// BeagleConnect Freedom Msp430 Firmware
-    Msp430Usb,
 }
 
 impl rusqlite::ToSql for Flasher {
@@ -228,8 +224,6 @@ impl rusqlite::ToSql for Flasher {
         let val: u8 = match self {
             Flasher::SdCard => 1,
             Flasher::SdCardBootfs => 2,
-            Flasher::BeagleConnectFreedom => 3,
-            Flasher::Msp430Usb => 4,
         };
 
         Ok(rusqlite::types::ToSqlOutput::from(val))
@@ -241,8 +235,6 @@ impl rusqlite::types::FromSql for Flasher {
         value.as_i64().and_then(|val| match val {
             1 => Ok(Flasher::SdCard),
             2 => Ok(Flasher::SdCardBootfs),
-            3 => Ok(Flasher::BeagleConnectFreedom),
-            4 => Ok(Flasher::Msp430Usb),
             _ => Err(rusqlite::types::FromSqlError::Other(
                 format!("Invalid Flasher discriminant: {}", val).into(),
             )),

@@ -4,7 +4,7 @@ _HOST_TARGET = $(shell rustc --print host-tuple)
 _CARGO_TOML_VERSION = $(shell grep 'version =' Cargo.toml | sed 's/version = "\(.*\)"/\1/')
 _DATE = $(shell date +%F)
 _RUST_ARGS_BASE = --locked
-_RUST_ARGS = ${_RUST_ARGS_BASE} --features bcf_cc1352p7
+_RUST_ARGS = ${_RUST_ARGS_BASE}
 _RUST_ARGS_CLI = ${_RUST_ARGS} --features dfu
 _RUST_ARGS_GUI = ${_RUST_ARGS} --features sd
 _PACKAGER_ARGS = -r -vvv --verbose
@@ -61,12 +61,8 @@ DESKTOP_DIR ?= $(PREFIX)/share/applications
 METAINFO_DIR ?= $(PREFIX)/share/metainfo
 ## variable: TARGET: Compilation Target. Default = host
 TARGET ?= $(_HOST_TARGET)
-## variable: BCF_MSP430: Enable bcf_msp430 feature. Only disabled in snap package.
-BCF_MSP430 ?= 1
 ## variable: SYSTEM_DEPS: Use system dependencies. Mainly for linux.
 SYSTEM_DEPS ?= 0
-## variable: SHARED_HIDRAW: Use system hidraw. Requires rather recent version of hidraw.
-SHARED_HIDRAW ?= 0
 ## variable: UPDATER: Enable updater feature in GUI.
 UPDATER ?= 0
 ## variable: NOTIFY_RUST: Use notify-rust for notification. Not needed when using xdg-portal on linux.
@@ -88,22 +84,10 @@ ifeq ($(VERBOSE),1)
 	_RUST_ARGS_BASE += --verbose
 endif
 
-# Add bcf_msp430 feature
-ifeq ($(BCF_MSP430),1)
-	_RUST_ARGS += --features bcf_msp430
-endif
-
 # Add system-deps feature
 ifeq ($(SYSTEM_DEPS),1)
 	_RUST_ARGS += --no-default-features
 	_RUST_ARGS_GUI += --features system-deps
-endif
-
-# Add shared-hidraw feature
-ifeq ($(SHARED_HIDRAW),1)
-	_RUST_ARGS += --features shared-hidraw
-else
-	_RUST_ARGS += --features static-hidraw
 endif
 
 # Add offline flag is needed
@@ -170,10 +154,9 @@ ifneq (${VERSION}, ${_CARGO_TOML_VERSION})
 endif
 
 _check_common:
-	$(_CARGO_CHECK) --all-targets --all-features --workspace --exclude bb-flasher-bcf \
+	$(_CARGO_CHECK) --all-targets --all-features --workspace \
 		--exclude bb-flasher --exclude bb-imager-gui --exclude bb-imager-cli
-	$(_CARGO_CHECK) --all-targets -p bb-flasher-bcf -F msp430,static
-	$(_CARGO_CHECK) --all-targets -p bb-flasher -F bcf,bcf_msp430,dfu,static,piped_image,sd
+	$(_CARGO_CHECK) --all-targets -p bb-flasher -F dfu,static,piped_image,sd
 
 _check_cli:
 	$(_CARGO_CHECK) --all-targets -p bb-imager-cli ${_RUST_ARGS_CLI}

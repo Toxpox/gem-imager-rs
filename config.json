@@ -19,24 +19,6 @@
 				"documentation": "https://docs.beagleboard.org/"
 			},
 			{
-				"name": "BeagleConnect Freedom",
-				"tags": [
-					"beagleconnect-freedom"
-				],
-				"description": "BeagleConnect Freedom based on Ti CC1352P7",
-				"icon": "https://media.githubusercontent.com/media/beagleboard/bb-imager-rs/refs/heads/main/assets/boards/bcf.png",
-				"flasher": "BeagleConnectFreedom",
-				"documentation": "https://docs.beagleboard.org/latest/boards/beagleconnect/freedom/index.html",
-				"oshw": "us002175",
-				"specification": {
-					"Processor": "Texas Instruments CC1352P7, Texas Instruments MSP430",
-					"Cores": "1 x 48MHz ARM® Cortex-M4F",
-					"Onboard Flash": "704KB",
-					"External Flash": "2MB SPI flash",
-					"Sensors": "TI OPT3001 light sensor, TI HDC2010 humidity/temperature sensor"
-				}
-			},
-			{
 				"name": "BeagleY-AI",
 				"tags": [
 					"beagle-am67"

@@ -157,7 +157,7 @@ jobs:
       with:
         command: build
         target: ${{matrix.platform}}
-        args: "--locked --release -F bcf_msp430,bcf_cc1352p7,dfu -p bb-imager-cli"
+        args: "--locked --release -F dfu -p bb-imager-cli"
 
     - name: Build packages
       run: make setup-packaging-deps package-${{matrix.platform}}

@@ -60,19 +60,6 @@ pub enum Commands {
 
 #[derive(Subcommand, Debug)]
 pub enum TargetCommands {
-    /// Flash BeagleConnect Freedom.
-    #[cfg(feature = "bcf_cc1352p7")]
-    Bcf {
-        /// Local path to image file. Can be compressed (xz) or extracted file
-        img: Box<Path>,
-
-        /// The destination device (e.g., `/dev/sdX` or specific device identifiers).
-        dst: String,
-
-        #[arg(long)]
-        /// Disable checksum verification after flashing to speed up the process.
-        no_verify: bool,
-    },
     /// Flash an SD card with customizable settings for BeagleBoard devices.
     Sd {
         /// Local path to image file. Can be compressed (xz) or extracted file
@@ -143,15 +130,6 @@ pub enum TargetCommands {
         /// The destination device (e.g., `/dev/sdX` or specific device identifiers).
         dst: PathBuf,
     },
-    /// Flash MSP430 on BeagleConnectFreedom.
-    #[cfg(feature = "bcf_msp430")]
-    Msp430 {
-        /// Local path to image file. Can be compressed (xz) or extracted file
-        img: Box<Path>,
-
-        /// The destination device (e.g., `/dev/sdX` or specific device identifiers).
-        dst: String,
-    },
     #[cfg(feature = "dfu")]
     Dfu {
         /// Identifer is in the following format: `{bus_num}:{address}:{vendor_id}:{product_id}`.
@@ -165,14 +143,8 @@ pub enum TargetCommands {
 
 #[derive(ValueEnum, Clone, Copy, Debug)]
 pub enum DestinationsTarget {
-    /// BeagleConnect Freedom targets.
-    #[cfg(feature = "bcf_cc1352p7")]
-    Bcf,
-    /// SD card targets for BeagleBoard devices.
+    /// SD card targets.
     Sd,
-    /// MSP430 targets
-    #[cfg(feature = "bcf_msp430")]
-    Msp430,
     /// USB DFU Target
     #[cfg(feature = "dfu")]
     Dfu,

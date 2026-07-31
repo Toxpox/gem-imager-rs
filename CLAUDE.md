@@ -61,7 +61,6 @@ The workspace is layered: **front-ends → `bb-flasher` façade → per-target f
 - **`bb-flasher`** — the common abstraction/façade the front-ends program against (`BBFlasher` trait, `LocalImage`, `sd::Flasher`, etc.). It re-exports and feature-gates the concrete flashers below; most capabilities are **off by default** and turned on per front-end via features.
 - Per-target flasher crates, pulled in optionally by `bb-flasher`:
   - `bb-flasher-sd` — OS images to SD card (Linux udev / macOS authopen backends).
-  - `bb-flasher-bcf` — BeagleConnect Freedom main proc (CC1352P7) and its MSP430 USB-UART bridge.
   - `bb-flasher-dfu` — DFU flashing.
 
 ### Support crates
@@ -77,6 +76,5 @@ The workspace is layered: **front-ends → `bb-flasher` façade → per-target f
 Because features cascade from front-end → `bb-flasher` → concrete flasher crates, always build/test with the intended feature set rather than defaults:
 
 - GUI links statically by default (`static` → bundled sqlite, static lzma/hidraw, rustls). `system-deps` switches to native TLS/system libs.
-- `static-hidraw` vs `shared-hidraw` selects USB HID linking (CLI defaults to static because distro hidraw is often too old).
-- Board/firmware support (`bcf_cc1352p7`, `bcf_msp430`, `dfu`) is opt-in per binary.
+- Board/firmware support (`dfu`) is opt-in per binary.
 - The `_check_common`/`_check_cli`/`_check_gui` recipes in the Makefile are the source of truth for which feature combinations must compile.

@@ -499,30 +499,6 @@ pub(crate) async fn flash(
             .await
             .unwrap()
         }
-        #[cfg(feature = "bcf_cc1352p7")]
-        (
-            BoardImage::Image { img, .. },
-            FlashingCustomization::Bcf(customization),
-            Destination::BeagleConnectFreedom(t),
-        ) => tokio::task::spawn_blocking(move || {
-            bb_flasher::bcf::cc1352p7::Flasher::new(
-                img.into_image_fn(),
-                t,
-                customization.verify,
-                Some(cancel_sync),
-            )
-            .flash(Some(chan))
-        })
-        .await
-        .unwrap(),
-        #[cfg(feature = "bcf_msp430")]
-        (BoardImage::Image { img, .. }, FlashingCustomization::Msp430, Destination::Msp430(t)) => {
-            tokio::task::spawn_blocking(move || {
-                bb_flasher::bcf::msp430::Flasher::new(img.into_image_fn(), t).flash(Some(chan))
-            })
-            .await
-            .unwrap()
-        }
         _ => unimplemented!(),
     }
 }
@@ -532,10 +508,6 @@ pub(crate) enum Destination {
     LocalFile(PathBuf),
     #[cfg(feature = "sd")]
     SdCard(bb_flasher::sd::Target),
-    #[cfg(feature = "bcf_cc1352p7")]
-    BeagleConnectFreedom(bb_flasher::bcf::cc1352p7::Target),
-    #[cfg(feature = "bcf_msp430")]
-    Msp430(bb_flasher::bcf::msp430::Target),
 }
 
 impl Display for Destination {
@@ -544,10 +516,6 @@ impl Display for Destination {
             Destination::LocalFile(_) => write!(f, "Save To File"),
             #[cfg(feature = "sd")]
             Destination::SdCard(target) => target.fmt(f),
-            #[cfg(feature = "bcf_cc1352p7")]
-            Destination::BeagleConnectFreedom(target) => target.fmt(f),
-            #[cfg(feature = "bcf_msp430")]
-            Destination::Msp430(target) => target.fmt(f),
         }
     }
 }
@@ -575,10 +543,6 @@ impl Destination {
                 ("Path", t.path().to_string_lossy().to_string()),
                 ("Size", pretty_bytes(t.size())),
             ],
-            #[cfg(feature = "bcf_cc1352p7")]
-            Self::BeagleConnectFreedom(t) => vec![("Path", t.path().to_string())],
-            #[cfg(feature = "bcf_msp430")]
-            Self::Msp430(t) => vec![("Path", t.path().to_string())],
         }
     }
 }
@@ -592,18 +556,6 @@ pub(crate) fn destinations(flasher: config::Flasher, filter: bool) -> Vec<Destin
                 .map(Destination::SdCard)
                 .collect()
         }
-        #[cfg(feature = "bcf_cc1352p7")]
-        config::Flasher::BeagleConnectFreedom => {
-            bb_flasher::bcf::cc1352p7::Target::destinations(filter)
-                .into_iter()
-                .map(Destination::BeagleConnectFreedom)
-                .collect()
-        }
-        #[cfg(feature = "bcf_msp430")]
-        config::Flasher::Msp430Usb => bb_flasher::bcf::msp430::Target::destinations(filter)
-            .into_iter()
-            .map(Destination::Msp430)
-            .collect(),
         _ => unimplemented!(),
     }
 }
@@ -614,10 +566,6 @@ pub(crate) fn file_filter(flasher: config::Flasher) -> &'static [&'static str] {
         config::Flasher::SdCard | config::Flasher::SdCardBootfs => {
             bb_flasher::sd::Target::FILE_TYPES
         }
-        #[cfg(feature = "bcf_cc1352p7")]
-        config::Flasher::BeagleConnectFreedom => bb_flasher::bcf::cc1352p7::Target::FILE_TYPES,
-        #[cfg(feature = "bcf_msp430")]
-        config::Flasher::Msp430Usb => bb_flasher::bcf::msp430::Target::FILE_TYPES,
         _ => unimplemented!(),
     }
 }
@@ -626,10 +574,6 @@ pub(crate) const fn flasher_supported(flasher: config::Flasher) -> bool {
     match flasher {
         #[cfg(feature = "sd")]
         config::Flasher::SdCard | config::Flasher::SdCardBootfs => true,
-        #[cfg(feature = "bcf_cc1352p7")]
-        config::Flasher::BeagleConnectFreedom => true,
-        #[cfg(feature = "bcf_msp430")]
-        config::Flasher::Msp430Usb => true,
         _ => false,
     }
 }
@@ -639,8 +583,6 @@ pub(crate) enum FlashingCustomization {
     NoneSd,
     LinuxSdSysconfig(crate::persistance::SdSysconfCustomization),
     LinuxSdCloudInit(crate::persistance::SdSysconfCustomization),
-    Bcf(crate::persistance::BcfCustomization),
-    Msp430,
 }
 
 impl FlashingCustomization {
@@ -669,10 +611,7 @@ impl FlashingCustomization {
                 )
             }
             config::Flasher::SdCard | config::Flasher::SdCardBootfs => Self::NoneSd,
-            config::Flasher::BeagleConnectFreedom => {
-                Self::Bcf(app_config.bcf_customization.clone().unwrap_or_default())
-            }
-            config::Flasher::Msp430Usb => Self::Msp430,
+            #[allow(unreachable_patterns)]
             _ => unimplemented!(),
         }
     }
@@ -681,9 +620,6 @@ impl FlashingCustomization {
         match self {
             Self::LinuxSdSysconfig(_) => {
                 *self = Self::LinuxSdSysconfig(Default::default());
-            }
-            Self::Bcf(_) => {
-                *self = Self::Bcf(Default::default());
             }
             _ => {}
         };
@@ -704,7 +640,6 @@ impl FlashingCustomization {
             FlashingCustomization::LinuxSdSysconfig(c) => c.sysconfig(),
             FlashingCustomization::LinuxSdCloudInit(c) => c.cloudinit(),
             FlashingCustomization::NoneSd => bb_flasher::sd::FlashingSdLinuxConfig::none(),
-            FlashingCustomization::Bcf(_) | FlashingCustomization::Msp430 => unreachable!(),
         }
     }
 }
@@ -799,7 +734,6 @@ pub(crate) fn no_customization(
         config::Flasher::SdCard | config::Flasher::SdCardBootfs => {
             Some(FlashingCustomization::NoneSd)
         }
-        config::Flasher::Msp430Usb => Some(FlashingCustomization::Msp430),
         _ => None,
     }
 }
@@ -1024,8 +958,7 @@ where
 mod tests {
     use super::*;
     use crate::persistance::{
-        BcfCustomization, GuiConfiguration, SdCustomizationUser, SdCustomizationWifi,
-        SdSysconfCustomization,
+        GuiConfiguration, SdCustomizationUser, SdCustomizationWifi, SdSysconfCustomization,
     };
 
     #[test]
@@ -1066,14 +999,6 @@ mod tests {
             flasher_supported(config::Flasher::SdCardBootfs),
             cfg!(feature = "sd")
         );
-        assert_eq!(
-            flasher_supported(config::Flasher::BeagleConnectFreedom),
-            cfg!(feature = "bcf_cc1352p7")
-        );
-        assert_eq!(
-            flasher_supported(config::Flasher::Msp430Usb),
-            cfg!(feature = "bcf_msp430")
-        );
     }
 
     #[test]
@@ -1105,11 +1030,6 @@ mod tests {
             no_customization(config::Flasher::SdCardBootfs, &img),
             Some(FlashingCustomization::NoneSd)
         ));
-        assert!(matches!(
-            no_customization(config::Flasher::Msp430Usb, &img),
-            Some(FlashingCustomization::Msp430)
-        ));
-        assert!(no_customization(config::Flasher::BeagleConnectFreedom, &img).is_none());
     }
 
     #[test]
@@ -1121,14 +1041,6 @@ mod tests {
         assert!(matches!(
             FlashingCustomization::new(config::Flasher::SdCard, &img, &cfg),
             FlashingCustomization::NoneSd
-        ));
-        assert!(matches!(
-            FlashingCustomization::new(config::Flasher::BeagleConnectFreedom, &img, &cfg),
-            FlashingCustomization::Bcf(_)
-        ));
-        assert!(matches!(
-            FlashingCustomization::new(config::Flasher::Msp430Usb, &img, &cfg),
-            FlashingCustomization::Msp430
         ));
     }
 
@@ -1145,13 +1057,6 @@ mod tests {
 
     #[test]
     fn flashing_customization_reset_restores_defaults() {
-        let mut bcf = FlashingCustomization::Bcf(BcfCustomization { verify: false });
-        bcf.reset();
-        assert!(matches!(
-            bcf,
-            FlashingCustomization::Bcf(BcfCustomization { verify: true })
-        ));
-
         let mut sysconf = FlashingCustomization::LinuxSdSysconfig(
             SdSysconfCustomization::default().update_hostname(Some("h".into())),
         );
@@ -1190,11 +1095,8 @@ mod tests {
         let file = tempfile::NamedTempFile::new().unwrap();
         std::fs::write(file.path(), b"0123456789").unwrap();
 
-        let img = BoardImage::local(
-            file.path().to_path_buf(),
-            config::Flasher::BeagleConnectFreedom,
-        );
-        assert_eq!(img.flasher(), config::Flasher::BeagleConnectFreedom);
+        let img = BoardImage::local(file.path().to_path_buf(), config::Flasher::SdCard);
+        assert_eq!(img.flasher(), config::Flasher::SdCard);
         assert_eq!(img.init_format(), config::InitFormat::None);
         assert!(matches!(img.icon(), BoardImageIcon::Local));
         assert!(img.description().is_none());

@@ -108,25 +108,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ansic"
-version = "0.1.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8b0067e2aa0c3500c29f3509a17150259bd92f1caeb4529f12254500b10d2e79"
-dependencies = [
- "ansic-macros",
-]
-
-[[package]]
-name = "ansic-macros"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1dc11e49578ae4bf0df28f17516c0e9d006a04cefcedcb006b81134552e2cc8d"
-dependencies = [
- "proc-macro2",
- "syn 2.0.118",
-]
-
-[[package]]
 name = "anstream"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -543,7 +524,6 @@ name = "bb-flasher"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "bb-flasher-bcf",
  "bb-flasher-dfu",
  "bb-flasher-sd",
  "bb-helper",
@@ -559,19 +539,6 @@ dependencies = [
  "tracing",
  "yaml_serde",
  "zip",
-]
-
-[[package]]
-name = "bb-flasher-bcf"
-version = "1.0.2"
-dependencies = [
- "bb-helper",
- "bin_file",
- "crc-fast",
- "hidapi",
- "serialport",
- "thiserror 2.0.18",
- "tracing",
 ]
 
 [[package]]
@@ -597,7 +564,7 @@ dependencies = [
  "gpt",
  "libc",
  "mbrman",
- "nix 0.31.3",
+ "nix",
  "security-framework",
  "tempfile",
  "thiserror 2.0.18",
@@ -676,18 +643,6 @@ dependencies = [
  "url",
  "webbrowser",
  "whoami",
-]
-
-[[package]]
-name = "bin_file"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "58fe20510982b248ad990117bd2ffe00d996114cac683222bbf290ee7a71191d"
-dependencies = [
- "ansic",
- "bytesize",
- "elf",
- "regex",
 ]
 
 [[package]]
@@ -880,12 +835,6 @@ checksum = "8ae3f5d315924270530207e2a68396c3cc547f6dca3fbdca317cfb1a51edb593"
 dependencies = [
  "serde",
 ]
-
-[[package]]
-name = "bytesize"
-version = "2.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3d7c8918969267b2932ffd5655509bbbea0833823058c378876953217f5fc50e"
 
 [[package]]
 name = "calloop"
@@ -1322,16 +1271,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "217698eaf96b4a3f0bc4f3662aaa55bdf913cd54d7204591faa790070c6d0853"
 
 [[package]]
-name = "crc-fast"
-version = "1.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e75b2483e97a5a7da73ac68a05b629f9c53cff58d8ed1c77866079e18b00dba5"
-dependencies = [
- "digest",
- "spin",
-]
-
-[[package]]
 name = "crc32fast"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1630,12 +1569,6 @@ name = "either"
 version = "1.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "91622ff5e7162018101f2fea40d6ebf4a78bbe5a49736a2020649edf9693679e"
-
-[[package]]
-name = "elf"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "55dd888a213fc57e957abf2aa305ee3e8a28dbe05687a251f33b637cd46b0070"
 
 [[package]]
 name = "embed-resource"
@@ -2456,19 +2389,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dfa686283ad6dd069f105e5ab091b04c62850d3e4cf5d67debad1933f55023df"
 
 [[package]]
-name = "hidapi"
-version = "2.6.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c78dadfc12f865bc3fcac3897e64533b930737ceb9ef245c8277de98d0b010e9"
-dependencies = [
- "cc",
- "cfg-if",
- "libc",
- "pkg-config",
- "windows-sys 0.61.2",
-]
-
-[[package]]
 name = "http"
 version = "1.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3110,16 +3030,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "io-kit-sys"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "617ee6cf8e3f66f3b4ea67a4058564628cde41901316e19f559e14c7c72c5e7b"
-dependencies = [
- "core-foundation-sys",
- "mach2",
-]
-
-[[package]]
 name = "ipnet"
 version = "2.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3533,15 +3443,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "mach2"
-version = "0.4.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d640282b302c0bb0a2a8e0233ead9035e3bed871f0b7e81fe4a1ec829765db44"
-dependencies = [
- "libc",
-]
-
-[[package]]
 name = "malloc_buf"
 version = "0.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3776,17 +3677,6 @@ name = "new_debug_unreachable"
 version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "650eef8c711430f1a879fdd01d4745a7deea475becfb90269c06775983bbf086"
-
-[[package]]
-name = "nix"
-version = "0.26.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "598beaf3cc6fdd9a5dfb1630c2800c7acd31df7aaf0f565796fba2b53ca1af1b"
-dependencies = [
- "bitflags 1.3.2",
- "cfg-if",
- "libc",
-]
 
 [[package]]
 name = "nix"
@@ -5737,24 +5627,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "serialport"
-version = "4.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a4d91116f97173694f1642263b2ff837f80d933aa837e2314969f6728f661df3"
-dependencies = [
- "bitflags 2.13.0",
- "cfg-if",
- "core-foundation 0.10.1",
- "core-foundation-sys",
- "io-kit-sys",
- "mach2",
- "nix 0.26.4",
- "scopeguard",
- "unescaper",
- "windows-sys 0.52.0",
-]
-
-[[package]]
 name = "sha1"
 version = "0.10.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6022,12 +5894,6 @@ dependencies = [
  "windows-sys 0.61.2",
  "x11rb",
 ]
-
-[[package]]
-name = "spin"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d5fe4ccb98d9c292d56fec89a5e07da7fc4cf0dc11e156b41793132775d3e591"
 
 [[package]]
 name = "spirv"
@@ -6694,15 +6560,6 @@ name = "unarray"
 version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "eaea85b334db583fe3274d12b4cd1880032beab409c0d774be044d4480ab9a94"
-
-[[package]]
-name = "unescaper"
-version = "0.1.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7285e83a80ce76f5e7bce79fa41f68d78ba62d1003cf27bf748ab24413808cf4"
-dependencies = [
- "thiserror 2.0.18",
-]
 
 [[package]]
 name = "unicode-bidi"

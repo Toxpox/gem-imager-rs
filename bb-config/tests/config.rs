@@ -153,8 +153,6 @@ fn flasher_serde_strings() {
     let cases = [
         (Flasher::SdCard, "\"SdCard\""),
         (Flasher::SdCardBootfs, "\"SdCardBootfs\""),
-        (Flasher::BeagleConnectFreedom, "\"BeagleConnectFreedom\""),
-        (Flasher::Msp430Usb, "\"Msp430Usb\""),
     ];
     for (variant, expected) in cases {
         assert_eq!(serde_json::to_string(&variant).unwrap(), expected);
@@ -167,12 +165,7 @@ fn flasher_sqlite_round_trip() {
     let conn = rusqlite::Connection::open_in_memory().unwrap();
     conn.execute("CREATE TABLE t (id INTEGER, f)", []).unwrap();
 
-    let variants = [
-        Flasher::SdCard,
-        Flasher::SdCardBootfs,
-        Flasher::BeagleConnectFreedom,
-        Flasher::Msp430Usb,
-    ];
+    let variants = [Flasher::SdCard, Flasher::SdCardBootfs];
     for (i, variant) in variants.iter().enumerate() {
         conn.execute(
             "INSERT INTO t (id, f) VALUES (?1, ?2)",

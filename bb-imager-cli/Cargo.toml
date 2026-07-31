@@ -30,14 +30,8 @@ tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 tracing = "0.1.44"
 
 [features]
-default = ["static-hidraw"]
-bcf_cc1352p7 = ["bb-flasher/bcf"]
-bcf_msp430 = ["bb-flasher/bcf_msp430"]
+default = []
 dfu = ["bb-flasher/dfu"]
-# Normally, I would enable shared for CLI on Linux by default, but most distros have out of date
-# version of dependency.
-static-hidraw = ["bb-flasher/static_hidraw"]
-shared-hidraw = ["bb-flasher/shared_hidraw"]
 
 [package.metadata.packager]
 category = "DeveloperTool"

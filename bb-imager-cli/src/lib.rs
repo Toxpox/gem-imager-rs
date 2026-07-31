@@ -211,23 +211,6 @@ fn flash_internal(
                 .flash()
             })
         }
-        #[cfg(feature = "bcf_cc1352p7")]
-        TargetCommands::Bcf {
-            img,
-            dst,
-            no_verify,
-        } => bb_flasher::bcf::cc1352p7::Flasher::new(
-            LocalImage::new(img).into_image_fn(),
-            dst.into(),
-            !no_verify,
-            None,
-        )
-        .flash(chan),
-        #[cfg(feature = "bcf_msp430")]
-        TargetCommands::Msp430 { img, dst } => {
-            bb_flasher::bcf::msp430::Flasher::new(LocalImage::new(img).into_image_fn(), dst.into())
-                .flash(chan)
-        }
         #[cfg(feature = "dfu")]
         TargetCommands::Dfu { identifier, imgs } => {
             if imgs.len() % 2 == 1 {
@@ -324,14 +307,6 @@ fn list_destinations(target: DestinationsTarget, no_frills: bool, no_filter: boo
             #[cfg(feature = "dfu")]
             DestinationsTarget::Dfu => {
                 no_frills_list_destinations::<bb_flasher::dfu::Target>(no_filter)
-            }
-            #[cfg(feature = "bcf_cc1352p7")]
-            DestinationsTarget::Bcf => {
-                no_frills_list_destinations::<bb_flasher::bcf::cc1352p7::Target>(no_filter)
-            }
-            #[cfg(feature = "bcf_msp430")]
-            DestinationsTarget::Msp430 => {
-                no_frills_list_destinations::<bb_flasher::bcf::msp430::Target>(no_filter)
             }
         }
         return;
@@ -486,14 +461,6 @@ fn list_destinations(target: DestinationsTarget, no_frills: bool, no_filter: boo
             }
 
             term.write_line(&table_border).unwrap();
-        }
-        #[cfg(feature = "bcf_msp430")]
-        DestinationsTarget::Msp430 => {
-            no_frills_list_destinations::<bb_flasher::bcf::msp430::Target>(no_filter)
-        }
-        #[cfg(feature = "bcf_cc1352p7")]
-        DestinationsTarget::Bcf => {
-            no_frills_list_destinations::<bb_flasher::bcf::cc1352p7::Target>(no_filter)
         }
     }
 }

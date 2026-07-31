@@ -5,7 +5,6 @@ members = [
 	"bb-flasher",
 	"bb-imager-cli",
 	"bb-imager-gui",
-	"bb-flasher-bcf",
 	"bb-flasher-sd",
 	"bb-downloader",
 	"bb-config",
