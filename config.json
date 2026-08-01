@@ -2,27 +2,9 @@
 	"imager": {
 		"latest_version": "2.0.0",
 		"remote_configs": [
-			"https://raw.githubusercontent.com/beagleboard/distros/refs/heads/main/os_list.json"
+			"https://packages.t3gemstone.org/images/list.json"
 		],
-		"devices": [
-			{
-				"name": "BeagleY-AI",
-				"tags": [
-					"beagle-am67"
-				],
-				"description": "BeagleY-AI based on TI AM67A",
-				"icon": "https://media.githubusercontent.com/media/beagleboard/bb-imager-rs/refs/heads/main/assets/boards/beagley.png",
-				"flasher": "SdCard",
-				"documentation": "https://docs.beagleboard.org/boards/beagley/ai/index.html#beagley-ai-home",
-				"oshw": "us002616",
-				"specification": {
-					"Processor": "Texas Instruments AM67A",
-					"Cores": "4 x 1.4GHz ARM® Cortex-A53 (64-bit), 2 x ARM® Cortex-R5F",
-					"GPU": "IMG BXS-4-64",
-					"RAM": "4GB LPDDR4"
-				}
-			}
-		]
+		"devices": []
 	},
 	"os_list": []
 }

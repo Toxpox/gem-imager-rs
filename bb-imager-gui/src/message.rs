@@ -193,7 +193,11 @@ pub(crate) fn update(state: &mut BBImager, message: BBImagerMessage) -> Task<BBI
                 OverlayData::ChooseOs(inner) => {
                     inner.selected_image = Some((
                         helpers::OsImageId::OsImage(image.id),
-                        helpers::BoardImage::remote(image, flasher, inner.common.downloader.clone()),
+                        helpers::BoardImage::remote(
+                            image,
+                            flasher,
+                            inner.common.downloader.clone(),
+                        ),
                     ));
                 }
                 _ => panic!("Unexpected message"),
@@ -504,7 +508,7 @@ pub(crate) fn update(state: &mut BBImager, message: BBImagerMessage) -> Task<BBI
                             let dc = dc.clone();
                             Task::perform(
                                 async move {
-                                    let res = dc.clone().download_json_no_cache(u).await?;
+                                    let res = helpers::fetch_remote_config(&dc, u).await?;
                                     Ok((i, res))
                                 },
                                 |x: std::io::Result<(i64, bb_config::config::Config)>| match x {

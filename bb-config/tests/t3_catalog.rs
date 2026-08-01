@@ -366,3 +366,89 @@ fn provenance_records_where_the_catalog_came_from() {
         Some("1.1.1")
     );
 }
+
+/// End-to-end proof against the captured live catalog: the two product boards, and only those,
+/// reach the model the front-end screens actually render.
+///
+/// This is the test that would have caught the fork's headline defect. The adapter and the
+/// canonical model were correct all along; nothing translated them into the front-end model, so
+/// the board list was empty no matter what the catalog said.
+#[test]
+fn the_live_catalog_reaches_the_front_end_model_with_both_product_boards() {
+    let parsed = parse(LIVE_CATALOG, ProductScope::T3AndBeagleY);
+    let config = bb_config::t3::catalog_to_config(&parsed.catalog);
+
+    let mut boards: Vec<&str> = config
+        .imager
+        .devices
+        .iter()
+        .map(|d| d.name.as_str())
+        .collect();
+    boards.sort_unstable();
+
+    assert_eq!(
+        boards,
+        ["BeagleY-AI", "T3-GEM-O1"],
+        "the product surface is exactly these two boards"
+    );
+
+    // The catalog also publishes a tagless "No filtering" pseudo-device. It must not become a
+    // selectable board.
+    assert!(
+        config.imager.devices.iter().all(|d| !d.tags.is_empty()),
+        "a tagless pseudo-device must never reach the board list"
+    );
+
+    assert!(
+        !config.os_list.is_empty(),
+        "an empty image list is never a success"
+    );
+
+    // Every emitted image belongs to one of the two boards.
+    let board_tags: std::collections::HashSet<&str> = config
+        .imager
+        .devices
+        .iter()
+        .flat_map(|d| d.tags.iter().map(String::as_str))
+        .collect();
+    for item in &config.os_list {
+        let bb_config::config::OsListItem::Image(img) = item else {
+            panic!("the bridge only emits plain images");
+        };
+        assert!(
+            img.devices.iter().any(|d| board_tags.contains(d.as_str())),
+            "image \"{}\" targets no board in the product surface",
+            img.name
+        );
+        // Faz 3/4 verify against these; an image that arrives without them flashes unverified.
+        assert!(
+            img.extract_sha256.is_some(),
+            "{} lost its extracted digest",
+            img.name
+        );
+        assert!(img.extract_size > 0, "{} lost its extracted size", img.name);
+    }
+}
+
+/// The T3 board must carry at least one image of its own, otherwise selecting it is a dead end.
+#[test]
+fn the_t3_board_has_images_in_the_front_end_model() {
+    let parsed = parse(LIVE_CATALOG, ProductScope::T3AndBeagleY);
+    let config = bb_config::t3::catalog_to_config(&parsed.catalog);
+
+    let t3_images: Vec<&str> = config
+        .os_list
+        .iter()
+        .filter_map(|item| match item {
+            bb_config::config::OsListItem::Image(img) if img.devices.contains(T3_BOARD_TAG) => {
+                Some(img.name.as_str())
+            }
+            _ => None,
+        })
+        .collect();
+
+    assert!(
+        !t3_images.is_empty(),
+        "T3-GEM-O1 must have at least one selectable image"
+    );
+}

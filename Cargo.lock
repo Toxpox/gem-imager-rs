@@ -476,6 +476,7 @@ dependencies = [
  "serde_json",
  "serde_with",
  "tempfile",
+ "tracing",
  "url",
 ]
 

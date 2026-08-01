@@ -832,6 +832,68 @@ pub(crate) fn fetch_images(
     iced::Task::batch(tasks)
 }
 
+/// Whether a remote config URL is the T3 image catalog.
+///
+/// Matched on host rather than on the exact URL so a mirror or a path change still takes the
+/// strict adapter instead of silently falling back to the BeagleBoard parser.
+fn is_t3_catalog(url: &Url) -> bool {
+    bb_config::t3::T3_CATALOG_URL
+        .parse::<Url>()
+        .ok()
+        .and_then(|canonical| Some((canonical.host_str()?.to_owned(), url.host_str()?)))
+        .is_some_and(|(canonical_host, host)| canonical_host == host)
+}
+
+/// Fetch a remote config, routing the T3 catalog through its strict adapter.
+///
+/// The T3 document must never be parsed as a [`bb_config::config::Config`]. It has no `flasher`
+/// field on devices and declares `init_format: "systemd"` on images, and both structs are parsed
+/// with `VecSkipError` — so the legacy path does not fail, it yields an **empty board and image
+/// list**. That is why the board never appeared. Anything that is not the T3 catalog keeps the
+/// original path.
+pub(crate) async fn fetch_remote_config(
+    downloader: &bb_downloader::Downloader,
+    url: Url,
+) -> std::io::Result<bb_config::config::Config> {
+    if !is_t3_catalog(&url) {
+        return Ok(downloader.download_json_no_cache(url).await?);
+    }
+
+    let raw: bb_config::t3::RawT3Catalog = downloader.download_json_no_cache(url.clone()).await?;
+
+    // Product scope: T3-GEM-O1 and BeagleY-AI, and nothing else. The catalog also publishes a
+    // tagless "No filtering" pseudo-device, which carries neither board tag and is therefore out
+    // of scope by construction rather than by a name check.
+    let parsed = bb_config::t3::validate_catalog(
+        raw,
+        bb_config::t3::ProductScope::T3AndBeagleY,
+        url.as_str(),
+    )
+    .map_err(|e| std::io::Error::other(format!("T3 catalog rejected: {e}")))?;
+
+    // Every dropped or downgraded entry carries a JSON path. Surfacing them is what keeps a
+    // shrinking catalog visible instead of looking like a normal, smaller list.
+    for diagnostic in &parsed.diagnostics {
+        tracing::warn!("T3 catalog: {diagnostic}");
+    }
+    if parsed.rejected_boards > 0 || parsed.rejected_images > 0 {
+        tracing::warn!(
+            "T3 catalog: dropped {} board(s) and {} image(s)",
+            parsed.rejected_boards,
+            parsed.rejected_images
+        );
+    }
+
+    let config = bb_config::t3::catalog_to_config(&parsed.catalog);
+    tracing::info!(
+        "T3 catalog: {} board(s) and {} image(s) in scope",
+        config.imager.devices.len(),
+        config.os_list.len()
+    );
+
+    Ok(config)
+}
+
 pub(crate) fn fetch_remote_subitems(
     items: impl IntoIterator<Item = (i64, Url)>,
     downloader: bb_downloader::Downloader,
