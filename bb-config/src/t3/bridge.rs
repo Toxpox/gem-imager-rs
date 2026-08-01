@@ -19,10 +19,6 @@
 //!
 //! # What is deliberately not translated
 //!
-//! * **Customization.** A T3 image's `systemd` consumer is the GemInit `config.ini` writer, which
-//!   is not [`crate::config::InitFormat::Sysconf`] — that is BeagleBoard's `sysconf.txt`. Mapping
-//!   one onto the other would make the GUI write a file the board does not read, so every bridged
-//!   image reports [`crate::config::InitFormat::None`] until the T3 serializer exists.
 //! * **eMMC/DFU capability.** [`crate::config::Flasher`] can only express `SdCard`. Boards keep
 //!   their DFU profile in the canonical model; the bridged view is SD-only on purpose, which
 //!   matches the SD-only milestone.
@@ -76,6 +72,24 @@ fn board_to_device(board: &Board) -> Device {
     }
 }
 
+/// Which customization screen the front-end offers for an image.
+///
+/// The T3 catalog's `init_format: "systemd"` names the consumer, not a file format: it is the
+/// GemInit `config.ini` writer. That is deliberately **not** mapped onto
+/// [`crate::config::InitFormat::Sysconf`], which is BeagleBoard's `sysconf.txt` and has a different
+/// key set — writing one where the other is expected produces a board that ignores the file.
+///
+/// An image with no recognised consumer reports [`crate::config::InitFormat::None`], which offers
+/// no customization at all. That is the safe direction: nothing is written rather than something
+/// the board cannot read.
+fn init_format(image: &Image) -> InitFormat {
+    match &image.customization {
+        Some(profile) if profile.desktop_variant => InitFormat::GemInitDesktop,
+        Some(_) => InitFormat::GemInit,
+        None => InitFormat::None,
+    }
+}
+
 /// Translate one image, resolving the icon the front-end requires.
 ///
 /// [`OsImage::icon`] is mandatory while the canonical model allows it to be absent. Rather than
@@ -111,8 +125,7 @@ fn image_to_item(image: &Image, boards: &[&Board]) -> Option<OsListItem> {
         release_date: image.release_date,
         devices: image.devices.iter().cloned().collect::<HashSet<_>>(),
         tags: HashSet::new(),
-        // See the module docs: not Sysconf, and not silently mapped onto it.
-        init_format: InitFormat::None,
+        init_format: init_format(image),
         info_text: None,
         support: None,
     }))
@@ -276,16 +289,46 @@ mod tests {
         assert_eq!(img.image_download_size, Some(807607316));
     }
 
-    /// `systemd` is the GemInit consumer, not BeagleBoard's `sysconf.txt`. Until the T3 serializer
-    /// exists, offering customization here would write a file the board never reads.
+    /// `systemd` is the GemInit consumer, not BeagleBoard's `sysconf.txt`. Mapping it onto the
+    /// BeagleBoard formats would make the GUI write a file the board never reads.
     #[test]
-    fn customization_is_not_mapped_onto_the_beagleboard_format() {
+    fn customization_is_not_mapped_onto_the_beagleboard_formats() {
         let config = bridged(ProductScope::T3Only);
-        let OsListItem::Image(img) = &config.os_list[0] else {
-            panic!("expected a plain image");
-        };
 
-        assert_eq!(img.init_format, InitFormat::None);
+        for item in &config.os_list {
+            let OsListItem::Image(img) = item else {
+                panic!("expected a plain image");
+            };
+
+            assert!(
+                img.init_format.is_gem_init(),
+                "{} should use the T3 writer, got {:?}",
+                img.name,
+                img.init_format
+            );
+            assert_ne!(img.init_format, InitFormat::Sysconf);
+            assert_ne!(img.init_format, InitFormat::CloudInit);
+        }
+    }
+
+    /// VNC is only offered on desktop images (`instruction.md` §10.1), and desktop-ness comes from
+    /// the canonical model rather than being re-derived here.
+    #[test]
+    fn only_desktop_images_offer_vnc() {
+        let config = bridged(ProductScope::T3Only);
+
+        for item in &config.os_list {
+            let OsListItem::Image(img) = item else {
+                panic!("expected a plain image");
+            };
+
+            assert_eq!(
+                img.init_format.supports_vnc(),
+                img.name.to_lowercase().contains("desktop"),
+                "VNC availability does not match the image variant for {}",
+                img.name
+            );
+        }
     }
 
     /// A bridged document must not send the front-end back out for another config.

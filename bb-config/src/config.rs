@@ -77,6 +77,30 @@ pub enum InitFormat {
     Armbian,
     /// Cloud Init based customization
     CloudInit,
+    /// T3 GemStone `config.ini`, consumed by `gem-first-boot`.
+    ///
+    /// Distinct from [`InitFormat::Sysconf`] on purpose: that is BeagleBoard's `sysconf.txt`, read
+    /// by a different consumer with a different key set. Mapping one onto the other would make the
+    /// application write a file the board never reads.
+    GemInit,
+    /// T3 GemStone `config.ini` on a desktop image, which additionally offers the VNC fields.
+    ///
+    /// This is a separate variant rather than a flag because the front-end selects its
+    /// customization screen from this value, and the desktop screen offers a different field set
+    /// (`instruction.md` §10.1).
+    GemInitDesktop,
+}
+
+impl InitFormat {
+    /// Whether this image is customized through the T3 `config.ini` writer.
+    pub const fn is_gem_init(self) -> bool {
+        matches!(self, Self::GemInit | Self::GemInitDesktop)
+    }
+
+    /// Whether the VNC fields may be offered for this image.
+    pub const fn supports_vnc(self) -> bool {
+        matches!(self, Self::GemInitDesktop)
+    }
 }
 
 impl rusqlite::ToSql for InitFormat {
@@ -86,6 +110,8 @@ impl rusqlite::ToSql for InitFormat {
             InitFormat::Sysconf => 2,
             InitFormat::Armbian => 3,
             InitFormat::CloudInit => 4,
+            InitFormat::GemInit => 5,
+            InitFormat::GemInitDesktop => 6,
         };
         Ok(rusqlite::types::ToSqlOutput::from(val))
     }
@@ -98,6 +124,8 @@ impl rusqlite::types::FromSql for InitFormat {
             2 => Ok(InitFormat::Sysconf),
             3 => Ok(InitFormat::Armbian),
             4 => Ok(InitFormat::CloudInit),
+            5 => Ok(InitFormat::GemInit),
+            6 => Ok(InitFormat::GemInitDesktop),
             _ => Err(rusqlite::types::FromSqlError::Other(
                 format!("Invalid InitFormat integer variant: {}", val).into(),
             )),
@@ -112,6 +140,8 @@ impl std::fmt::Display for InitFormat {
             InitFormat::Sysconf => f.write_str("sysconfig"),
             InitFormat::Armbian => f.write_str("armbian"),
             InitFormat::CloudInit => f.write_str("cloudinit"),
+            InitFormat::GemInit => f.write_str("geminit"),
+            InitFormat::GemInitDesktop => f.write_str("geminit-desktop"),
         }
     }
 }

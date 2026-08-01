@@ -419,7 +419,7 @@ pub(crate) async fn flash(
                 bb_flasher::sd::Flasher::with_file_dest(
                     img.into_image_fn(),
                     f,
-                    customization.sd_customization(),
+                    customization.sd_customization()?,
                 )
                 .flash(Some(chan), Some(cancel_sync))
             })
@@ -434,7 +434,7 @@ pub(crate) async fn flash(
                 bb_flasher::sd::Flasher::new(
                     img.into_image_fn(),
                     t,
-                    customization.sd_customization(),
+                    customization.sd_customization()?,
                 )
                 .flash(Some(chan), Some(cancel_sync))
             })
@@ -527,6 +527,12 @@ pub(crate) enum FlashingCustomization {
     NoneSd,
     LinuxSdSysconfig(crate::persistance::SdSysconfCustomization),
     LinuxSdCloudInit(crate::persistance::SdSysconfCustomization),
+    /// T3 GemStone `config.ini`. The flag carries whether the selected image is a desktop variant,
+    /// which is what decides whether the VNC fields exist at all.
+    T3GemInit {
+        config: crate::persistance::T3GemInitCustomization,
+        desktop: bool,
+    },
 }
 
 impl FlashingCustomization {
@@ -554,6 +560,16 @@ impl FlashingCustomization {
                         .unwrap_or_default(),
                 )
             }
+            flasher if img.init_format().is_gem_init() && flasher == config::Flasher::SdCard => {
+                Self::T3GemInit {
+                    config: app_config
+                        .sd_customization
+                        .as_ref()
+                        .and_then(|x| x.t3_customization().cloned())
+                        .unwrap_or_default(),
+                    desktop: img.init_format().supports_vnc(),
+                }
+            }
             config::Flasher::SdCard => Self::NoneSd,
             #[allow(unreachable_patterns)]
             _ => unimplemented!(),
@@ -561,8 +577,17 @@ impl FlashingCustomization {
     }
 
     pub(crate) fn reset(&mut self) {
-        if matches!(self, Self::LinuxSdSysconfig(_)) {
-            *self = Self::LinuxSdSysconfig(Default::default());
+        match self {
+            Self::LinuxSdSysconfig(_) => *self = Self::LinuxSdSysconfig(Default::default()),
+            // Resetting must clear the secrets too, so the whole buffer is replaced rather than
+            // having its non-secret fields cleared one by one.
+            Self::T3GemInit { desktop, .. } => {
+                *self = Self::T3GemInit {
+                    config: Default::default(),
+                    desktop: *desktop,
+                }
+            }
+            _ => {}
         }
     }
 
@@ -571,17 +596,41 @@ impl FlashingCustomization {
             FlashingCustomization::LinuxSdSysconfig(sd_customization) => {
                 sd_customization.validate_user()
             }
+            // The T3 screen is valid exactly when the file it describes can be produced, so this
+            // asks the serializer instead of duplicating its rules.
+            FlashingCustomization::T3GemInit { config, desktop } => config.build(*desktop).is_ok(),
             _ => true,
         }
     }
 
-    #[cfg(feature = "sd")]
-    fn sd_customization(self) -> bb_flasher::sd::FlashingSdLinuxConfig {
+    /// The first problem with the current T3 form, for display next to the disabled NEXT button.
+    ///
+    /// Returns `None` when the form is valid or is not a T3 form.
+    pub(crate) fn validation_error(&self) -> Option<String> {
         match self {
+            FlashingCustomization::T3GemInit { config, desktop } => {
+                config.build(*desktop).err().map(|e| e.to_string())
+            }
+            _ => None,
+        }
+    }
+
+    /// Build the customization the flasher will apply.
+    ///
+    /// This returns a `Result` rather than falling back to "no customization": a card flashed
+    /// without the first-boot file the user configured is a wrong result, not a degraded one, and
+    /// it would only be discovered after boot.
+    #[cfg(feature = "sd")]
+    fn sd_customization(self) -> anyhow::Result<bb_flasher::sd::FlashingSdLinuxConfig> {
+        Ok(match self {
             FlashingCustomization::LinuxSdSysconfig(c) => c.sysconfig(),
             FlashingCustomization::LinuxSdCloudInit(c) => c.cloudinit(),
             FlashingCustomization::NoneSd => bb_flasher::sd::FlashingSdLinuxConfig::none(),
-        }
+            FlashingCustomization::T3GemInit { config, desktop } => {
+                let config = config.build(desktop)?;
+                bb_flasher::sd::FlashingSdLinuxConfig::t3_gem_init(&config)?
+            }
+        })
     }
 }
 
@@ -668,7 +717,8 @@ pub(crate) fn no_customization(
     match flasher {
         config::Flasher::SdCard
             if img.init_format() == config::InitFormat::Sysconf
-                || img.init_format() == config::InitFormat::CloudInit =>
+                || img.init_format() == config::InitFormat::CloudInit
+                || img.init_format().is_gem_init() =>
         {
             None
         }
@@ -1097,8 +1147,17 @@ mod tests {
         let details = img.details();
         assert!(details.iter().any(|(k, _)| *k == "Path"));
         assert!(details.iter().any(|(k, v)| *k == "Size" && v == "10"));
-        // Local (non-SD) images offer no init-format customization.
-        assert!(img.supported_init_formats().is_empty());
+        // A local file carries no catalog metadata, so the format cannot be derived from it. For an
+        // SD target the user picks one instead (see `board_image_update_init_format_on_image`),
+        // which is why both BeagleBoard formats are offered rather than none.
+        //
+        // The T3 GemInit formats are deliberately absent: writing `config.ini` onto an arbitrary
+        // local image would be guessing that the image is a T3 one, and a first-boot file the image
+        // does not consume is the failure this whole phase exists to avoid.
+        assert_eq!(
+            img.supported_init_formats(),
+            &[config::InitFormat::Sysconf, config::InitFormat::CloudInit]
+        );
     }
 
     #[test]

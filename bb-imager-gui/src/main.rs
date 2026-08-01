@@ -477,6 +477,21 @@ impl BBImager {
 
                     Task::batch([inner.save_app_config(), self.scroll_reset()])
                 }
+                // Saved for convenience on the next run. The secret fields are `#[serde(skip)]`,
+                // so what lands on disk is the host name, network name, country, time zone and
+                // keymap — never a password (`instruction.md` §10.3).
+                helpers::FlashingCustomization::T3GemInit { config, .. } => {
+                    let mut temp = inner
+                        .common
+                        .app_config
+                        .sd_customization
+                        .clone()
+                        .unwrap_or_default();
+                    temp.update_t3(config.clone());
+                    inner.common.app_config.update_sd_customization(temp);
+
+                    Task::batch([inner.save_app_config(), self.scroll_reset()])
+                }
                 _ => self.scroll_reset(),
             },
             _ => self.scroll_reset(),
