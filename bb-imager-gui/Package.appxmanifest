@@ -12,13 +12,13 @@
   IgnorableNamespaces="uap uap2 uap3 uap10 desktop desktop6 rescap">
 
   <Identity
-    Name="BeagleBoard.org.BBImager"
-    Publisher="CN=BeagleBoard.org"
+    Name="T3Gemstone.Imager"
+    Publisher="CN=T3Gemstone"
     Version="1.0.13.0" />
 
   <Properties>
-    <DisplayName>BeagleBoard Imager</DisplayName>
-    <PublisherDisplayName>BeagleBoard.org</PublisherDisplayName>
+    <DisplayName>T3 Gemstone Imager</DisplayName>
+    <PublisherDisplayName>T3 Gemstone</PublisherDisplayName>
     <Logo>assets\icons\icon.scale-50.png</Logo>
   </Properties>
 
@@ -31,12 +31,12 @@
   </Resources>
 
   <Applications>
-    <Application Id="BBImagerGui"
+    <Application Id="T3GemstoneImagerGui"
       Executable="$targetnametoken$.exe"
       EntryPoint="Windows.FullTrustApplication">
       <uap:VisualElements
-        DisplayName="BeagleBoard Imager"
-        Description="The easiest way to install the latest operating system images for your Beagle."
+        DisplayName="T3 Gemstone Imager"
+        Description="The easiest way to install the latest operating system images for your T3 Gemstone board."
         BackgroundColor="transparent"
         Square150x150Logo="assets\packages\windows\MedTile.png"
         Square44x44Logo="assets\packages\windows\AppList.png">

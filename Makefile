@@ -26,7 +26,7 @@ _GUI_BIN = target/${TARGET}/release/bb-imager-gui
 _GUI_PORTABLE_EXE = bb-imager-gui/dist/bb-imager-gui_$(VERSION)_$(word 1,$(subst -, ,$(TARGET))).exe
 
 ## variable: GUI_NAME: Change name for GUI related files.
-GUI_NAME ?= BeagleBoardImager
+GUI_NAME ?= org.t3gemstone.imager
 ## variable: CARGO_PATH: Path to cargo binary
 CARGO_PATH ?= $(shell which cargo)
 ## variable: RUST_BUILDER: The Rust builder to use. Possble choices - cargo (default), cross.
@@ -112,7 +112,7 @@ ifeq ($(NOTIFY_RUST),1)
 endif
 
 ifneq ($(APPIMAGE_RELEASE_TAG),)
-	_APPIMAGETOOL_ARGS += -u "gh-releases-zsync|beagleboard|bb-imager-rs|${APPIMAGE_RELEASE_TAG}|BeagleBoard_Imager-*-${APPIMAGE_ARCH}.AppImage.zsync"
+	_APPIMAGETOOL_ARGS += -u "gh-releases-zsync|t3gemstone|imager|${APPIMAGE_RELEASE_TAG}|T3Gemstone_Imager-*-${APPIMAGE_ARCH}.AppImage.zsync"
 endif
 
 ## build: build: Build both CLI and GUI
@@ -244,8 +244,8 @@ endif
 	sed -i "s/^version: .*/version: ${VERSION}/" docs/antora.yml
 	sed -i '/<releases>/a \
 \t\t<release version="$(VERSION)" date="$(_DATE)">\
-\t\t\t<url>https://github.com/beagleboard/bb-imager-rs/releases/tag/$(VERSION)</url>\
-\t\t</release>' bb-imager-gui/assets/packages/linux/flatpak/org.beagleboard.imagingutility.metainfo.xml
+\t\t\t<url>https://github.com/t3gemstone/imager/releases/tag/$(VERSION)</url>\
+\t\t</release>' bb-imager-gui/assets/packages/linux/flatpak/org.t3gemstone.imager.metainfo.xml
 	sed -i -E "s/^[[:space:]]*Version=\"[^\"]+\"/    Version=\"${VERSION}.0\"/" bb-imager-gui/Package.appxmanifest
 	sed -i -E "s/(<assemblyIdentity[[:space:]]+version=\")[^\"]*(\")/\1${VERSION}.0\2/" bb-imager-gui/assets/packages/windows/gui.exe.manifest
 	cargo build
@@ -255,7 +255,7 @@ endif
         	read -r -p "Create git commit and tag [y/N]: " CONTINUE; \
 	done ; \
 	[ $$CONTINUE = "y" ] || [ $$CONTINUE = "Y" ] || (echo "Aborting."; exit 1;)
-	git add Cargo.toml Cargo.lock bb-imager-gui/assets/packages/linux/flatpak/org.beagleboard.imagingutility.metainfo.xml docs/antora.yml \
+	git add Cargo.toml Cargo.lock bb-imager-gui/assets/packages/linux/flatpak/org.t3gemstone.imager.metainfo.xml docs/antora.yml \
 		snapcraft.*.yaml bb-imager-gui/Package.appxmanifest bb-imager-gui/assets/packages/windows/gui.exe.manifest
 	git commit -s -m "Bump version to ${VERSION}"
 	git tag ${VERSION}
@@ -280,13 +280,13 @@ package-gui-pacman: build-gui
 
 package-gui-appimage: build-gui
 	mkdir -p bb-imager-gui/dist
-	$(MAKE) _install_gui PREFIX=/usr DESTDIR=bb-imager-gui/dist/org.beagleboard.imagingutility.AppDir GUI_NAME=org.beagleboard.imagingutility
-	ln -srf bb-imager-gui/dist/org.beagleboard.imagingutility.AppDir/usr/bin/bb-imager-gui bb-imager-gui/dist/org.beagleboard.imagingutility.AppDir/AppRun
-	ln -srf bb-imager-gui/dist/org.beagleboard.imagingutility.AppDir/usr/share/applications/org.beagleboard.imagingutility.desktop bb-imager-gui/dist/org.beagleboard.imagingutility.AppDir/org.beagleboard.imagingutility.desktop
-	ln -srf bb-imager-gui/dist/org.beagleboard.imagingutility.AppDir/usr/share/icons/hicolor/128x128/apps/org.beagleboard.imagingutility.png bb-imager-gui/dist/org.beagleboard.imagingutility.AppDir/org.beagleboard.imagingutility.png
-	ln -srf bb-imager-gui/dist/org.beagleboard.imagingutility.AppDir/usr/share/metainfo/org.beagleboard.imagingutility.metainfo.xml bb-imager-gui/dist/org.beagleboard.imagingutility.AppDir/usr/share/metainfo/org.beagleboard.imagingutility.appdata.xml
-	cd bb-imager-gui/dist && appimagetool $(_APPIMAGETOOL_ARGS) org.beagleboard.imagingutility.AppDir BeagleBoard_Imager-$(_DEST_VERSION)-$(APPIMAGE_ARCH).AppImage
-	rm -rf bb-imager-gui/dist/org.beagleboard.imagingutility.AppDir
+	$(MAKE) _install_gui PREFIX=/usr DESTDIR=bb-imager-gui/dist/org.t3gemstone.imager.AppDir GUI_NAME=org.t3gemstone.imager
+	ln -srf bb-imager-gui/dist/org.t3gemstone.imager.AppDir/usr/bin/bb-imager-gui bb-imager-gui/dist/org.t3gemstone.imager.AppDir/AppRun
+	ln -srf bb-imager-gui/dist/org.t3gemstone.imager.AppDir/usr/share/applications/org.t3gemstone.imager.desktop bb-imager-gui/dist/org.t3gemstone.imager.AppDir/org.t3gemstone.imager.desktop
+	ln -srf bb-imager-gui/dist/org.t3gemstone.imager.AppDir/usr/share/icons/hicolor/128x128/apps/org.t3gemstone.imager.png bb-imager-gui/dist/org.t3gemstone.imager.AppDir/org.t3gemstone.imager.png
+	ln -srf bb-imager-gui/dist/org.t3gemstone.imager.AppDir/usr/share/metainfo/org.t3gemstone.imager.metainfo.xml bb-imager-gui/dist/org.t3gemstone.imager.AppDir/usr/share/metainfo/org.t3gemstone.imager.appdata.xml
+	cd bb-imager-gui/dist && appimagetool $(_APPIMAGETOOL_ARGS) org.t3gemstone.imager.AppDir T3Gemstone_Imager-$(_DEST_VERSION)-$(APPIMAGE_ARCH).AppImage
+	rm -rf bb-imager-gui/dist/org.t3gemstone.imager.AppDir
 
 package-gui-dmg: build-gui
 	$(CARGO_PATH) packager -p bb-imager-gui --target $(TARGET) ${_PACKAGER_ARGS} -f dmg
@@ -432,15 +432,15 @@ uninstall-cli:
 _install_gui:
 	$(info Install GUI)
 	install -Dm755 $(_GUI_BIN) $(DESTDIR)$(BINDIR)/bb-imager-gui
-	install -Dm644 bb-imager-gui/assets/packages/linux/BeagleBoardImager.desktop $(DESTDIR)$(DESKTOP_DIR)/$(GUI_NAME).desktop
+	install -Dm644 bb-imager-gui/assets/packages/linux/T3GemstoneImager.desktop $(DESTDIR)$(DESKTOP_DIR)/$(GUI_NAME).desktop
 	desktop-file-edit --set-icon=$(GUI_NAME) $(DESTDIR)$(DESKTOP_DIR)/$(GUI_NAME).desktop
 	install -Dm644 bb-imager-gui/assets/icons/icon.png $(DESTDIR)$(ICONS_DIR)/hicolor/128x128/apps/$(GUI_NAME).png
-	install -Dm644 bb-imager-gui/assets/packages/linux/flatpak/org.beagleboard.imagingutility.metainfo.xml $(DESTDIR)$(METAINFO_DIR)/$(GUI_NAME).metainfo.xml
+	install -Dm644 bb-imager-gui/assets/packages/linux/flatpak/org.t3gemstone.imager.metainfo.xml $(DESTDIR)$(METAINFO_DIR)/$(GUI_NAME).metainfo.xml
 
 ## install: install-gui: Install GUI. Intended for use in Linux.
 .PHONY: install-gui
 install-gui: _install_gui
-	install -Dm644 bb-imager-gui/assets/packages/linux/udev/10-beagle.rules $(DESTDIR)$(UDEV_RULESDIR)/10-beagle.rules
+	install -Dm644 bb-imager-gui/assets/packages/linux/udev/10-t3gemstone.rules $(DESTDIR)$(UDEV_RULESDIR)/10-t3gemstone.rules
 
 _fetch-gui-deps:
 	$(CARGO_PATH) fetch ${_RUST_ARGS_BASE} --manifest-path bb-imager-gui/Cargo.toml
@@ -455,7 +455,7 @@ package-gui-flatpak:
 uninstall-gui:
 	$(info Uninstall GUI)
 	rm -f $(DESTDIR)$(BINDIR)/bb-imager-gui
-	rm -f $(DESTDIR)$(UDEV_RULESDIR)/10-beagle.rules
+	rm -f $(DESTDIR)$(UDEV_RULESDIR)/10-t3gemstone.rules
 	rm -f $(DESTDIR)$(DESKTOP_DIR)/$(GUI_NAME).desktop
 	rm -f $(DESTDIR)$(ICONS_DIR)/hicolor/128x128/apps/$(GUI_NAME).png
 	rm -f $(DESTDIR)$(METAINFO_DIR)/$(GUI_NAME).metainfo.xml

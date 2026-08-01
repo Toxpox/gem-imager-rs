@@ -54,7 +54,7 @@ fn main() -> iced::Result {
 
     #[cfg(target_os = "macos")]
     // HACK: mac_notification_sys set application name (not an option in notify-rust)
-    let _ = notify_rust::set_application("org.beagleboard.imagingutility");
+    let _ = notify_rust::set_application(constants::APP_ID);
 
     let settings = iced::window::Settings {
         min_size: Some(constants::WINDOW_SIZE),
@@ -143,14 +143,14 @@ impl BBImager {
 
     fn theme(&self) -> iced::Theme {
         iced::Theme::custom(
-            "Beagle",
+            "T3 Gemstone",
             iced::theme::Palette {
-                background: constants::BACKGROUND,
+                background: constants::GEMSTONE_NAVY,
                 text: iced::Color::WHITE,
-                primary: constants::TONGUE_ORANGE,
-                success: constants::CHECK_MARK_GREEN,
-                warning: constants::HAIR_LIGHT_BROWN,
-                danger: constants::DANGER,
+                primary: constants::GEMSTONE_ROSE,
+                success: constants::SUCCESS_GREEN,
+                warning: constants::WARNING_AMBER,
+                danger: constants::DANGER_RED,
             },
         )
     }

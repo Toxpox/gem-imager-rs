@@ -1,9 +1,9 @@
-name: bb-imager
+name: t3gemstone-imager
 base: core24 # the base snap is the execution environment for this snap
 version: 1.0.13
-adopt-info: bb-imager
+adopt-info: t3gemstone-imager
 contact:
-  - https://www.beagleboard.org/collaborate
+  - https://docs.t3gemstone.org/en
 
 grade: stable # must be 'stable' to release into candidate/stable channels
 confinement: strict # use 'strict' once you have the right plugs and slots
@@ -23,7 +23,7 @@ parts:
     prime:
       - -*
 
-  bb-imager:
+  t3gemstone-imager:
     plugin: nil
     source: .
     after: [rust-deps]
@@ -34,17 +34,17 @@ parts:
       - libclang-dev
       - desktop-file-utils
     parse-info:
-      - usr/share/metainfo/org.beagleboard.imagingutility.metainfo.xml
+      - usr/share/metainfo/org.t3gemstone.imager.metainfo.xml
     override-build: |
       # Ensure cargo/rustc from rust-deps are on PATH
       export PATH="$HOME/.cargo/bin:$PATH"
       source .envrc
-      make build-gui _install_gui DESTDIR=${CRAFT_PART_INSTALL} PREFIX=/usr SYSTEM_DEPS=1 GUI_NAME=org.beagleboard.imagingutility NOTIFY_RUST=0 PRE_RELEASE=$PRE_RELEASE
+      make build-gui _install_gui DESTDIR=${CRAFT_PART_INSTALL} PREFIX=/usr SYSTEM_DEPS=1 GUI_NAME=org.t3gemstone.imager NOTIFY_RUST=0 PRE_RELEASE=$PRE_RELEASE
 
 apps:
-  bb-imager:
+  t3gemstone-imager:
     command: usr/bin/bb-imager-gui
-    common-id: org.beagleboard.imagingutility
+    common-id: org.t3gemstone.imager
     plugs:
       # Downloading firmware/iso from network.
       - network

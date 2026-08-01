@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
-	<description>BeagleBoard Imager</description>
+	<description>T3 Gemstone Imager</description>
 	<trustInfo xmlns="urn:schemas-microsoft-com:asm.v3">
 		<security>
 			<requestedPrivileges>
@@ -8,7 +8,7 @@
 			</requestedPrivileges>
 		</security>
 	</trustInfo>
-        <assemblyIdentity version="1.0.13.0" name="BeagleBoard.org.BBImager"/>
+        <assemblyIdentity version="1.0.13.0" name="T3Gemstone.Imager"/>
         <application xmlns="urn:schemas-microsoft-com:asm.v3">
                 <windowsSettings>
                         <dpiAware xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">true/PM</dpiAware>

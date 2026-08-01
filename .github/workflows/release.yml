@@ -340,8 +340,8 @@ jobs:
 
       - name: Setup git
         run: |
-          git config --global user.email "ayush@beagleboard.org"
-          git config --global user.name "Ayush Singh"
+          git config --global user.email "dev@t3gemstone.org"
+          git config --global user.name "T3 Gemstone Devteam"
 
       - name: Clone AUR repo
         run: git clone ssh://aur@aur.archlinux.org/bb-imager-cli.git $GITHUB_WORKSPACE

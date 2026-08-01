@@ -15,6 +15,12 @@ mod helpers;
 mod policy;
 mod single_flight;
 
+/// Value sent as `User-Agent` on every request.
+///
+/// Product identity rather than crate identity: `packages.t3gemstone.org` sees the application
+/// that is asking, not the internal crate name that happens to hold the HTTP client.
+pub const USER_AGENT: &str = concat!("T3GemstoneImager/", env!("CARGO_PKG_VERSION"));
+
 use helpers::sha256_from_path;
 use single_flight::SingleFlight;
 
@@ -396,7 +402,7 @@ fn build_client(
     let max_redirects = policy.max_redirects;
 
     reqwest::Client::builder()
-        .user_agent(env!("CARGO_PKG_NAME"))
+        .user_agent(USER_AGENT)
         .connect_timeout(policy.connect_timeout)
         .read_timeout(policy.idle_timeout)
         .timeout(total_timeout)

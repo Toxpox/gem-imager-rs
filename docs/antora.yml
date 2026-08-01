@@ -1,6 +1,6 @@
-name: bb-imager
+name: t3gemstone-imager
 version: 1.0.13
-title: BeagleBoard Imaging Utility
+title: T3 Gemstone Imager
 nav:
 - modules/ROOT/nav.adoc
 
@@ -8,5 +8,5 @@ asciidoc:
   attributes:
     description: >
       Offers an easy-to-use GUI and a powerful CLI to download, configure, and 
-      safely flash OS images for BeagleBoard hardware, with cross-platform 
+      safely flash OS images for T3 Gemstone hardware, with cross-platform 
       support on Linux, Windows, and macOS.

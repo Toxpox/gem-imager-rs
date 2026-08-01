@@ -1,6 +1,6 @@
 [package]
 name = "bb-imager-gui"
-description = "The easiest way to install the latest operating system images for your Beagle."
+description = "The easiest way to install the latest operating system images for your T3 Gemstone board."
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -61,9 +61,9 @@ debug = ["iced/hot"]
 [package.metadata.packager]
 icons = ["assets/icons/icon.*"]
 category = "DeveloperTool"
-identifier = "org.beagleboard.imagingutility"
+identifier = "org.t3gemstone.imager"
 out_dir = "dist"
-product_name = "BeagleBoard Imaging Utility"
+product_name = "T3 Gemstone Imager"
 
 [package.metadata.packager.wix]
 banner_path = "assets/icons/installer_banner.png"
@@ -71,7 +71,7 @@ dialog_image_path = "assets/icons/dialog_image.png"
 
 [package.metadata.packager.deb]
 package_name = "bb-imager-gui"
-files = { "assets/packages/linux/udev/10-beagle.rules" = "/etc/udev/rules.d/10-beagle.rules" }
+files = { "assets/packages/linux/udev/10-t3gemstone.rules" = "/etc/udev/rules.d/10-t3gemstone.rules" }
 
 [package.metadata.packager.pacman]
-files = { "assets/packages/linux/udev/10-beagle.rules" = "/etc/udev/rules.d/10-beagle.rules" }
+files = { "assets/packages/linux/udev/10-t3gemstone.rules" = "/etc/udev/rules.d/10-t3gemstone.rules" }

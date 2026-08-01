@@ -3,7 +3,7 @@
 
 site:
   title: BeagleBoard Imaging Utility
-  start_page: bb-imager::index.adoc
+  start_page: t3gemstone-imager::index.adoc
 
 content:
   sources:

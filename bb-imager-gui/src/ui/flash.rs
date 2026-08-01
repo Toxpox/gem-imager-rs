@@ -4,7 +4,7 @@ use iced::{
     widget::{self, button},
 };
 
-use crate::constants::{FONT_BOLD, TONGUE_ORANGE};
+use crate::constants::{FONT_BOLD, GEMSTONE_ROSE};
 use crate::ui::helpers::{self, VIEW_COL_PADDING, detail_entry, page_type1};
 use crate::{BBImagerMessage, state::FlashingState};
 
@@ -28,7 +28,7 @@ fn progress_view(state: &FlashingState) -> Element<'_, BBImagerMessage> {
         bb_flasher::DownloadFlashingStatus::Customizing => (0.99, "Customizing ..."),
     };
 
-    let progress = progress_circle(prog, 10.0f32, TONGUE_ORANGE, FONT_BOLD);
+    let progress = progress_circle(prog, 10.0f32, GEMSTONE_ROSE, FONT_BOLD);
 
     let mut col = widget::column![progress, widget::text(label)];
     if let Some(x) = state.time_remaining() {

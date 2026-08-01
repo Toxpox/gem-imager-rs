@@ -3,12 +3,12 @@
 <plist version="1.0">
     <dict>
         <key>CFBundleDevelopmentRegion</key><string>English</string>
-        <key>CFBundleDisplayName</key><string>BeagleBoard Imager</string>
+        <key>CFBundleDisplayName</key><string>T3 Gemstone Imager</string>
         <key>CFBundleExecutable</key><string>bb-imager-gui</string>
         <key>CFBundleIconFile</key><string>icon.icns</string>
-        <key>CFBundleIdentifier</key><string>org.beagleboard.imagingutility</string>
+        <key>CFBundleIdentifier</key><string>org.t3gemstone.imager</string>
         <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
-        <key>CFBundleName</key><string>BeagleBoard Imager</string>
+        <key>CFBundleName</key><string>T3 Gemstone Imager</string>
         <key>CFBundlePackageType</key><string>APPL</string>
         <key>CFBundleShortVersionString</key><string>0.0.0</string>
         <key>CFBundleVersion</key><string>fffffff</string>

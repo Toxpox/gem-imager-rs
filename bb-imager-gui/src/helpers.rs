@@ -638,11 +638,10 @@ impl FlashingCustomization {
 async fn show_notification_xdg_portal(body: &str) -> ashpd::Result<()> {
     let proxy = ashpd::desktop::notification::NotificationProxy::new().await?;
 
-    let app_id = "org.beagleboard.imagingutility";
     proxy
         .add_notification(
-            app_id,
-            ashpd::desktop::notification::Notification::new("BeagleBoard Imager").body(body),
+            constants::APP_ID,
+            ashpd::desktop::notification::Notification::new(constants::APP_NAME).body(body),
         )
         .await
 }
@@ -656,7 +655,7 @@ pub(crate) async fn show_notification(body: String) -> anyhow::Result<()> {
     #[cfg(feature = "notify-rust")]
     if tokio::task::spawn_blocking(move || {
         notify_rust::Notification::new()
-            .appname("BeagleBoard Imager")
+            .appname(constants::APP_NAME)
             .body(&body)
             .finalize()
             .show()
