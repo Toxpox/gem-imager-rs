@@ -1,3 +1,4 @@
+use crate::helpers::check_cancel;
 use crate::{Error, Result};
 use bb_helper::cancel::CancellationToken;
 use fatfs::FileSystem;
@@ -23,6 +24,10 @@ impl ParitionType {
     where
         T: Write + Seek + Read + std::fmt::Debug,
     {
+        // Partition detection reads from wherever the stream happens to be, so start from the top.
+        // Without this, opening the partition a second time — which the read-back pass does —
+        // reads whatever follows the previous access and reports a corrupt partition table.
+        dst.rewind()?;
         let part_table = PartitionTable::detect_partition_table(&mut dst)?;
         dst.rewind()?;
         let (start_offset, end_offset) = match part_table {
@@ -92,6 +97,12 @@ pub enum ContentType<'a> {
     Reader(Box<dyn Read + 'a>),
     File(Box<std::path::Path>),
     DataAppend(Box<[u8]>),
+    /// Replace the file with exactly these bytes, then read them back off the device and compare.
+    ///
+    /// This is the mode for files whose absence or corruption stays invisible until the board is
+    /// booted — a first-boot configuration that silently did not land looks like a successful flash
+    /// right up to the moment the user cannot log in.
+    VerifiedData(Box<[u8]>),
 }
 
 impl<'a> From<Box<[u8]>> for ContentType<'a> {
@@ -116,12 +127,19 @@ impl<'a, I> Customization<I>
 where
     I: Iterator<Item = (Box<str>, ContentType<'a>)>,
 {
+    /// Write the customization files, then read back the ones that asked to be verified.
+    ///
+    /// The read-back re-opens the FAT filesystem from scratch rather than reusing the handle that
+    /// did the writing, so it goes through the same path the board will: a file that only exists in
+    /// a cache the writer still holds is not a file the board can read.
     pub(crate) fn customize(
         self,
-        dst: impl Write + Seek + Read + std::fmt::Debug,
+        mut dst: impl Write + Seek + Read + std::fmt::Debug,
         cancel: Option<CancellationToken>,
     ) -> Result<()> {
-        let partition = self.partition.open(dst)?;
+        let mut to_verify: Vec<(Box<str>, Box<[u8]>)> = Vec::new();
+
+        let partition = self.partition.open(&mut dst)?;
         {
             let root = partition.root_dir();
 
@@ -151,6 +169,48 @@ where
                         dst.truncate()?;
                         std::io::copy(&mut reader, &mut dst)?;
                     }
+                    ContentType::VerifiedData(items) => {
+                        let mut f = root.create_file(&path).map_err(customization_err)?;
+                        f.truncate()?;
+                        f.write_all(&items)?;
+                        f.flush()?;
+                        to_verify.push((path, items));
+                    }
+                }
+            }
+        }
+
+        partition.unmount()?;
+
+        if !to_verify.is_empty() {
+            check_cancel(cancel.as_ref())?;
+            self.partition.verify(&mut dst, &to_verify)?;
+        }
+
+        Ok(())
+    }
+}
+
+impl ParitionType {
+    /// Re-open the partition and confirm each file holds exactly the bytes that were written.
+    pub(crate) fn verify<T>(self, dst: T, expected: &[(Box<str>, Box<[u8]>)]) -> Result<()>
+    where
+        T: Write + Seek + Read + std::fmt::Debug,
+    {
+        let partition = self.open(dst)?;
+        {
+            let root = partition.root_dir();
+
+            for (path, want) in expected {
+                let mut got = Vec::with_capacity(want.len());
+                root.open_file(path)
+                    .map_err(|_| Error::CustomizationReadBackMismatch { file: path.clone() })?
+                    .read_to_end(&mut got)?;
+
+                // A plain inequality, not a diff: the buffer can hold a password hash, so nothing
+                // about its contents may reach an error message or a log line.
+                if got.as_slice() != want.as_ref() {
+                    return Err(Error::CustomizationReadBackMismatch { file: path.clone() });
                 }
             }
         }

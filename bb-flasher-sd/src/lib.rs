@@ -48,6 +48,16 @@ pub enum Error {
         source: io::Error,
         file: Box<str>,
     },
+
+    /// A customization file did not survive the round trip to the card.
+    ///
+    /// The message carries the file name and nothing else on purpose: these files hold password
+    /// hashes and pre-shared keys, so neither the expected nor the actual bytes may be reported.
+    #[error(
+        "Read-back verification failed for {file}: the boot partition does not hold the bytes \
+         that were written. The card may be faulty, counterfeit, or was disconnected."
+    )]
+    CustomizationReadBackMismatch { file: Box<str> },
     /// Unknown error occured during IO.
     #[error("Unknown Error during IO. Please check logs for more information.")]
     IoError {

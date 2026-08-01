@@ -25,11 +25,26 @@ sha2 = "0.10"
 const-hex = "1.19"
 bb-flasher-dfu = { path = "../bb-flasher-dfu", optional = true }
 anyhow = "1.0"
+# T3 GemInit `config.ini` secrets. Kept on the mature RustCrypto generation (digest 0.10) so the
+# whole workspace shares one `sha2`/`digest` version.
+sha-crypt = { version = "0.5", default-features = false, optional = true }
+pbkdf2 = { version = "0.12", default-features = false, features = ["hmac"], optional = true }
+hmac = { version = "0.12", optional = true }
+sha1 = { version = "0.10", optional = true }
+des = { version = "0.8", optional = true }
+cipher = { version = "0.4", optional = true }
+zeroize = { version = "1", optional = true }
+# The crypt(3) salt has to come from the OS CSPRNG (`instruction.md` §10.3), never a userspace PRNG.
+getrandom = { version = "0.3", optional = true }
+chrono-tz = { version = "0.10", optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 liblzma = { version = "0.4", features = ["parallel"] }
 
 [dev-dependencies]
+# `simple` brings in `sha512_check`, the independent verifier the crypt(3) tests check against.
+# Production code never uses it — the hash is built from an OS-CSPRNG salt, not this crate's RNG.
+sha-crypt = { version = "0.5", features = ["simple"] }
 tokio = { version = "1.52", default-features = false, features = ["rt-multi-thread", "macros"] }
 tempfile = "3.27"
 zip = { version = "8.6", default-features = false }
@@ -37,7 +52,20 @@ zip = { version = "8.6", default-features = false }
 [features]
 default = []
 serde = ["dep:serde"]
-sd = ["bb-flasher-sd", "serde", "dep:yaml_serde", "bb-helper/reader_progress"]
+sd = ["bb-flasher-sd", "serde", "dep:yaml_serde", "bb-helper/reader_progress", "t3_gem_init"]
+# Safe serializer for the T3 GemStone `config.ini` first-boot file. Separate from `sd` because the
+# eMMC/DFU path writes the same file into a staging image.
+t3_gem_init = [
+	"dep:sha-crypt",
+	"dep:pbkdf2",
+	"dep:hmac",
+	"dep:sha1",
+	"dep:des",
+	"dep:cipher",
+	"dep:zeroize",
+	"dep:getrandom",
+	"dep:chrono-tz",
+]
 sd_linux_udev = ["bb-flasher-sd?/udev"]
 sd_macos_authopen = ["bb-flasher-sd?/macos_authopen"]
 dfu = ["bb-flasher-dfu"]

@@ -27,10 +27,15 @@
 //! - `sd_macos_authopen`: Uses authopen to provide GUI prompt to open SD Cards in MacOS. Useful
 //!   for GUI applications.
 //! - `dfu`: Provide USB DFU flashing.
+//! - `t3_gem_init`: Safe serializer for the T3 GemStone `config.ini` first-boot file. Implied by
+//!   `sd`, and separate from it because the eMMC/DFU path writes the same file into a staging
+//!   image.
 
 mod common;
 mod flasher;
 pub mod img;
+#[cfg(feature = "t3_gem_init")]
+pub mod t3_gem_init;
 
 use std::path::Path;
 

@@ -66,8 +66,20 @@ impl BBFlasherTarget for Target {
 }
 
 /// Linux Image post-install customization options.
+///
+/// Each entry is a file to place on the boot partition. Entries carrying secrets are marked so the
+/// SD backend reads them back off the card and compares them, instead of trusting the write.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct FlashingSdLinuxConfig(Vec<(Box<str>, Box<[u8]>)>);
+pub struct FlashingSdLinuxConfig(Vec<(Box<str>, Box<[u8]>, Verification)>);
+
+/// Whether a customization file is read back off the card after it is written.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+enum Verification {
+    /// Trust the filesystem write, as the BeagleBoard paths have always done.
+    None,
+    /// Re-open the partition, read the file back and compare it byte for byte.
+    ReadBack,
+}
 
 fn sysconf_w(sysconf: &mut Vec<u8>, key: &str, value: &str) {
     sysconf.extend(key.as_bytes());
@@ -113,17 +125,47 @@ impl FlashingSdLinuxConfig {
                 sysconf_w(&mut content, "iwd_psk_file", &format!("{ssid}.psk"));
 
                 Self(vec![
-                    ("sysconf.txt".to_string().into(), content.into()),
+                    (
+                        "sysconf.txt".to_string().into(),
+                        content.into(),
+                        Verification::None,
+                    ),
                     (
                         format!("services/{ssid}.psk").into(),
                         format!("[Security]\nPassphrase={psk}\n\n[Settings]\nAutoConnect=true")
                             .into_bytes()
                             .into(),
+                        Verification::None,
                     ),
                 ])
             }
-            None => Self(vec![("sysconf.txt".to_string().into(), content.into())]),
+            None => Self(vec![(
+                "sysconf.txt".to_string().into(),
+                content.into(),
+                Verification::None,
+            )]),
         }
+    }
+
+    /// Customization for T3 GemStone images: the `config.ini` file `gem-first-boot` consumes.
+    ///
+    /// The bytes come from [`crate::t3_gem_init`], which is the only place allowed to build them —
+    /// the file is `source`d as root on the board, so it is never assembled by concatenation here.
+    ///
+    /// It is written with [`Verification::ReadBack`]: a `config.ini` that silently failed to land
+    /// produces a board with the factory password and no network, which looks like a successful
+    /// flash until the user tries to log in.
+    #[cfg(feature = "t3_gem_init")]
+    pub fn t3_gem_init(
+        config: &crate::t3_gem_init::T3GemInitConfig,
+    ) -> Result<Self, crate::t3_gem_init::T3GemInitError> {
+        let content = config.serialize()?;
+
+        Ok(Self(vec![(
+            crate::t3_gem_init::CONFIG_FILE_NAME.to_string().into(),
+            content.to_vec().into(),
+            Verification::ReadBack,
+        )]))
     }
 
     pub fn cloud_init(
@@ -135,11 +177,19 @@ impl FlashingSdLinuxConfig {
         ssh: Option<Box<str>>,
     ) -> Self {
         let data = cloud_init::CloudInitConfig::new(hostname, timezone, keymap, user, wifi, ssh);
-        Self(vec![("cloud-init".to_string().into(), data.to_file_data())])
+        Self(vec![(
+            "cloud-init".to_string().into(),
+            data.to_file_data(),
+            Verification::None,
+        )])
     }
 
     pub fn generic_file(file_name: Box<str>, file_content: Box<str>) -> Self {
-        Self(vec![(file_name, file_content.into_boxed_bytes())])
+        Self(vec![(
+            file_name,
+            file_content.into_boxed_bytes(),
+            Verification::None,
+        )])
     }
 
     pub const fn none() -> Self {
@@ -282,7 +332,13 @@ where
         let customization = if self.customization.0.is_empty() {
             vec![]
         } else {
-            let content = self.customization.0.into_iter().map(|(p, d)| (p, d.into()));
+            let content = self.customization.0.into_iter().map(|(p, d, v)| {
+                let content = match v {
+                    Verification::None => bb_flasher_sd::ContentType::DataAppend(d),
+                    Verification::ReadBack => bb_flasher_sd::ContentType::VerifiedData(d),
+                };
+                (p, content)
+            });
             vec![bb_flasher_sd::Customization {
                 partition: bb_flasher_sd::ParitionType::Boot,
                 content,

@@ -248,6 +248,102 @@ mod mock_card {
         })
     }
 
+    /// Same as [`boot_file`], but the file is read back off the card and compared.
+    fn verified_boot_file(name: &str, data: &[u8]) -> std::iter::Once<Customization<Content>> {
+        let entries = vec![(name.into(), data.to_vec().into_boxed_slice())];
+        let content: Content = entries
+            .into_iter()
+            .map(|(n, d): (Box<str>, Box<[u8]>)| (n, ContentType::VerifiedData(d)));
+
+        std::iter::once(Customization {
+            partition: ParitionType::Boot,
+            content,
+        })
+    }
+
+    /// `instruction.md` §10.4: the first-boot file is written to the FAT partition and then read
+    /// back from it. This drives the real MBR + FAT32 image, so it covers the partition lookup,
+    /// the write and the verifying re-open.
+    #[test]
+    fn a_verified_boot_file_is_written_and_read_back() {
+        let card = MockSd::new();
+        let image: Box<[u8]> = std::fs::read(card.path()).unwrap().into_boxed_slice();
+        let img_size = image.len() as u64;
+        let expected = b"firstboot=1\nhostname='t3-gemstone'\n";
+
+        flash_internal(
+            move || Ok((Cursor::new(image), img_size)),
+            card,
+            None,
+            None,
+            verified_boot_file("config.ini", expected),
+            None,
+        )
+        .expect("a healthy card must write and verify config.ini");
+    }
+
+    /// The read-back opens the file from a fresh filesystem handle, so a file that never landed is
+    /// caught instead of being echoed back from the writer's own buffer.
+    #[test]
+    fn a_missing_file_fails_the_read_back() {
+        let mut card = MockSd::new();
+
+        let err = ParitionType::Boot
+            .verify(
+                &mut card,
+                &[("absent.ini".into(), b"firstboot=1\n".to_vec().into())],
+            )
+            .expect_err("a file that is not on the card cannot verify");
+
+        assert!(
+            matches!(err, crate::Error::CustomizationReadBackMismatch { .. }),
+            "expected CustomizationReadBackMismatch, got {err:?}"
+        );
+    }
+
+    /// A byte flip after the write must surface as a mismatch, not as a successful flash. This is
+    /// the file-level counterpart of the raw read-back test above.
+    #[test]
+    fn a_flipped_byte_fails_the_read_back() {
+        let mut card = MockSd::new();
+        let expected: Box<[u8]> = b"firstboot=1\nhostname='t3-gemstone'\n".to_vec().into();
+
+        {
+            let mut corrupted = expected.to_vec();
+            corrupted[0] ^= 0x01;
+
+            let fs = card.open_boot();
+            {
+                let root = fs.root_dir();
+                let mut f = root.create_file("config.ini").unwrap();
+                std::io::Write::write_all(&mut f, &corrupted).unwrap();
+            }
+            fs.unmount().unwrap();
+        }
+
+        let err = ParitionType::Boot
+            .verify(&mut card, &[("config.ini".into(), expected)])
+            .expect_err("a single flipped byte must fail verification");
+
+        assert!(
+            matches!(err, crate::Error::CustomizationReadBackMismatch { .. }),
+            "expected CustomizationReadBackMismatch, got {err:?}"
+        );
+    }
+
+    /// The error names the file and nothing else: these files carry password hashes and PSKs.
+    #[test]
+    fn the_read_back_error_never_quotes_the_file_contents() {
+        let err = crate::Error::CustomizationReadBackMismatch {
+            file: "config.ini".into(),
+        };
+        let rendered = format!("{err}");
+
+        assert!(rendered.contains("config.ini"));
+        assert!(!rendered.contains("firstboot"));
+        assert!(!rendered.contains('$'));
+    }
+
     /// The whole pipeline over a real partitioned image: write, sync, read back, then land a file
     /// in the first FAT partition. A failure anywhere in MBR/FAT detection surfaces here.
     #[test]
