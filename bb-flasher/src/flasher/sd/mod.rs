@@ -245,6 +245,84 @@ const fn translate_status(
 mod status_tests {
     use super::*;
 
+    /// The extract gate has to fail the **flash**, not merely the read.
+    ///
+    /// `instruction.md` §8.1 puts the extracted digest between the decoder and the writer, and the
+    /// verifier only settles when the decoder reports EOF. That makes the whole guarantee depend on
+    /// the writer reading all the way to EOF rather than stopping once it has the declared number of
+    /// bytes. Nothing else asserts that, and if it ever regressed the gate would silently never fire
+    /// — the flash would report success for an image the catalog never published.
+    #[test]
+    fn a_declared_gate_mismatch_fails_the_whole_flash() {
+        use crate::img::{ExtractGate, ExtractedIntegrity, OsImage};
+        use std::io::Write as _;
+
+        let payload = vec![0xa5u8; 64 * 1024];
+
+        let mut archive = tempfile::NamedTempFile::new().unwrap();
+        let mut encoder = liblzma::write::XzEncoder::new(Vec::new(), 6);
+        encoder.write_all(&payload).unwrap();
+        archive.write_all(&encoder.finish().unwrap()).unwrap();
+        archive.flush().unwrap();
+
+        let dst = tempfile::NamedTempFile::new().unwrap();
+        let size = payload.len() as u64;
+        // Right size, wrong digest: exactly the "a different image was downloaded" case, which the
+        // post-write read-back cannot detect because the card faithfully keeps what it was handed.
+        let gate = ExtractGate::Declared(ExtractedIntegrity::new(size, [0u8; 32]));
+        let path = archive.path().to_path_buf();
+
+        let err = Flasher::with_file_dest(
+            move || Ok((OsImage::from_path(&path, gate)?, size)),
+            dst.path().to_path_buf(),
+            FlashingSdLinuxConfig::none(),
+        )
+        .flash(None, None)
+        .expect_err("an image that fails the extracted digest must not flash successfully");
+
+        // Asserted on the source chain, not on `err.to_string()`. The SD backend wraps the decoder's
+        // `io::Error` in its catch-all `IoError` variant, whose own message is "Unknown Error during
+        // IO" — so the outermost text says nothing about integrity and the reason lives one level
+        // down. The front-end renders this same chain (`{e:#}`); asserting on the chain here is what
+        // keeps the two in step.
+        let chain = format!("{err:#}");
+        assert!(
+            chain.contains("integrity"),
+            "the integrity failure must survive into the reported chain, got {chain}"
+        );
+    }
+
+    /// The same pipeline with the true digest completes, so the test above fails for the declared
+    /// reason rather than because this path never works at all.
+    #[test]
+    fn a_matching_declared_gate_flashes_to_completion() {
+        use crate::img::{ExtractGate, ExtractedIntegrity, OsImage};
+        use sha2::{Digest as _, Sha256};
+        use std::io::Write as _;
+
+        let payload = vec![0xa5u8; 64 * 1024];
+        let sha256: [u8; 32] = Sha256::digest(&payload).into();
+
+        let mut archive = tempfile::NamedTempFile::new().unwrap();
+        let mut encoder = liblzma::write::XzEncoder::new(Vec::new(), 6);
+        encoder.write_all(&payload).unwrap();
+        archive.write_all(&encoder.finish().unwrap()).unwrap();
+        archive.flush().unwrap();
+
+        let dst = tempfile::NamedTempFile::new().unwrap();
+        let size = payload.len() as u64;
+        let gate = ExtractGate::Declared(ExtractedIntegrity::new(size, sha256));
+        let path = archive.path().to_path_buf();
+
+        Flasher::with_file_dest(
+            move || Ok((OsImage::from_path(&path, gate)?, size)),
+            dst.path().to_path_buf(),
+            FlashingSdLinuxConfig::none(),
+        )
+        .flash(None, None)
+        .expect("a matching image must flash");
+    }
+
     #[test]
     fn writing_to_a_device_is_flashing_and_to_a_file_is_downloading() {
         assert_eq!(

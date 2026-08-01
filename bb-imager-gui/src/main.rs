@@ -297,7 +297,12 @@ impl BBImager {
                 }
                 Err(e) => {
                     tracing::error!("Flashing failed with error: {:#?}", e);
-                    BBImagerMessage::FlashFail(e.to_string())
+                    // `{e}` prints only the outermost error, and the outermost error is often the
+                    // least informative one: an integrity failure arrives wrapped as "Unknown Error
+                    // during IO", which reads exactly like a full disk or a permissions problem.
+                    // `{e:#}` appends the source chain, so the user can tell "this image is not the
+                    // one the catalog published, download it again" from "your card is faulty".
+                    BBImagerMessage::FlashFail(format!("{e:#}"))
                 }
             };
 
