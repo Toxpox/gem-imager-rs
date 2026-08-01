@@ -134,6 +134,13 @@ pub(crate) struct LinuxDrive {
     drive: PathBuf,
 }
 
+impl crate::helpers::Commit for LinuxDrive {
+    fn commit(&mut self) -> io::Result<()> {
+        io::Write::flush(&mut self.file)?;
+        self.file.sync_all()
+    }
+}
+
 #[cfg(feature = "udev")]
 impl Eject for LinuxDrive {
     fn eject(self) -> io::Result<()> {

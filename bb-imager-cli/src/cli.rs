@@ -60,19 +60,6 @@ pub enum Commands {
 
 #[derive(Subcommand, Debug)]
 pub enum TargetCommands {
-    /// Flash BeagleConnect Freedom.
-    #[cfg(feature = "bcf_cc1352p7")]
-    Bcf {
-        /// Local path to image file. Can be compressed (xz) or extracted file
-        img: Box<Path>,
-
-        /// The destination device (e.g., `/dev/sdX` or specific device identifiers).
-        dst: String,
-
-        #[arg(long)]
-        /// Disable checksum verification after flashing to speed up the process.
-        no_verify: bool,
-    },
     /// Flash an SD card with customizable settings for BeagleBoard devices.
     Sd {
         /// Local path to image file. Can be compressed (xz) or extracted file
@@ -118,9 +105,6 @@ pub enum TargetCommands {
         #[arg(long)]
         /// Enable USB DHCP
         usb_enable_dhcp: bool,
-        /// Provide the bmap file for the image
-        #[arg(long)]
-        bmap: Option<Box<Path>>,
 
         #[arg(long)]
         /// Generate clound-init config.
@@ -135,33 +119,6 @@ pub enum TargetCommands {
         #[arg(long)]
         file_destination: bool,
     },
-    /// Update boot partition with contents from archive
-    SdBootUpdate {
-        /// Local path to bootfs archive.
-        img: Box<Path>,
-
-        /// The destination device (e.g., `/dev/sdX` or specific device identifiers).
-        dst: PathBuf,
-    },
-    /// Flash MSP430 on BeagleConnectFreedom.
-    #[cfg(feature = "bcf_msp430")]
-    Msp430 {
-        /// Local path to image file. Can be compressed (xz) or extracted file
-        img: Box<Path>,
-
-        /// The destination device (e.g., `/dev/sdX` or specific device identifiers).
-        dst: String,
-    },
-    /// Flash MSPM0 on Pocketbeagle2.
-    #[cfg(feature = "pb2_mspm0")]
-    Pb2Mspm0 {
-        /// Local path to image file. Can be compressed (xz) or extracted file
-        img: Box<Path>,
-
-        /// Do not persist EEPROM contents
-        #[arg(long)]
-        no_eeprom: bool,
-    },
     #[cfg(feature = "dfu")]
     Dfu {
         /// Identifer is in the following format: `{bus_num}:{address}:{vendor_id}:{product_id}`.
@@ -171,46 +128,15 @@ pub enum TargetCommands {
         /// be flashed in a sequential order.
         imgs: Vec<String>,
     },
-    /// Flash Zepto
-    #[cfg(any(feature = "zepto_uart", feature = "zepto_i2c"))]
-    Zepto {
-        /// Local path to image file. Can be compressed (xz) or extracted file
-        img: Box<Path>,
-        /// The destination device (e.g., `/dev/tty*` or `/dev/i2c-*` or specific device identifiers).
-        dst: String,
-        #[arg(long)]
-        /// Disable checksum verification after flashing to speed up the process.
-        no_verify: bool,
-        #[cfg(target_os = "linux")]
-        #[arg(long, requires = "bsl_gpio")]
-        /// RESET GPIO for MSPM0.
-        reset_gpio: Option<String>,
-        #[cfg(target_os = "linux")]
-        #[arg(long, requires = "reset_gpio")]
-        /// BSL GPIO for MSPM0.
-        bsl_gpio: Option<String>,
-    },
 }
 
 #[derive(ValueEnum, Clone, Copy, Debug)]
 pub enum DestinationsTarget {
-    /// BeagleConnect Freedom targets.
-    #[cfg(feature = "bcf_cc1352p7")]
-    Bcf,
-    /// SD card targets for BeagleBoard devices.
+    /// SD card targets.
     Sd,
-    /// MSP430 targets
-    #[cfg(feature = "bcf_msp430")]
-    Msp430,
-    /// Pocketbeagle2 MSPM0
-    #[cfg(feature = "pb2_mspm0")]
-    Pb2Mspm0,
     /// USB DFU Target
     #[cfg(feature = "dfu")]
     Dfu,
-    /// Zepto Target
-    #[cfg(any(feature = "zepto_uart", feature = "zepto_i2c"))]
-    Zepto,
 }
 
 #[cfg(test)]
@@ -400,47 +326,18 @@ mod tests {
     }
 
     #[test]
-    fn sd_boot_update_parses() {
-        let opt = Opt::try_parse_from([
-            "bb-imager-cli",
-            "flash",
-            "sd-boot-update",
-            "boot.tar",
-            "/dev/sdX",
-        ])
-        .expect("valid sd-boot-update");
-        match opt.command {
-            Commands::Flash { target, .. } => match *target {
-                TargetCommands::SdBootUpdate { img, dst } => {
-                    assert_eq!(img.as_ref(), Path::new("boot.tar"));
-                    assert_eq!(dst, PathBuf::from("/dev/sdX"));
-                }
-                other => panic!("expected SdBootUpdate, got {other:?}"),
-            },
-            other => panic!("expected Flash, got {other:?}"),
-        }
-    }
-
-    #[cfg(feature = "pb2_mspm0")]
-    #[test]
-    fn pb2_mspm0_variant_parses() {
-        let opt = Opt::try_parse_from([
-            "bb-imager-cli",
-            "flash",
-            "pb2-mspm0",
-            "fw.bin",
-            "--no-eeprom",
-        ])
-        .expect("valid pb2-mspm0 flash");
-        match opt.command {
-            Commands::Flash { target, .. } => match *target {
-                TargetCommands::Pb2Mspm0 { no_eeprom, img } => {
-                    assert!(no_eeprom);
-                    assert_eq!(img.as_ref(), Path::new("fw.bin"));
-                }
-                other => panic!("expected Pb2Mspm0, got {other:?}"),
-            },
-            other => panic!("expected Flash, got {other:?}"),
-        }
+    fn sd_boot_update_is_no_longer_a_subcommand() {
+        // The boot-archive path was removed with `SdCardBootfs`; the old
+        // invocation must fail to parse rather than silently do something else.
+        assert!(
+            Opt::try_parse_from([
+                "bb-imager-cli",
+                "flash",
+                "sd-boot-update",
+                "boot.tar",
+                "/dev/sdX",
+            ])
+            .is_err()
+        );
     }
 }

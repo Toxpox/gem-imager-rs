@@ -6,6 +6,7 @@
 //! This crate provides abstractions to parse and generate distros.json file.
 
 pub mod config;
+pub mod t3;
 
 pub use config::Config;
 

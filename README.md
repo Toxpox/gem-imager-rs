@@ -77,7 +77,7 @@ Options:
 ## Flashing image
 
 ```shell
-❯ bb-imager-cli flash --quiet bcf $IMG_PATH /dev/ttyACM0
+❯ bb-imager-cli flash --quiet sd $IMG_PATH /dev/sdX
 ```
 
 # Creating Issues

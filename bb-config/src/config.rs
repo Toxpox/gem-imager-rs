@@ -77,6 +77,30 @@ pub enum InitFormat {
     Armbian,
     /// Cloud Init based customization
     CloudInit,
+    /// T3 GemStone `config.ini`, consumed by `gem-first-boot`.
+    ///
+    /// Distinct from [`InitFormat::Sysconf`] on purpose: that is BeagleBoard's `sysconf.txt`, read
+    /// by a different consumer with a different key set. Mapping one onto the other would make the
+    /// application write a file the board never reads.
+    GemInit,
+    /// T3 GemStone `config.ini` on a desktop image, which additionally offers the VNC fields.
+    ///
+    /// This is a separate variant rather than a flag because the front-end selects its
+    /// customization screen from this value, and the desktop screen offers a different field set
+    /// (the supported first-boot contract).
+    GemInitDesktop,
+}
+
+impl InitFormat {
+    /// Whether this image is customized through the T3 `config.ini` writer.
+    pub const fn is_gem_init(self) -> bool {
+        matches!(self, Self::GemInit | Self::GemInitDesktop)
+    }
+
+    /// Whether the VNC fields may be offered for this image.
+    pub const fn supports_vnc(self) -> bool {
+        matches!(self, Self::GemInitDesktop)
+    }
 }
 
 impl rusqlite::ToSql for InitFormat {
@@ -86,6 +110,8 @@ impl rusqlite::ToSql for InitFormat {
             InitFormat::Sysconf => 2,
             InitFormat::Armbian => 3,
             InitFormat::CloudInit => 4,
+            InitFormat::GemInit => 5,
+            InitFormat::GemInitDesktop => 6,
         };
         Ok(rusqlite::types::ToSqlOutput::from(val))
     }
@@ -98,6 +124,8 @@ impl rusqlite::types::FromSql for InitFormat {
             2 => Ok(InitFormat::Sysconf),
             3 => Ok(InitFormat::Armbian),
             4 => Ok(InitFormat::CloudInit),
+            5 => Ok(InitFormat::GemInit),
+            6 => Ok(InitFormat::GemInitDesktop),
             _ => Err(rusqlite::types::FromSqlError::Other(
                 format!("Invalid InitFormat integer variant: {}", val).into(),
             )),
@@ -112,6 +140,8 @@ impl std::fmt::Display for InitFormat {
             InitFormat::Sysconf => f.write_str("sysconfig"),
             InitFormat::Armbian => f.write_str("armbian"),
             InitFormat::CloudInit => f.write_str("cloudinit"),
+            InitFormat::GemInit => f.write_str("geminit"),
+            InitFormat::GemInitDesktop => f.write_str("geminit-desktop"),
         }
     }
 }
@@ -191,6 +221,14 @@ pub struct OsImage {
     pub image_download_sha256: [u8; 32],
     /// Os Image size after extraction
     pub extract_size: u64,
+    /// Os Image sha256 *after* extraction, when the catalog publishes it.
+    ///
+    /// The T3 catalog always publishes this; the legacy BeagleBoard schema never did, which is why
+    /// it is optional here. Together with [`Self::extract_size`] it forms the extracted-side pair
+    /// of the four independent integrity gates in the integrity policy — the pair that decides
+    /// what is allowed to reach the board.
+    #[serde(default, with = "hex_option")]
+    pub extract_sha256: Option<[u8; 32]>,
     /// Os Image release date
     pub release_date: chrono::NaiveDate,
     /// Devices the Os Image can be used with
@@ -201,12 +239,41 @@ pub struct OsImage {
     /// Initialization Format. Currently only used by SD Card Images
     #[serde(default)]
     pub init_format: InitFormat,
-    /// Bmap file for the image
-    pub bmap: Option<Url>,
     /// Special Instructions for flashing board.
     pub info_text: Option<String>,
     /// URL to support page for image. This is where issues should be reported.
     pub support: Option<Url>,
+}
+
+/// Hex serde for an optional 32-byte digest.
+///
+/// `const_hex`'s serde support covers `[u8; 32]` but not `Option<[u8; 32]>`, and an absent
+/// `extract_sha256` has to stay distinguishable from a present one — treating "missing" as
+/// "all zeroes" would turn a missing gate into a gate that always fails.
+mod hex_option {
+    use serde::{Deserialize as _, Deserializer, Serializer};
+
+    pub(super) fn serialize<S: Serializer>(
+        value: &Option<[u8; 32]>,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error> {
+        match value {
+            Some(bytes) => serializer.serialize_str(&const_hex::encode(bytes)),
+            None => serializer.serialize_none(),
+        }
+    }
+
+    pub(super) fn deserialize<'de, D: Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<Option<[u8; 32]>, D::Error> {
+        let Some(raw) = Option::<String>::deserialize(deserializer)? else {
+            return Ok(None);
+        };
+
+        let mut out = [0u8; 32];
+        const_hex::decode_to_slice(raw.as_str(), &mut out).map_err(serde::de::Error::custom)?;
+        Ok(Some(out))
+    }
 }
 
 /// Types of flashers Os Image(s) support
@@ -215,27 +282,12 @@ pub enum Flasher {
     #[default]
     /// Image needs to be written to SD Card
     SdCard,
-    /// Archive for updated bootfs
-    SdCardBootfs,
-    /// BeagleConnect Freedom CC1352P7 Firmware
-    BeagleConnectFreedom,
-    /// BeagleConnect Freedom Msp430 Firmware
-    Msp430Usb,
-    /// PocketBeagle2 Mspm0 firmware
-    Pb2Mspm0,
-    /// MSPM0 flasher
-    Mspm0,
 }
 
 impl rusqlite::ToSql for Flasher {
     fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
         let val: u8 = match self {
             Flasher::SdCard => 1,
-            Flasher::SdCardBootfs => 2,
-            Flasher::BeagleConnectFreedom => 3,
-            Flasher::Msp430Usb => 4,
-            Flasher::Pb2Mspm0 => 5,
-            Flasher::Mspm0 => 6,
         };
 
         Ok(rusqlite::types::ToSqlOutput::from(val))
@@ -246,11 +298,6 @@ impl rusqlite::types::FromSql for Flasher {
     fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
         value.as_i64().and_then(|val| match val {
             1 => Ok(Flasher::SdCard),
-            2 => Ok(Flasher::SdCardBootfs),
-            3 => Ok(Flasher::BeagleConnectFreedom),
-            4 => Ok(Flasher::Msp430Usb),
-            5 => Ok(Flasher::Pb2Mspm0),
-            6 => Ok(Flasher::Mspm0),
             _ => Err(rusqlite::types::FromSqlError::Other(
                 format!("Invalid Flasher discriminant: {}", val).into(),
             )),

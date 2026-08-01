@@ -18,11 +18,12 @@ fatfs = "0.3"
 fscommon = "0.1"
 mbrman = "0.6"
 gpt = "4.1"
-bb-bmap-parser = { version = "0.1", path = "../bb-bmap-parser" }
 tokio = { version = "1.52", optional = true, default-features = false, features = ["rt", "signal"] }
 anyhow = "1.0"
 bb-helper = { path = "../bb-helper", features = ["cancel"] }
 tempfile = { version = "3.27", optional = true }
+sha2 = "0.10"
+const-hex = "1.19"
 
 [dev-dependencies]
 tempfile = "3.27"

@@ -4,17 +4,13 @@ resolver = "2"
 members = [
 	"bb-flasher",
 	"bb-imager-cli",
-	"bb-flasher-pb2-mspm0",
 	"bb-imager-gui",
-	"bb-flasher-bcf",
 	"bb-flasher-sd",
 	"bb-downloader",
 	"bb-config",
 	"bb-helper",
 	"bb-flasher-dfu",
-        "bb-drivelist", 
-        "bb-flasher-mspm0",
-        "bb-bmap-parser",
+        "bb-drivelist",
         "bb-iced-widgets"
 ]
 
@@ -25,6 +21,6 @@ codegen-units = 1
 [workspace.package]
 version = "1.0.13"
 edition = "2024"
-authors = ["Ayush Singh <ayush@beagleboard.org>"]
-repository = "https://github.com/beagleboard/bb-imager-rs"
+authors = ["T3 Gemstone Devteam <dev@t3gemstone.org>"]
+repository = "https://github.com/t3gemstone/imager"
 license = "MIT"

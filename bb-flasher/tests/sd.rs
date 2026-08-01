@@ -26,7 +26,7 @@ fn mock_img() -> OsImage {
     std::io::copy(&mut data.as_slice(), &mut f).unwrap();
     f.flush().unwrap();
 
-    OsImage::from_path(f.path()).unwrap()
+    OsImage::from_path(f.path(), bb_flasher::img::ExtractGate::LocalFile).unwrap()
 }
 
 #[test]
@@ -35,7 +35,6 @@ fn flash_no_progress() {
 
     bb_flasher::sd::Flasher::with_file_dest(
         || Ok((mock_img(), MOCK_IMG_LEN as u64)),
-        None::<Box<dyn FnOnce() -> std::io::Result<Box<str>> + Send>>,
         sd.path().to_path_buf(),
         FlashingSdLinuxConfig::none(),
     )
@@ -59,7 +58,6 @@ fn flash_progress() {
     let handle = std::thread::spawn(move || {
         bb_flasher::sd::Flasher::with_file_dest(
             || Ok((mock_img(), MOCK_IMG_LEN as u64)),
-            None::<Box<dyn FnOnce() -> std::io::Result<Box<str>> + Send>>,
             sd.path().to_path_buf(),
             FlashingSdLinuxConfig::none(),
         )
@@ -94,7 +92,6 @@ fn flash_cancel() {
 
     let res = bb_flasher::sd::Flasher::with_file_dest(
         || Ok((mock_img(), MOCK_IMG_LEN as u64)),
-        None::<Box<dyn FnOnce() -> std::io::Result<Box<str>> + Send>>,
         sd.path().to_path_buf(),
         FlashingSdLinuxConfig::none(),
     )

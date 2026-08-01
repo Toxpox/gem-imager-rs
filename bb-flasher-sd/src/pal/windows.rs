@@ -202,10 +202,16 @@ impl Seek for WinDrive {
 }
 
 /// TODO: Implement real eject
+impl crate::helpers::Commit for WinDrive {
+    fn commit(&mut self) -> io::Result<()> {
+        io::Write::flush(&mut self.drive)?;
+        self.drive.sync_all()
+    }
+}
+
 impl crate::helpers::Eject for WinDrive {
-    fn eject(self) -> io::Result<()> {
-        self.drive.sync_all()?;
-        Ok(())
+    fn eject(mut self) -> io::Result<()> {
+        crate::helpers::Commit::commit(&mut self)
     }
 }
 

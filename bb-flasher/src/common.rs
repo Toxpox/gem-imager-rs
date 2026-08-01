@@ -1,17 +1,6 @@
 //! Stuff common to all the flashers
 
-use std::{borrow::Cow, io::Read};
-
-use thiserror::Error;
-
-#[derive(Error, Debug)]
-pub(crate) enum FlasherError {
-    #[error("Failed to fetch image.")]
-    ImageResolvingError {
-        #[source]
-        source: std::io::Error,
-    },
-}
+use std::borrow::Cow;
 
 /// Enum to denote the Flashing progress.
 ///
@@ -21,7 +10,11 @@ pub enum DownloadFlashingStatus {
     Preparing,
     DownloadingProgress(f32),
     FlashingProgress(f32),
-    Verifying,
+    /// Reading the written data back off the destination and comparing it.
+    ///
+    /// Carries its own fraction rather than being a bare marker: a full read-back takes about as
+    /// long as the write it verifies, and a UI that shows no movement for minutes reads as a hang.
+    Verifying(f32),
     Customizing,
 }
 
@@ -42,17 +35,4 @@ where
 
     /// A sort of device ID (mostly a Path).
     fn identifier<'a>(&'a self) -> Cow<'a, str>;
-}
-
-// Should only be used when image is expected to rather small and can fit in heap.
-pub(crate) fn resolve_img(
-    img: impl FnOnce() -> std::io::Result<(crate::img::OsImage, u64)>,
-) -> Result<Vec<u8>, FlasherError> {
-    let (mut img, _) = img().map_err(|source| FlasherError::ImageResolvingError { source })?;
-
-    let mut data = Vec::new();
-    img.read_to_end(&mut data)
-        .map_err(|source| FlasherError::ImageResolvingError { source })?;
-
-    Ok(data)
 }

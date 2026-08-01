@@ -1,12 +1,8 @@
 //! Module to handle extraction of compressed firmware, auto detection of type of extraction, etc
 
-#[cfg(feature = "sd")]
-use bb_flasher_sd::ContentType;
 #[cfg(feature = "piped_image")]
 use bb_helper::file_stream::ReaderFileStream;
 use rc_zip_sync::ReadZipStreaming;
-#[cfg(feature = "sd")]
-use std::sync::mpsc;
 use std::{
     io::{self, Read, Seek, SeekFrom},
     path::Path,
@@ -16,118 +12,25 @@ use tokio_util::task::AbortOnDropHandle;
 
 #[cfg(test)]
 mod test;
+mod verify;
+
+use verify::ExtractVerifier;
+pub use verify::{ExtractGate, ExtractedIntegrity};
 
 const XZ_MAGIC: [u8; 6] = [0xfd, 0x37, 0x7a, 0x58, 0x5a, 0x00];
 
-#[cfg(feature = "sd")]
-pub struct OsArchive {
-    inner: OsArchiveCompression,
-}
-
-#[cfg(feature = "sd")]
-impl OsArchive {
-    fn new(img: OsImageSource, chan: Option<mpsc::SyncSender<f32>>, size: u64) -> io::Result<Self> {
-        let img = bb_helper::reader_progress::ReaderWithProgress::new(img, size, chan);
-        let img = OsArchiveCompression::new(img)?;
-        Ok(Self { inner: img })
-    }
-
-    pub fn from_path(path: &Path, chan: Option<mpsc::SyncSender<f32>>) -> io::Result<Self> {
-        let file = std::fs::File::open(path)?;
-        let len = file.metadata()?.len();
-
-        let img = OsImageSource::from(file);
-        Self::new(img, chan, len)
-    }
-
-    #[cfg(feature = "piped_image")]
-    pub fn from_piped(
-        img: ReaderFileStream,
-        _background: AbortOnDropHandle<io::Result<()>>,
-        size: u64,
-        chan: Option<mpsc::SyncSender<f32>>,
-    ) -> io::Result<Self> {
-        let img = OsImageSource::FileStream {
-            reader: img,
-            _background,
-        };
-        Self::new(img, chan, size)
-    }
-}
-
-#[cfg(feature = "sd")]
-impl<'a> IntoIterator for &'a mut OsArchive {
-    type Item = (Box<str>, ContentType<'a>);
-    type IntoIter = Box<dyn Iterator<Item = Self::Item> + 'a>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        match &mut self.inner {
-            OsArchiveCompression::TarXz(archive) => {
-                Box::new(archive.entries().unwrap().flat_map(flat_map_with_log))
-            }
-            OsArchiveCompression::Tar(archive) => {
-                Box::new(archive.entries().unwrap().flat_map(flat_map_with_log))
-            }
-        }
-    }
-}
-
-#[cfg(feature = "sd")]
-fn flat_map_with_log<'a, R: Read>(
-    entry: io::Result<tar::Entry<'a, R>>,
-) -> Option<(Box<str>, ContentType<'a>)> {
-    match entry {
-        Ok(x) => Some(tar_entry_map(x)),
-        Err(e) => {
-            tracing::warn!("Dropping archive entry: {}", e);
-            None
-        }
-    }
-}
-
-#[cfg(feature = "sd")]
-fn tar_entry_map<'a, R: Read>(entry: tar::Entry<'a, R>) -> (Box<str>, ContentType<'a>) {
-    let p = entry.path().unwrap().to_string_lossy().to_string().into();
-    let f = if entry.header().entry_type().is_dir() {
-        ContentType::Dir
-    } else {
-        let temp: Box<dyn Read + 'a> = Box::new(entry);
-        ContentType::Reader(temp)
-    };
-
-    (p, f)
-}
-
-#[cfg(feature = "sd")]
-type ProgressSource = bb_helper::reader_progress::ReaderWithProgress<OsImageSource>;
-
-#[cfg(feature = "sd")]
-enum OsArchiveCompression {
-    TarXz(tar::Archive<liblzma::read::XzDecoder<ProgressSource>>),
-    Tar(tar::Archive<io::BufReader<ProgressSource>>),
-}
-
-#[cfg(feature = "sd")]
-impl OsArchiveCompression {
-    fn new(mut img: ProgressSource) -> io::Result<Self> {
-        let mut magic = [0u8; 6];
-        img.read_exact(&mut magic)?;
-        img.rewind()?;
-
-        match magic {
-            XZ_MAGIC => Ok(Self::TarXz(tar::Archive::new(liblzma_new(img)))),
-            _ => Ok(Self::Tar(tar::Archive::new(io::BufReader::new(img)))),
-        }
-    }
-}
-
+/// A decoded OS image, gated on the extracted values the catalog published.
+///
+/// Every constructor takes an [`ExtractGate`]: whether the extracted bytes are checked is a
+/// decision the caller must make explicitly under the integrity policy.
 pub struct OsImage {
     size: u64,
     img: OsImageCompression<OsImageSource>,
+    gate: ExtractVerifier,
 }
 
 impl OsImage {
-    pub fn from_path(path: &Path) -> io::Result<Self> {
+    pub fn from_path(path: &Path, gate: ExtractGate) -> io::Result<Self> {
         let file = std::fs::File::open(path)?;
         let mut img = OsImageCompression::new(OsImageSource::from(file))?;
 
@@ -146,7 +49,11 @@ impl OsImage {
             OsImageCompression::QCow2(x) => x.virtual_disk_size(),
         };
 
-        Ok(Self { size, img })
+        Ok(Self {
+            size,
+            img,
+            gate: ExtractVerifier::new(gate),
+        })
     }
 
     #[cfg(feature = "piped_image")]
@@ -154,6 +61,7 @@ impl OsImage {
         img: ReaderFileStream,
         _background: AbortOnDropHandle<io::Result<()>>,
         size: u64,
+        gate: ExtractGate,
     ) -> io::Result<Self> {
         Ok(Self {
             size,
@@ -161,6 +69,7 @@ impl OsImage {
                 reader: img,
                 _background,
             })?,
+            gate: ExtractVerifier::new(gate),
         })
     }
 
@@ -170,13 +79,26 @@ impl OsImage {
 }
 
 impl Read for OsImage {
+    /// Reads decoded bytes and feeds them to the integrity gate on the way past.
+    ///
+    /// The gate is checked here rather than after the write, because this is the only place that
+    /// sees every extracted byte exactly once, in order, whether the source is a cached archive or
+    /// a download still in flight.
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        match &mut self.img {
+        let count = match &mut self.img {
             OsImageCompression::Xz(x) => x.read(buf),
             OsImageCompression::Zip(x) => x.read(buf),
             OsImageCompression::Uncompressed(x) => x.read(buf),
             OsImageCompression::QCow2(x) => x.read(buf),
+        }?;
+
+        // A zero-length `buf` also yields `count == 0` without the stream having ended, so it must
+        // not be mistaken for EOF.
+        if !buf.is_empty() {
+            self.gate.observe(&buf[..count])?;
         }
+
+        Ok(count)
     }
 }
 

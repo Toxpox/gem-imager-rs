@@ -39,4 +39,3 @@ impl<R: io::Seek> io::Seek for ReaderWithProgress<R> {
         Ok(self.pos)
     }
 }
-

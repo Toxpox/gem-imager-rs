@@ -157,7 +157,7 @@ jobs:
       with:
         command: build
         target: ${{matrix.platform}}
-        args: "--locked --release -F bcf_msp430,bcf_cc1352p7,dfu,zepto_uart,zepto_i2c -p bb-imager-cli"
+        args: "--locked --release -F dfu -p bb-imager-cli"
 
     - name: Build packages
       run: make setup-packaging-deps package-${{matrix.platform}}
@@ -340,8 +340,8 @@ jobs:
 
       - name: Setup git
         run: |
-          git config --global user.email "ayush@beagleboard.org"
-          git config --global user.name "Ayush Singh"
+          git config --global user.email "dev@t3gemstone.org"
+          git config --global user.name "T3 Gemstone Devteam"
 
       - name: Clone AUR repo
         run: git clone ssh://aur@aur.archlinux.org/bb-imager-cli.git $GITHUB_WORKSPACE

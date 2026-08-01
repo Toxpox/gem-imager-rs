@@ -3,8 +3,6 @@ use std::{borrow::Cow, fmt::Display, path::PathBuf, sync::LazyLock, time::Durati
 
 use crate::{BBImagerMessage, PACKAGE_QUALIFIER, constants};
 use bb_config::config;
-#[cfg(feature = "sd")]
-use bb_flasher::img::OsArchive;
 use bb_flasher::img::OsImage;
 use bb_flasher::{BBFlasherTarget, DownloadFlashingStatus};
 use bb_helper::file_stream::ReaderFileStream;
@@ -29,7 +27,6 @@ pub(crate) enum BoardImage {
         flasher: config::Flasher,
         init_format: config::InitFormat,
         img: SelectedImage,
-        bmap: Option<Bmap>,
         info_text: Option<String>,
         description: Option<String>,
         icon: BoardImageIcon,
@@ -48,7 +45,6 @@ impl BoardImage {
 
         Self::Image {
             img: bb_flasher::LocalImage::new(path.into()).into(),
-            bmap: None,
             flasher,
             // Do not try to apply customization for local images
             init_format: config::InitFormat::None,
@@ -79,14 +75,12 @@ impl BoardImage {
                 image.name.into(),
                 Box::new(image.url),
                 image.image_download_sha256,
+                image.image_download_size.map(|x| x as u64),
+                image.extract_sha256,
                 image.extract_size as u64,
                 downloader.clone(),
             )
             .into(),
-            bmap: image.bmap.map(|url| Bmap {
-                url: Box::new(url),
-                downloader,
-            }),
             flasher,
             init_format: image.init_format,
             info_text: image.info_text,
@@ -235,12 +229,23 @@ pub(crate) fn system_keymap() -> &'static str {
     (*SYSTEM_KEYMAP).unwrap_or("us")
 }
 
+/// A catalog image, with the integrity values the catalog published for it.
+///
+/// The two hashes are *not* interchangeable and never share a name (the catalog validation rules):
+/// `archive_sha256` covers the compressed download and is what the cache is addressed by;
+/// `extract_sha256` covers the bytes that reach the board. Previously this struct called the
+/// archive hash `extract_sha256` while being handed `image_download_sha256`, so the extracted
+/// bytes were never checked at all.
 #[derive(Debug, Clone, serde::Serialize)]
 pub(crate) struct RemoteImage {
     name: Box<str>,
     url: Box<url::Url>,
     #[serde(with = "const_hex")]
-    extract_sha256: [u8; 32],
+    archive_sha256: [u8; 32],
+    archive_size: Option<u64>,
+    /// `None` when the catalog entry predates the extracted-digest contract.
+    #[serde(skip)]
+    extract_sha256: Option<[u8; 32]>,
     extract_size: u64,
     #[serde(skip)]
     downloader: bb_downloader::Downloader,
@@ -250,16 +255,33 @@ impl RemoteImage {
     pub(crate) fn new(
         name: Box<str>,
         url: Box<url::Url>,
-        extract_sha256: [u8; 32],
+        archive_sha256: [u8; 32],
+        archive_size: Option<u64>,
+        extract_sha256: Option<[u8; 32]>,
         extract_size: u64,
         downloader: bb_downloader::Downloader,
     ) -> Self {
         Self {
             name,
             url,
+            archive_sha256,
+            archive_size,
             extract_sha256,
             extract_size,
             downloader,
+        }
+    }
+
+    /// The extracted-side gate for this image.
+    ///
+    /// A catalog entry that publishes an extracted digest is held to it; one that does not is
+    /// marked as such rather than quietly treated as verified.
+    fn extract_gate(&self) -> bb_flasher::img::ExtractGate {
+        match self.extract_sha256 {
+            Some(sha256) => bb_flasher::img::ExtractGate::Declared(
+                bb_flasher::img::ExtractedIntegrity::new(self.extract_size, sha256),
+            ),
+            None => bb_flasher::img::ExtractGate::UndeclaredLegacyCatalog,
         }
     }
 
@@ -275,7 +297,8 @@ impl RemoteImage {
         let rt = tokio::runtime::Handle::current();
         move || {
             let downloader = self.downloader.clone();
-            let cache = downloader.check_cache_from_sha(self.extract_sha256);
+            // The cache is addressed by the *archive* hash, because the archive is what is stored.
+            let cache = downloader.check_cache_from_sha(self.archive_sha256);
 
             if let Some(path) = cache {
                 tracing::info!("Found the remote image in cache");
@@ -286,11 +309,14 @@ impl RemoteImage {
             let (tx_stream, rx) = bb_helper::file_stream::file_stream()?;
             let downloader = self.downloader.clone();
             let url = self.url.clone();
-            let sha = self.extract_sha256;
+            let integrity = bb_downloader::ArchiveIntegrity {
+                sha256: self.archive_sha256,
+                size: self.archive_size,
+            };
 
             let t: tokio::task::JoinHandle<io::Result<()>> = rt.spawn(async move {
                 downloader
-                    .download_to_stream(*url, sha, tx_stream)
+                    .download_to_stream(*url, integrity, tx_stream)
                     .await
                     .map_err(|e| {
                         let msg = format!("Error while downloading Os Image: {e}");
@@ -305,24 +331,15 @@ impl RemoteImage {
         }
     }
 
-    #[cfg(feature = "sd")]
-    fn into_archive_fn(
-        self,
-        tx: Option<mpsc::SyncSender<f32>>,
-    ) -> impl FnOnce() -> io::Result<OsArchive> {
-        let tx_clone = tx.clone();
-        self.open(
-            move |p| OsArchive::from_path(p, tx_clone),
-            move |rx, abort, es| OsArchive::from_piped(rx, abort, es, tx),
-        )
-    }
-
     fn into_image_fn(self) -> impl FnOnce() -> io::Result<(OsImage, u64)> {
         let extract_size = self.extract_size;
+        // Captured before `self` is consumed; the gate is the same whether the archive comes from
+        // the cache or straight off the wire.
+        let gate = self.extract_gate();
         self.open(
-            move |p| Ok((OsImage::from_path(p)?, extract_size)),
+            move |p| Ok((OsImage::from_path(p, gate)?, extract_size)),
             move |rx, abort, es| {
-                let img = OsImage::from_piped(rx, abort, es)?;
+                let img = OsImage::from_piped(rx, abort, es, gate)?;
                 Ok((img, es))
             },
         )
@@ -336,27 +353,11 @@ impl std::fmt::Display for RemoteImage {
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
-pub(crate) struct Bmap {
-    url: Box<Url>,
-    #[serde(skip)]
-    downloader: bb_downloader::Downloader,
-}
-
-impl Bmap {
-    fn into_fn(self) -> impl FnOnce() -> io::Result<Box<str>> {
-        let rt = tokio::runtime::Handle::current();
-        move || {
-            let res =
-                rt.block_on(async move { self.downloader.download(*self.url.clone()).await })?;
-            std::fs::read_to_string(res).map(Into::into)
-        }
-    }
-}
-
-#[derive(Debug, Clone, serde::Serialize)]
 pub(crate) enum SelectedImage {
     LocalImage(bb_flasher::LocalImage),
-    RemoteImage(RemoteImage),
+    /// Boxed because a remote image carries the whole published integrity set while a local one is
+    /// just a path; inlining it would make every `SelectedImage` pay for the larger variant.
+    RemoteImage(Box<RemoteImage>),
 }
 
 impl SelectedImage {
@@ -367,21 +368,10 @@ impl SelectedImage {
         }
     }
 
-    #[cfg(feature = "sd")]
-    fn into_archive_fn(
-        self,
-        tx: Option<mpsc::SyncSender<f32>>,
-    ) -> Box<dyn FnOnce() -> io::Result<OsArchive>> {
-        match self {
-            SelectedImage::LocalImage(x) => Box::new(x.into_archive_fn(tx)),
-            SelectedImage::RemoteImage(x) => Box::new(x.into_archive_fn(tx)),
-        }
-    }
-
     fn into_image_fn(self) -> Box<dyn FnOnce() -> io::Result<(OsImage, u64)> + Send> {
         match self {
             SelectedImage::LocalImage(x) => Box::new(x.into_image_fn()),
-            SelectedImage::RemoteImage(x) => Box::new(x.into_image_fn()),
+            SelectedImage::RemoteImage(x) => Box::new((*x).into_image_fn()),
         }
     }
 }
@@ -397,7 +387,7 @@ impl std::fmt::Display for SelectedImage {
 
 impl From<RemoteImage> for SelectedImage {
     fn from(value: RemoteImage) -> Self {
-        Self::RemoteImage(value)
+        Self::RemoteImage(Box::new(value))
     }
 }
 
@@ -422,123 +412,35 @@ pub(crate) async fn flash(
                 .unwrap()
         }
         #[cfg(feature = "sd")]
-        (
-            BoardImage::Image {
-                img, bmap, flasher, ..
-            },
-            customization,
-            Destination::LocalFile(f),
-        ) if flasher == config::Flasher::SdCard => tokio::task::spawn_blocking(move || {
-            bb_flasher::sd::Flasher::with_file_dest(
-                img.into_image_fn(),
-                bmap.map(|x| x.into_fn()),
-                f,
-                customization.sd_customization(),
-            )
-            .flash(Some(chan), Some(cancel_sync))
-        })
-        .await
-        .unwrap(),
-        #[cfg(feature = "sd")]
-        (
-            BoardImage::Image {
-                img, bmap, flasher, ..
-            },
-            customization,
-            Destination::SdCard(t),
-        ) if flasher == config::Flasher::SdCard => tokio::task::spawn_blocking(move || {
-            bb_flasher::sd::Flasher::new(
-                img.into_image_fn(),
-                bmap.map(|x| x.into_fn()),
-                t,
-                customization.sd_customization(),
-            )
-            .flash(Some(chan), Some(cancel_sync))
-        })
-        .await
-        .unwrap(),
-        #[cfg(feature = "sd")]
-        (BoardImage::Image { img, flasher, .. }, _, Destination::SdCard(t))
-            if flasher == config::Flasher::SdCardBootfs =>
+        (BoardImage::Image { img, flasher, .. }, customization, Destination::LocalFile(f))
+            if flasher == config::Flasher::SdCard =>
         {
-            let (tx, rx) = std::sync::mpsc::sync_channel(4);
             tokio::task::spawn_blocking(move || {
-                while let Ok(msg) = rx.recv() {
-                    let _ = chan.try_send(DownloadFlashingStatus::FlashingProgress(msg));
-                }
-            });
-            tokio::task::spawn_blocking(move || {
-                bb_flasher::sd::UpdateBootFlasher::new(
-                    img.into_archive_fn(Some(tx)),
-                    t,
-                    Some(cancel_sync),
+                bb_flasher::sd::Flasher::with_file_dest(
+                    img.into_image_fn(),
+                    f,
+                    customization.sd_customization()?,
                 )
-                .flash()
+                .flash(Some(chan), Some(cancel_sync))
             })
             .await
             .unwrap()
         }
         #[cfg(feature = "sd")]
-        (BoardImage::Image { img, flasher, .. }, _, Destination::LocalFile(t))
-            if flasher == config::Flasher::SdCardBootfs =>
+        (BoardImage::Image { img, flasher, .. }, customization, Destination::SdCard(t))
+            if flasher == config::Flasher::SdCard =>
         {
-            let (tx, rx) = std::sync::mpsc::sync_channel(4);
             tokio::task::spawn_blocking(move || {
-                while let Ok(msg) = rx.recv() {
-                    let _ = chan.try_send(DownloadFlashingStatus::FlashingProgress(msg));
-                }
-            });
-            tokio::task::spawn_blocking(move || {
-                bb_flasher::sd::UpdateBootFlasher::with_file_dest(
-                    img.into_archive_fn(Some(tx)),
+                bb_flasher::sd::Flasher::new(
+                    img.into_image_fn(),
                     t,
-                    Some(cancel_sync),
+                    customization.sd_customization()?,
                 )
-                .flash()
+                .flash(Some(chan), Some(cancel_sync))
             })
             .await
             .unwrap()
         }
-        #[cfg(feature = "bcf_cc1352p7")]
-        (
-            BoardImage::Image { img, .. },
-            FlashingCustomization::Bcf(customization),
-            Destination::BeagleConnectFreedom(t),
-        ) => tokio::task::spawn_blocking(move || {
-            bb_flasher::bcf::cc1352p7::Flasher::new(
-                img.into_image_fn(),
-                t,
-                customization.verify,
-                Some(cancel_sync),
-            )
-            .flash(Some(chan))
-        })
-        .await
-        .unwrap(),
-        #[cfg(feature = "bcf_msp430")]
-        (BoardImage::Image { img, .. }, FlashingCustomization::Msp430, Destination::Msp430(t)) => {
-            tokio::task::spawn_blocking(move || {
-                bb_flasher::bcf::msp430::Flasher::new(img.into_image_fn(), t).flash(Some(chan))
-            })
-            .await
-            .unwrap()
-        }
-        #[cfg(any(feature = "zepto_uart", feature = "zepto_i2c"))]
-        (
-            BoardImage::Image { img, .. },
-            FlashingCustomization::Zepto(customization),
-            Destination::Mspm0(t),
-        ) => tokio::task::spawn_blocking(move || {
-            bb_flasher::mspm0::Flasher::no_prep(
-                img.into_image_fn(),
-                t,
-                customization.verify,
-                Some(cancel_sync),
-            )
-            .flash(Some(chan))
-        })
-        .await
-        .unwrap(),
         _ => unimplemented!(),
     }
 }
@@ -548,12 +450,6 @@ pub(crate) enum Destination {
     LocalFile(PathBuf),
     #[cfg(feature = "sd")]
     SdCard(bb_flasher::sd::Target),
-    #[cfg(feature = "bcf_cc1352p7")]
-    BeagleConnectFreedom(bb_flasher::bcf::cc1352p7::Target),
-    #[cfg(feature = "bcf_msp430")]
-    Msp430(bb_flasher::bcf::msp430::Target),
-    #[cfg(any(feature = "zepto_uart", feature = "zepto_i2c"))]
-    Mspm0(bb_flasher::mspm0::Target),
 }
 
 impl Display for Destination {
@@ -562,12 +458,6 @@ impl Display for Destination {
             Destination::LocalFile(_) => write!(f, "Save To File"),
             #[cfg(feature = "sd")]
             Destination::SdCard(target) => target.fmt(f),
-            #[cfg(feature = "bcf_cc1352p7")]
-            Destination::BeagleConnectFreedom(target) => target.fmt(f),
-            #[cfg(feature = "bcf_msp430")]
-            Destination::Msp430(target) => target.fmt(f),
-            #[cfg(any(feature = "zepto_uart", feature = "zepto_i2c"))]
-            Destination::Mspm0(target) => target.fmt(f),
         }
     }
 }
@@ -595,12 +485,6 @@ impl Destination {
                 ("Path", t.path().to_string_lossy().to_string()),
                 ("Size", pretty_bytes(t.size())),
             ],
-            #[cfg(feature = "bcf_cc1352p7")]
-            Self::BeagleConnectFreedom(t) => vec![("Path", t.path().to_string())],
-            #[cfg(feature = "bcf_msp430")]
-            Self::Msp430(t) => vec![("Path", t.path().to_string())],
-            #[cfg(any(feature = "zepto_uart", feature = "zepto_i2c"))]
-            Self::Mspm0(t) => vec![("Path", t.path().to_string())],
         }
     }
 }
@@ -608,29 +492,12 @@ impl Destination {
 pub(crate) fn destinations(flasher: config::Flasher, filter: bool) -> Vec<Destination> {
     match flasher {
         #[cfg(feature = "sd")]
-        config::Flasher::SdCard | config::Flasher::SdCardBootfs => {
-            bb_flasher::sd::Target::destinations(filter)
-                .into_iter()
-                .map(Destination::SdCard)
-                .collect()
-        }
-        #[cfg(feature = "bcf_cc1352p7")]
-        config::Flasher::BeagleConnectFreedom => {
-            bb_flasher::bcf::cc1352p7::Target::destinations(filter)
-                .into_iter()
-                .map(Destination::BeagleConnectFreedom)
-                .collect()
-        }
-        #[cfg(feature = "bcf_msp430")]
-        config::Flasher::Msp430Usb => bb_flasher::bcf::msp430::Target::destinations(filter)
+        config::Flasher::SdCard => bb_flasher::sd::Target::destinations(filter)
             .into_iter()
-            .map(Destination::Msp430)
+            .map(Destination::SdCard)
             .collect(),
-        #[cfg(any(feature = "zepto_uart", feature = "zepto_i2c"))]
-        config::Flasher::Mspm0 => bb_flasher::mspm0::Target::destinations(filter)
-            .into_iter()
-            .map(Destination::Mspm0)
-            .collect(),
+        // Only reachable when the crate is built without the `sd` feature.
+        #[allow(unreachable_patterns)]
         _ => unimplemented!(),
     }
 }
@@ -638,15 +505,9 @@ pub(crate) fn destinations(flasher: config::Flasher, filter: bool) -> Vec<Destin
 pub(crate) fn file_filter(flasher: config::Flasher) -> &'static [&'static str] {
     match flasher {
         #[cfg(feature = "sd")]
-        config::Flasher::SdCard | config::Flasher::SdCardBootfs => {
-            bb_flasher::sd::Target::FILE_TYPES
-        }
-        #[cfg(feature = "bcf_cc1352p7")]
-        config::Flasher::BeagleConnectFreedom => bb_flasher::bcf::cc1352p7::Target::FILE_TYPES,
-        #[cfg(feature = "bcf_msp430")]
-        config::Flasher::Msp430Usb => bb_flasher::bcf::msp430::Target::FILE_TYPES,
-        #[cfg(any(feature = "zepto_uart", feature = "zepto_i2c"))]
-        config::Flasher::Mspm0 => bb_flasher::mspm0::Target::FILE_TYPES,
+        config::Flasher::SdCard => bb_flasher::sd::Target::FILE_TYPES,
+        // Only reachable when the crate is built without the `sd` feature.
+        #[allow(unreachable_patterns)]
         _ => unimplemented!(),
     }
 }
@@ -654,13 +515,9 @@ pub(crate) fn file_filter(flasher: config::Flasher) -> &'static [&'static str] {
 pub(crate) const fn flasher_supported(flasher: config::Flasher) -> bool {
     match flasher {
         #[cfg(feature = "sd")]
-        config::Flasher::SdCard | config::Flasher::SdCardBootfs => true,
-        #[cfg(feature = "bcf_cc1352p7")]
-        config::Flasher::BeagleConnectFreedom => true,
-        #[cfg(feature = "bcf_msp430")]
-        config::Flasher::Msp430Usb => true,
-        #[cfg(any(feature = "zepto_uart", feature = "zepto_i2c"))]
-        config::Flasher::Mspm0 => true,
+        config::Flasher::SdCard => true,
+        // Only reachable when the crate is built without the `sd` feature.
+        #[allow(unreachable_patterns)]
         _ => false,
     }
 }
@@ -670,9 +527,12 @@ pub(crate) enum FlashingCustomization {
     NoneSd,
     LinuxSdSysconfig(crate::persistance::SdSysconfCustomization),
     LinuxSdCloudInit(crate::persistance::SdSysconfCustomization),
-    Bcf(crate::persistance::BcfCustomization),
-    Msp430,
-    Zepto(crate::persistance::BcfCustomization),
+    /// T3 GemStone `config.ini`. The flag carries whether the selected image is a desktop variant,
+    /// which is what decides whether the VNC fields exist at all.
+    T3GemInit {
+        config: crate::persistance::T3GemInitCustomization,
+        desktop: bool,
+    },
 }
 
 impl FlashingCustomization {
@@ -700,31 +560,35 @@ impl FlashingCustomization {
                         .unwrap_or_default(),
                 )
             }
-            config::Flasher::SdCard | config::Flasher::SdCardBootfs => Self::NoneSd,
-            config::Flasher::BeagleConnectFreedom => {
-                Self::Bcf(app_config.bcf_customization.clone().unwrap_or_default())
+            flasher if img.init_format().is_gem_init() && flasher == config::Flasher::SdCard => {
+                Self::T3GemInit {
+                    config: app_config
+                        .sd_customization
+                        .as_ref()
+                        .and_then(|x| x.t3_customization().cloned())
+                        .unwrap_or_default(),
+                    desktop: img.init_format().supports_vnc(),
+                }
             }
-            config::Flasher::Msp430Usb => Self::Msp430,
-            config::Flasher::Mspm0 => {
-                Self::Zepto(app_config.zepto_customization.clone().unwrap_or_default())
-            }
+            config::Flasher::SdCard => Self::NoneSd,
+            #[allow(unreachable_patterns)]
             _ => unimplemented!(),
         }
     }
 
     pub(crate) fn reset(&mut self) {
         match self {
-            Self::LinuxSdSysconfig(_) => {
-                *self = Self::LinuxSdSysconfig(Default::default());
-            }
-            Self::Bcf(_) => {
-                *self = Self::Bcf(Default::default());
-            }
-            Self::Zepto(_) => {
-                *self = Self::Zepto(Default::default());
+            Self::LinuxSdSysconfig(_) => *self = Self::LinuxSdSysconfig(Default::default()),
+            // Resetting must clear the secrets too, so the whole buffer is replaced rather than
+            // having its non-secret fields cleared one by one.
+            Self::T3GemInit { desktop, .. } => {
+                *self = Self::T3GemInit {
+                    config: Default::default(),
+                    desktop: *desktop,
+                }
             }
             _ => {}
-        };
+        }
     }
 
     pub(crate) fn validate(&self) -> bool {
@@ -732,20 +596,41 @@ impl FlashingCustomization {
             FlashingCustomization::LinuxSdSysconfig(sd_customization) => {
                 sd_customization.validate_user()
             }
+            // The T3 screen is valid exactly when the file it describes can be produced, so this
+            // asks the serializer instead of duplicating its rules.
+            FlashingCustomization::T3GemInit { config, desktop } => config.build(*desktop).is_ok(),
             _ => true,
         }
     }
 
-    #[cfg(feature = "sd")]
-    fn sd_customization(self) -> bb_flasher::sd::FlashingSdLinuxConfig {
+    /// The first problem with the current T3 form, for display next to the disabled NEXT button.
+    ///
+    /// Returns `None` when the form is valid or is not a T3 form.
+    pub(crate) fn validation_error(&self) -> Option<String> {
         match self {
+            FlashingCustomization::T3GemInit { config, desktop } => {
+                config.build(*desktop).err().map(|e| e.to_string())
+            }
+            _ => None,
+        }
+    }
+
+    /// Build the customization the flasher will apply.
+    ///
+    /// This returns a `Result` rather than falling back to "no customization": a card flashed
+    /// without the first-boot file the user configured is a wrong result, not a degraded one, and
+    /// it would only be discovered after boot.
+    #[cfg(feature = "sd")]
+    fn sd_customization(self) -> anyhow::Result<bb_flasher::sd::FlashingSdLinuxConfig> {
+        Ok(match self {
             FlashingCustomization::LinuxSdSysconfig(c) => c.sysconfig(),
             FlashingCustomization::LinuxSdCloudInit(c) => c.cloudinit(),
             FlashingCustomization::NoneSd => bb_flasher::sd::FlashingSdLinuxConfig::none(),
-            FlashingCustomization::Bcf(_)
-            | FlashingCustomization::Msp430
-            | FlashingCustomization::Zepto(_) => unreachable!(),
-        }
+            FlashingCustomization::T3GemInit { config, desktop } => {
+                let config = config.build(desktop)?;
+                bb_flasher::sd::FlashingSdLinuxConfig::t3_gem_init(&config)?
+            }
+        })
     }
 }
 
@@ -753,11 +638,10 @@ impl FlashingCustomization {
 async fn show_notification_xdg_portal(body: &str) -> ashpd::Result<()> {
     let proxy = ashpd::desktop::notification::NotificationProxy::new().await?;
 
-    let app_id = "org.beagleboard.imagingutility";
     proxy
         .add_notification(
-            app_id,
-            ashpd::desktop::notification::Notification::new("BeagleBoard Imager").body(body),
+            constants::APP_ID,
+            ashpd::desktop::notification::Notification::new(constants::APP_NAME).body(body),
         )
         .await
 }
@@ -771,7 +655,7 @@ pub(crate) async fn show_notification(body: String) -> anyhow::Result<()> {
     #[cfg(feature = "notify-rust")]
     if tokio::task::spawn_blocking(move || {
         notify_rust::Notification::new()
-            .appname("BeagleBoard Imager")
+            .appname(constants::APP_NAME)
             .body(&body)
             .finalize()
             .show()
@@ -832,15 +716,12 @@ pub(crate) fn no_customization(
     match flasher {
         config::Flasher::SdCard
             if img.init_format() == config::InitFormat::Sysconf
-                || img.init_format() == config::InitFormat::CloudInit =>
+                || img.init_format() == config::InitFormat::CloudInit
+                || img.init_format().is_gem_init() =>
         {
             None
         }
-        config::Flasher::SdCard | config::Flasher::SdCardBootfs => {
-            Some(FlashingCustomization::NoneSd)
-        }
-        config::Flasher::Msp430Usb => Some(FlashingCustomization::Msp430),
-        _ => None,
+        config::Flasher::SdCard => Some(FlashingCustomization::NoneSd),
     }
 }
 
@@ -1000,6 +881,68 @@ pub(crate) fn fetch_images(
     iced::Task::batch(tasks)
 }
 
+/// Whether a remote config URL is the T3 image catalog.
+///
+/// Matched on host rather than on the exact URL so a mirror or a path change still takes the
+/// strict adapter instead of silently falling back to the BeagleBoard parser.
+fn is_t3_catalog(url: &Url) -> bool {
+    bb_config::t3::T3_CATALOG_URL
+        .parse::<Url>()
+        .ok()
+        .and_then(|canonical| Some((canonical.host_str()?.to_owned(), url.host_str()?)))
+        .is_some_and(|(canonical_host, host)| canonical_host == host)
+}
+
+/// Fetch a remote config, routing the T3 catalog through its strict adapter.
+///
+/// The T3 document must never be parsed as a [`bb_config::config::Config`]. It has no `flasher`
+/// field on devices and declares `init_format: "systemd"` on images, and both structs are parsed
+/// with `VecSkipError` — so the legacy path does not fail, it yields an **empty board and image
+/// list**. That is why the board never appeared. Anything that is not the T3 catalog keeps the
+/// original path.
+pub(crate) async fn fetch_remote_config(
+    downloader: &bb_downloader::Downloader,
+    url: Url,
+) -> std::io::Result<bb_config::config::Config> {
+    if !is_t3_catalog(&url) {
+        return Ok(downloader.download_json_no_cache(url).await?);
+    }
+
+    let raw: bb_config::t3::RawT3Catalog = downloader.download_json_no_cache(url.clone()).await?;
+
+    // Product scope: T3-GEM-O1 and BeagleY-AI, and nothing else. The catalog also publishes a
+    // tagless "No filtering" pseudo-device, which carries neither board tag and is therefore out
+    // of scope by construction rather than by a name check.
+    let parsed = bb_config::t3::validate_catalog(
+        raw,
+        bb_config::t3::ProductScope::T3AndBeagleY,
+        url.as_str(),
+    )
+    .map_err(|e| std::io::Error::other(format!("T3 catalog rejected: {e}")))?;
+
+    // Every dropped or downgraded entry carries a JSON path. Surfacing them is what keeps a
+    // shrinking catalog visible instead of looking like a normal, smaller list.
+    for diagnostic in &parsed.diagnostics {
+        tracing::warn!("T3 catalog: {diagnostic}");
+    }
+    if parsed.rejected_boards > 0 || parsed.rejected_images > 0 {
+        tracing::warn!(
+            "T3 catalog: dropped {} board(s) and {} image(s)",
+            parsed.rejected_boards,
+            parsed.rejected_images
+        );
+    }
+
+    let config = bb_config::t3::catalog_to_config(&parsed.catalog);
+    tracing::info!(
+        "T3 catalog: {} board(s) and {} image(s) in scope",
+        config.imager.devices.len(),
+        config.os_list.len()
+    );
+
+    Ok(config)
+}
+
 pub(crate) fn fetch_remote_subitems(
     items: impl IntoIterator<Item = (i64, Url)>,
     downloader: bb_downloader::Downloader,
@@ -1064,8 +1007,7 @@ where
 mod tests {
     use super::*;
     use crate::persistance::{
-        BcfCustomization, GuiConfiguration, SdCustomizationUser, SdCustomizationWifi,
-        SdSysconfCustomization,
+        GuiConfiguration, SdCustomizationUser, SdCustomizationWifi, SdSysconfCustomization,
     };
 
     #[test]
@@ -1102,22 +1044,6 @@ mod tests {
             flasher_supported(config::Flasher::SdCard),
             cfg!(feature = "sd")
         );
-        assert_eq!(
-            flasher_supported(config::Flasher::SdCardBootfs),
-            cfg!(feature = "sd")
-        );
-        assert_eq!(
-            flasher_supported(config::Flasher::BeagleConnectFreedom),
-            cfg!(feature = "bcf_cc1352p7")
-        );
-        assert_eq!(
-            flasher_supported(config::Flasher::Msp430Usb),
-            cfg!(feature = "bcf_msp430")
-        );
-        assert_eq!(
-            flasher_supported(config::Flasher::Mspm0),
-            cfg!(any(feature = "zepto_uart", feature = "zepto_i2c"))
-        );
     }
 
     #[test]
@@ -1145,15 +1071,6 @@ mod tests {
             no_customization(config::Flasher::SdCard, &img),
             Some(FlashingCustomization::NoneSd)
         ));
-        assert!(matches!(
-            no_customization(config::Flasher::SdCardBootfs, &img),
-            Some(FlashingCustomization::NoneSd)
-        ));
-        assert!(matches!(
-            no_customization(config::Flasher::Msp430Usb, &img),
-            Some(FlashingCustomization::Msp430)
-        ));
-        assert!(no_customization(config::Flasher::BeagleConnectFreedom, &img).is_none());
     }
 
     #[test]
@@ -1165,18 +1082,6 @@ mod tests {
         assert!(matches!(
             FlashingCustomization::new(config::Flasher::SdCard, &img, &cfg),
             FlashingCustomization::NoneSd
-        ));
-        assert!(matches!(
-            FlashingCustomization::new(config::Flasher::BeagleConnectFreedom, &img, &cfg),
-            FlashingCustomization::Bcf(_)
-        ));
-        assert!(matches!(
-            FlashingCustomization::new(config::Flasher::Msp430Usb, &img, &cfg),
-            FlashingCustomization::Msp430
-        ));
-        assert!(matches!(
-            FlashingCustomization::new(config::Flasher::Mspm0, &img, &cfg),
-            FlashingCustomization::Zepto(_)
         ));
     }
 
@@ -1193,13 +1098,6 @@ mod tests {
 
     #[test]
     fn flashing_customization_reset_restores_defaults() {
-        let mut bcf = FlashingCustomization::Bcf(BcfCustomization { verify: false });
-        bcf.reset();
-        assert!(matches!(
-            bcf,
-            FlashingCustomization::Bcf(BcfCustomization { verify: true })
-        ));
-
         let mut sysconf = FlashingCustomization::LinuxSdSysconfig(
             SdSysconfCustomization::default().update_hostname(Some("h".into())),
         );
@@ -1238,11 +1136,8 @@ mod tests {
         let file = tempfile::NamedTempFile::new().unwrap();
         std::fs::write(file.path(), b"0123456789").unwrap();
 
-        let img = BoardImage::local(
-            file.path().to_path_buf(),
-            config::Flasher::BeagleConnectFreedom,
-        );
-        assert_eq!(img.flasher(), config::Flasher::BeagleConnectFreedom);
+        let img = BoardImage::local(file.path().to_path_buf(), config::Flasher::SdCard);
+        assert_eq!(img.flasher(), config::Flasher::SdCard);
         assert_eq!(img.init_format(), config::InitFormat::None);
         assert!(matches!(img.icon(), BoardImageIcon::Local));
         assert!(img.description().is_none());
@@ -1251,8 +1146,17 @@ mod tests {
         let details = img.details();
         assert!(details.iter().any(|(k, _)| *k == "Path"));
         assert!(details.iter().any(|(k, v)| *k == "Size" && v == "10"));
-        // Local (non-SD) images offer no init-format customization.
-        assert!(img.supported_init_formats().is_empty());
+        // A local file carries no catalog metadata, so the format cannot be derived from it. For an
+        // SD target the user picks one instead (see `board_image_update_init_format_on_image`),
+        // which is why both BeagleBoard formats are offered rather than none.
+        //
+        // The T3 GemInit formats are deliberately absent: writing `config.ini` onto an arbitrary
+        // local image would be guessing that the image is a T3 one and could silently write an
+        // unsupported configuration.
+        assert_eq!(
+            img.supported_init_formats(),
+            &[config::InitFormat::Sysconf, config::InitFormat::CloudInit]
+        );
     }
 
     #[test]

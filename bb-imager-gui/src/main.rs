@@ -54,7 +54,7 @@ fn main() -> iced::Result {
 
     #[cfg(target_os = "macos")]
     // HACK: mac_notification_sys set application name (not an option in notify-rust)
-    let _ = notify_rust::set_application("org.beagleboard.imagingutility");
+    let _ = notify_rust::set_application(constants::APP_ID);
 
     let settings = iced::window::Settings {
         min_size: Some(constants::WINDOW_SIZE),
@@ -143,14 +143,14 @@ impl BBImager {
 
     fn theme(&self) -> iced::Theme {
         iced::Theme::custom(
-            "Beagle",
+            "T3 Gemstone",
             iced::theme::Palette {
-                background: constants::BACKGROUND,
+                background: constants::GEMSTONE_NAVY,
                 text: iced::Color::WHITE,
-                primary: constants::TONGUE_ORANGE,
-                success: constants::CHECK_MARK_GREEN,
-                warning: constants::HAIR_LIGHT_BROWN,
-                danger: constants::DANGER,
+                primary: constants::GEMSTONE_ROSE,
+                success: constants::SUCCESS_GREEN,
+                warning: constants::WARNING_AMBER,
+                danger: constants::DANGER_RED,
             },
         )
     }
@@ -297,7 +297,12 @@ impl BBImager {
                 }
                 Err(e) => {
                     tracing::error!("Flashing failed with error: {:#?}", e);
-                    BBImagerMessage::FlashFail(e.to_string())
+                    // `{e}` prints only the outermost error, and the outermost error is often the
+                    // least informative one: an integrity failure arrives wrapped as "Unknown Error
+                    // during IO", which reads exactly like a full disk or a permissions problem.
+                    // `{e:#}` appends the source chain, so the user can tell "this image is not the
+                    // one the catalog published, download it again" from "your card is faulty".
+                    BBImagerMessage::FlashFail(format!("{e:#}"))
                 }
             };
 
@@ -477,15 +482,19 @@ impl BBImager {
 
                     Task::batch([inner.save_app_config(), self.scroll_reset()])
                 }
-                helpers::FlashingCustomization::Bcf(c) => {
-                    inner.common.app_config.update_bcf_customization(c.clone());
-                    Task::batch([inner.save_app_config(), self.scroll_reset()])
-                }
-                helpers::FlashingCustomization::Zepto(c) => {
-                    inner
+                // Saved for convenience on the next run. The secret fields are `#[serde(skip)]`,
+                // so what lands on disk is the host name, network name, country, time zone and
+                // keymap — never a password (the secret-handling policy).
+                helpers::FlashingCustomization::T3GemInit { config, .. } => {
+                    let mut temp = inner
                         .common
                         .app_config
-                        .update_zepto_customization(c.clone());
+                        .sd_customization
+                        .clone()
+                        .unwrap_or_default();
+                    temp.update_t3(config.clone());
+                    inner.common.app_config.update_sd_customization(temp);
+
                     Task::batch([inner.save_app_config(), self.scroll_reset()])
                 }
                 _ => self.scroll_reset(),

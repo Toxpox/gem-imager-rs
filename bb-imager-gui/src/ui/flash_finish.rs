@@ -8,7 +8,7 @@ use crate::{BBImagerMessage, constants};
 pub(crate) fn fail(state: &FlashingFailState) -> Element<'_, BBImagerMessage> {
     page_type1(
         info_view(state),
-        progress_finish_view("Failed", constants::DANGER, &state.err),
+        progress_finish_view("Failed", constants::DANGER_RED, &state.err),
         [
             button("Flash New")
                 .style(widget::button::danger)
@@ -36,7 +36,7 @@ pub(crate) fn cancel(state: &FlashingFinishState) -> Element<'_, BBImagerMessage
         board_view_pane(&state.selected_board, &state.common),
         progress_finish_view(
             "Cancelled",
-            constants::DANGER,
+            constants::DANGER_RED,
             "Flashing Cancelled by the user",
         ),
         [button("Restart")
@@ -54,7 +54,7 @@ pub(crate) fn success(state: &FlashingFinishState) -> Element<'_, BBImagerMessag
 
     page_type1(
         board_view_pane(&state.selected_board, &state.common),
-        progress_finish_view("100%", constants::CHECK_MARK_GREEN, msg),
+        progress_finish_view("100%", constants::SUCCESS_GREEN, msg),
         [button("Flash Another")
             .style(widget::button::primary)
             .on_press(BBImagerMessage::Restart)],

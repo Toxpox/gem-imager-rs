@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<component type="desktop-application">
+	<id>org.t3gemstone.imager</id>
+
+	<name>T3 Gemstone Imager</name>
+	<summary>Write T3 Gemstone OS images to SD cards</summary>
+	<developer id="org.t3gemstone">
+		<name>T3 Gemstone Devteam</name>
+	</developer>
+
+	<metadata_license>CC0-1.0</metadata_license>
+	<project_license>MIT</project_license>
+
+	<description>
+		<p>
+			The easiest way to install the latest operating system images for your T3 Gemstone board.
+		</p>
+		<p>
+			Preview release: this build writes to SD cards only. eMMC installation over DFU is not
+			available yet, and this application is not a replacement for gem-imager.
+		</p>
+	</description>
+
+	<launchable type="desktop-id">org.t3gemstone.imager.desktop</launchable>
+
+	<branding>
+		<color type="primary" scheme_preference="light">#d15d7d</color>
+		<color type="primary" scheme_preference="dark">#18224f</color>
+	</branding>
+
+	<categories>
+		<category>Development</category>
+	</categories>
+
+	<url type="homepage">https://docs.t3gemstone.org</url>
+	<url type="bugtracker">https://github.com/t3gemstone/imager/issues</url>
+	<url type="contact">https://docs.t3gemstone.org/en</url>
+	<url type="contribute">https://github.com/t3gemstone/imager/tree/main?tab=contributing-ov-file</url>
+	<url type="vcs-browser">https://github.com/t3gemstone/imager</url>
+
+	<content_rating type="oars-1.1" />
+
+	<!--
+		Screenshots are deliberately absent. The upstream entries pointed at BeagleBoard captures
+		of a user interface this fork no longer ships, and a stale screenshot is worse than none:
+		it advertises the wrong product. Current T3 screenshots are required before this metadata block can be restored.
+	-->
+
+	<releases>
+		<release version="1.0.13" date="2026-08-01">
+			<url>https://github.com/t3gemstone/imager/releases/tag/1.0.13</url>
+		</release>
+	</releases>
+</component>

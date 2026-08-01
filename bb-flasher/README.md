@@ -31,8 +31,4 @@ async fn main() {
 applications.
 - `sd_macos_authopen`: Uses authopen to provide GUI prompt to open SD Cards in MacOS. Useful
 for GUI applications.
-- `bcf`: Provde support for flashing the main processor (CC1352P7) in BeagleConnect Freedom.
-- `bcf_msp430`: Provide support for flashing MSP430 in BeagleConnect Freedom, which acts as the
-USB to UART bridge.
-- `pb2_mspm0`: Provides support to flash PocketBeagle 2 MSPM0. Needs root permissions.
-- `pb2_mspm0_dbus`: Use bb-imager-serivce to flash PocketBeagle 2 as a normal user.
+- `dfu`: Provide USB DFU flashing.

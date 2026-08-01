@@ -382,12 +382,12 @@ fn add_config_inserts_os_image_for_board() {
         url: "https://example.com/os.img.xz".try_into().unwrap(),
         image_download_size: Some(1024),
         image_download_sha256: [1; 32],
+        extract_sha256: None,
         extract_size: 2048,
         release_date: chrono::NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
         devices: HashSet::from(["test_board".to_string()]),
         tags: HashSet::new(),
         init_format: bb_config::config::InitFormat::None,
-        bmap: None,
         info_text: None,
         support: None,
     };
@@ -460,12 +460,12 @@ fn os_image_by_id_returns_correct_data() {
         url: "https://example.com/os.img.xz".try_into().unwrap(),
         image_download_size: Some(1024),
         image_download_sha256: [7; 32],
+        extract_sha256: None,
         extract_size: 4096,
         release_date: chrono::NaiveDate::from_ymd_opt(2024, 5, 10).unwrap(),
         devices: HashSet::from(["test_board".to_string()]),
         tags: HashSet::new(),
         init_format: bb_config::config::InitFormat::None,
-        bmap: Some("https://example.com/os.bmap".try_into().unwrap()),
         info_text: Some("Test info".to_string()),
         support: Some(
             "https://github.com/beagleboard/bb-imager-rs"
@@ -510,10 +510,6 @@ fn os_image_by_id_returns_correct_data() {
     assert_eq!(stored.extract_size, 4096);
     assert_eq!(stored.release_date, image.release_date);
     assert_eq!(stored.init_format, image.init_format);
-    assert_eq!(
-        stored.bmap.as_ref().map(|x| x.as_str()),
-        image.bmap.as_ref().map(|x| x.as_str())
-    );
     assert_eq!(stored.info_text, image.info_text);
 }
 
@@ -561,12 +557,12 @@ fn add_config_inserts_os_sublist_for_board() {
         url: "https://example.com/os.img.xz".try_into().unwrap(),
         image_download_size: Some(1024),
         image_download_sha256: [1; 32],
+        extract_sha256: None,
         extract_size: 2048,
         release_date: chrono::NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
         devices: HashSet::from(["test_board".to_string()]),
         tags: HashSet::new(),
         init_format: bb_config::config::InitFormat::None,
-        bmap: None,
         info_text: None,
         support: None,
     };
@@ -646,12 +642,12 @@ fn nested_os_sublists_propagate_board_support() {
         url: "https://example.com/os.img.xz".try_into().unwrap(),
         image_download_size: Some(1024),
         image_download_sha256: [1; 32],
+        extract_sha256: None,
         extract_size: 2048,
         release_date: chrono::NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
         devices: HashSet::from(["test_board".to_string()]),
         tags: HashSet::new(),
         init_format: bb_config::config::InitFormat::None,
-        bmap: None,
         info_text: None,
         support: None,
     };
@@ -865,12 +861,12 @@ fn remote_os_sublist_resolve_inserts_child_items_and_clears_url() {
         url: "https://example.com/os.img.xz".try_into().unwrap(),
         image_download_size: Some(1024),
         image_download_sha256: [1; 32],
+        extract_sha256: None,
         extract_size: 2048,
         release_date: chrono::NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
         devices: HashSet::from(["test_board".to_string()]),
         tags: HashSet::new(),
         init_format: bb_config::config::InitFormat::None,
-        bmap: None,
         info_text: None,
         support: None,
     };
@@ -971,12 +967,12 @@ fn duplicate_remote_sublist_resolve_does_not_duplicate_os_items() {
         url: "https://example.com/os.img.xz".try_into().unwrap(),
         image_download_size: Some(1024),
         image_download_sha256: [1; 32],
+        extract_sha256: None,
         extract_size: 2048,
         release_date: chrono::NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
         devices: HashSet::from(["test_board".to_string()]),
         tags: HashSet::new(),
         init_format: bb_config::config::InitFormat::None,
-        bmap: None,
         info_text: None,
         support: None,
     };

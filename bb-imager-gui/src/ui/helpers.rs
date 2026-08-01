@@ -262,7 +262,7 @@ fn card_box<'a>(
 ) -> widget::Container<'a, BBImagerMessage> {
     widget::container(content).style(|_| {
         widget::container::Style::default()
-            .background(constants::CARD)
+            .background(constants::GEMSTONE_NAVY_CARD)
             .border(iced::border::rounded(8))
     })
 }

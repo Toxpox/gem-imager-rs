@@ -3,14 +3,24 @@ use std::io::{self, Write};
 use bb_helper::cancel::CancellationToken;
 use std::sync::mpsc;
 
-pub(crate) fn chan_send(chan: Option<&mut mpsc::SyncSender<f32>>, msg: f32) {
+/// Best-effort progress report. A full or closed channel must never fail a flash.
+pub(crate) fn chan_send<T>(chan: Option<&mpsc::SyncSender<T>>, msg: T) {
     if let Some(c) = chan {
         let _ = c.try_send(msg);
     }
 }
 
-pub(crate) const fn progress(pos: u64, img_size: u64) -> f32 {
-    pos as f32 / img_size as f32
+/// Fraction of `img_size` reached, clamped to `1.0`.
+///
+/// The last chunk read from the image is padded up to the 512-byte alignment the device wants, so
+/// `pos` can legitimately overshoot `img_size` by up to 511 bytes. Reporting `1.02` would make the
+/// GUI's ETA extrapolation produce a negative duration.
+pub(crate) fn progress(pos: u64, img_size: u64) -> f32 {
+    if img_size == 0 {
+        return 1.0;
+    }
+
+    (pos as f32 / img_size as f32).clamp(0.0, 1.0)
 }
 
 pub(crate) fn check_cancel(tkn: Option<&CancellationToken>) -> crate::Result<()> {
@@ -23,14 +33,36 @@ pub(crate) fn check_cancel(tkn: Option<&CancellationToken>) -> crate::Result<()>
     }
 }
 
-pub(crate) trait Eject {
+/// Make every byte written so far durable on the physical device.
+///
+/// Split out of [`Eject`] because the read-back verification has to run *between* the write and the
+/// eject: reading back through our own dirty buffers would only prove the buffers agree with
+/// themselves. A failure here is a flashing failure, never a warning — an unwritten tail is exactly
+/// the case where the user pulls the card and gets a board that will not boot.
+pub(crate) trait Commit {
+    fn commit(&mut self) -> io::Result<()>;
+}
+
+impl Commit for std::fs::File {
+    fn commit(&mut self) -> io::Result<()> {
+        self.flush()?;
+        self.sync_all()
+    }
+}
+
+impl<T: Commit + ?Sized> Commit for &mut T {
+    fn commit(&mut self) -> io::Result<()> {
+        (**self).commit()
+    }
+}
+
+pub(crate) trait Eject: Commit {
     fn eject(self) -> io::Result<()>;
 }
 
 impl Eject for std::fs::File {
     fn eject(mut self) -> io::Result<()> {
-        self.flush()?;
-        self.sync_all()
+        self.commit()
     }
 }
 
@@ -178,11 +210,16 @@ impl<const N: usize> DirectIoBuffer<N> {
 
 /// A wrapper to support writing the first block at the end. This is required on Windows to make
 /// things work reliably.
+///
+/// Once [`Self::finish`] has run, the deferred block is on the device and the cache is retired:
+/// every later read and write goes straight to `inner`. That is what makes the post-write read-back
+/// meaningful — otherwise the first block would be compared against the very buffer it came from.
 #[derive(Debug)]
 pub(crate) struct SdCardWrapper<W> {
     inner: W,
     buf: Box<DirectIoBuffer<BLOCK_SIZE>>,
     pos: u64,
+    finished: bool,
 }
 
 impl<W> SdCardWrapper<W> {
@@ -191,7 +228,13 @@ impl<W> SdCardWrapper<W> {
             inner,
             buf: Box::new(DirectIoBuffer::new()),
             pos: 0,
+            finished: false,
         }
+    }
+
+    /// Whether the deferred first block is still only in memory.
+    const fn is_cached(&self, pos: usize) -> bool {
+        !self.finished && pos < self.buf.len()
     }
 }
 
@@ -200,11 +243,26 @@ where
     W: io::Write + io::Seek,
 {
     fn finish(&mut self) -> io::Result<()> {
+        if self.finished {
+            return Ok(());
+        }
+
         self.inner.seek(io::SeekFrom::Start(0))?;
         self.inner.write_all(self.buf.as_slice())?;
         self.pos = u64::try_from(self.buf.len()).unwrap();
+        self.finished = true;
 
         Ok(())
+    }
+}
+
+impl<W> Commit for SdCardWrapper<W>
+where
+    W: io::Write + io::Seek + Commit,
+{
+    fn commit(&mut self) -> io::Result<()> {
+        self.finish()?;
+        self.inner.commit()
     }
 }
 
@@ -215,7 +273,7 @@ where
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let pos = usize::try_from(self.pos).unwrap();
 
-        let count = if pos < self.buf.len() {
+        let count = if self.is_cached(pos) {
             let count = std::cmp::min(self.buf.len() - pos, buf.len());
             self.inner
                 .seek(io::SeekFrom::Current(i64::try_from(count).unwrap()))?;
@@ -237,7 +295,7 @@ where
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         let pos = usize::try_from(self.pos).unwrap();
 
-        let count = if pos < self.buf.len() {
+        let count = if self.is_cached(pos) {
             let count = std::cmp::min(self.buf.len() - pos, buf.len());
             self.inner
                 .seek(io::SeekFrom::Current(i64::try_from(count).unwrap()))?;
@@ -274,6 +332,35 @@ where
         self.finish()?;
         self.inner.eject()
     }
+}
+
+/// Read exactly `buf.len()` bytes, tolerating a short device only past `required`.
+///
+/// Direct IO wants aligned, block-multiple reads, so the tail of the read-back asks for more bytes
+/// than the image actually occupies. Hitting the end of a plain file there is fine; hitting it
+/// before `required` means the device gave back less than was written to it, which is a failure.
+pub(crate) fn read_at_least(
+    mut src: impl io::Read,
+    buf: &mut [u8],
+    required: usize,
+) -> io::Result<()> {
+    let mut pos = 0;
+
+    while pos < buf.len() {
+        match src.read(&mut buf[pos..])? {
+            0 => break,
+            n => pos += n,
+        }
+    }
+
+    if pos < required {
+        return Err(io::Error::new(
+            io::ErrorKind::UnexpectedEof,
+            format!("device returned {pos} bytes where {required} were written"),
+        ));
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]

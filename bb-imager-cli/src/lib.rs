@@ -1,10 +1,8 @@
 pub mod cli;
-mod helpers;
 
 use bb_flasher::{BBFlasherTarget, DownloadFlashingStatus, LocalImage};
 use clap::CommandFactory;
 use cli::{Commands, DestinationsTarget, Opt, TargetCommands};
-use helpers::LocalStringFile;
 use std::path::PathBuf;
 use std::sync::mpsc;
 
@@ -59,12 +57,17 @@ fn flash(target: TargetCommands, quite: bool) {
                         | (
                             DownloadFlashingStatus::FlashingProgress(p),
                             DownloadFlashingStatus::FlashingProgress(_),
+                        )
+                        | (
+                            DownloadFlashingStatus::Verifying(p),
+                            DownloadFlashingStatus::Verifying(_),
                         ) => {
                             last_bar.as_ref().unwrap().set_position((p * 100.0) as u64);
                         }
                         // Create new bar when stage has changed
                         (DownloadFlashingStatus::DownloadingProgress(p), _)
-                        | (DownloadFlashingStatus::FlashingProgress(p), _) => {
+                        | (DownloadFlashingStatus::FlashingProgress(p), _)
+                        | (DownloadFlashingStatus::Verifying(p), _) => {
                             if let Some(b) = last_bar.take() {
                                 b.finish();
                             }
@@ -78,8 +81,7 @@ fn flash(target: TargetCommands, quite: bool) {
                             last_bar = Some(temp_bar);
                         }
                         // Print stage when entering a new stage without progress
-                        (DownloadFlashingStatus::Verifying, _)
-                        | (DownloadFlashingStatus::Customizing, _)
+                        (DownloadFlashingStatus::Customizing, _)
                         | (DownloadFlashingStatus::Preparing, _) => {
                             if let Some(b) = last_bar.take() {
                                 b.finish();
@@ -121,7 +123,6 @@ fn flash_internal(
             img,
             ssh_key,
             usb_enable_dhcp,
-            bmap,
             sysconfig,
             cloud_init,
             file_destination,
@@ -170,68 +171,17 @@ fn flash_internal(
             if file_destination {
                 bb_flasher::sd::Flasher::with_file_dest(
                     LocalImage::new(img).into_image_fn(),
-                    bmap.map(LocalStringFile::new).map(|x| x.into_fn()),
                     dst,
                     customization,
                 )
             } else {
                 bb_flasher::sd::Flasher::new(
                     LocalImage::new(img).into_image_fn(),
-                    bmap.map(LocalStringFile::new).map(|x| x.into_fn()),
                     dst.try_into().unwrap(),
                     customization,
                 )
             }
             .flash(chan, None)
-        }
-        TargetCommands::SdBootUpdate { img, dst } => {
-            std::thread::scope(|s| {
-                let tx = if let Some(chan) = chan {
-                    let (tx, rx) = mpsc::sync_channel(4);
-                    s.spawn(move || {
-                        let _ = chan.try_send(DownloadFlashingStatus::Preparing);
-                        while let Ok(msg) = rx.recv() {
-                            // Safeguard for initial rewinds
-                            if msg > 0.01 {
-                                let _ =
-                                    chan.try_send(DownloadFlashingStatus::FlashingProgress(msg));
-                            }
-                        }
-                    });
-                    Some(tx)
-                } else {
-                    None
-                };
-
-                bb_flasher::sd::UpdateBootFlasher::with_file_dest(
-                    LocalImage::new(img).into_archive_fn(tx),
-                    dst,
-                    None,
-                )
-                .flash()
-            })
-        }
-        #[cfg(feature = "bcf_cc1352p7")]
-        TargetCommands::Bcf {
-            img,
-            dst,
-            no_verify,
-        } => bb_flasher::bcf::cc1352p7::Flasher::new(
-            LocalImage::new(img).into_image_fn(),
-            dst.into(),
-            !no_verify,
-            None,
-        )
-        .flash(chan),
-        #[cfg(feature = "bcf_msp430")]
-        TargetCommands::Msp430 { img, dst } => {
-            bb_flasher::bcf::msp430::Flasher::new(LocalImage::new(img).into_image_fn(), dst.into())
-                .flash(chan)
-        }
-        #[cfg(feature = "pb2_mspm0")]
-        TargetCommands::Pb2Mspm0 { no_eeprom, img } => {
-            bb_flasher::pb2::mspm0::Flasher::new(LocalImage::new(img).into_image_fn(), !no_eeprom)
-                .flash(chan)
         }
         #[cfg(feature = "dfu")]
         TargetCommands::Dfu { identifier, imgs } => {
@@ -253,50 +203,6 @@ fn flash_internal(
                 .unwrap()
                 .flash(chan)
         }
-        #[cfg(all(
-            any(feature = "zepto_uart", feature = "zepto_i2c"),
-            not(target_os = "linux")
-        ))]
-        TargetCommands::Zepto {
-            img,
-            dst,
-            no_verify,
-        } => bb_flasher::mspm0::Flasher::no_prep(
-            LocalImage::new(img).into_image_fn(),
-            dst.into(),
-            !no_verify,
-            None,
-        )
-        .flash(chan),
-        #[cfg(all(
-            any(feature = "zepto_uart", feature = "zepto_i2c"),
-            target_os = "linux"
-        ))]
-        TargetCommands::Zepto {
-            img,
-            dst,
-            no_verify,
-            reset_gpio,
-            bsl_gpio,
-        } => match (reset_gpio, bsl_gpio) {
-            (Some(reset), Some(bsl)) => bb_flasher::mspm0::Flasher::gpio_by_name(
-                LocalImage::new(img).into_image_fn(),
-                dst.into(),
-                !no_verify,
-                None,
-                reset,
-                bsl,
-            )
-            .flash(chan),
-            (None, None) => bb_flasher::mspm0::Flasher::no_prep(
-                LocalImage::new(img).into_image_fn(),
-                dst.into(),
-                !no_verify,
-                None,
-            )
-            .flash(chan),
-            _ => panic!("Invalid arguments"),
-        },
     }
 }
 
@@ -373,22 +279,6 @@ fn list_destinations(target: DestinationsTarget, no_frills: bool, no_filter: boo
             #[cfg(feature = "dfu")]
             DestinationsTarget::Dfu => {
                 no_frills_list_destinations::<bb_flasher::dfu::Target>(no_filter)
-            }
-            #[cfg(feature = "bcf_cc1352p7")]
-            DestinationsTarget::Bcf => {
-                no_frills_list_destinations::<bb_flasher::bcf::cc1352p7::Target>(no_filter)
-            }
-            #[cfg(feature = "bcf_msp430")]
-            DestinationsTarget::Msp430 => {
-                no_frills_list_destinations::<bb_flasher::bcf::msp430::Target>(no_filter)
-            }
-            #[cfg(feature = "pb2_mspm0")]
-            DestinationsTarget::Pb2Mspm0 => {
-                no_frills_list_destinations::<bb_flasher::pb2::mspm0::Target>(no_filter)
-            }
-            #[cfg(any(feature = "zepto_uart", feature = "zepto_i2c"))]
-            DestinationsTarget::Zepto => {
-                no_frills_list_destinations::<bb_flasher::mspm0::Target>(no_filter)
             }
         }
         return;
@@ -544,22 +434,6 @@ fn list_destinations(target: DestinationsTarget, no_frills: bool, no_filter: boo
 
             term.write_line(&table_border).unwrap();
         }
-        #[cfg(feature = "bcf_msp430")]
-        DestinationsTarget::Msp430 => {
-            no_frills_list_destinations::<bb_flasher::bcf::msp430::Target>(no_filter)
-        }
-        #[cfg(feature = "bcf_cc1352p7")]
-        DestinationsTarget::Bcf => {
-            no_frills_list_destinations::<bb_flasher::bcf::cc1352p7::Target>(no_filter)
-        }
-        #[cfg(feature = "pb2_mspm0")]
-        DestinationsTarget::Pb2Mspm0 => {
-            no_frills_list_destinations::<bb_flasher::pb2::mspm0::Target>(no_filter)
-        }
-        #[cfg(any(feature = "zepto_uart", feature = "zepto_i2c"))]
-        DestinationsTarget::Zepto => {
-            no_frills_list_destinations::<bb_flasher::mspm0::Target>(no_filter)
-        }
     }
 }
 
@@ -568,7 +442,7 @@ const fn progress_msg(status: DownloadFlashingStatus) -> &'static str {
         DownloadFlashingStatus::Preparing => "Preparing  ",
         DownloadFlashingStatus::DownloadingProgress(_) => "Downloading",
         DownloadFlashingStatus::FlashingProgress(_) => "Flashing",
-        DownloadFlashingStatus::Verifying => "Verifying",
+        DownloadFlashingStatus::Verifying(_) => "Verifying",
         DownloadFlashingStatus::Customizing => "Customizing",
     }
 }
@@ -602,7 +476,10 @@ mod tests {
             progress_msg(DownloadFlashingStatus::FlashingProgress(0.5)),
             "Flashing"
         );
-        assert_eq!(progress_msg(DownloadFlashingStatus::Verifying), "Verifying");
+        assert_eq!(
+            progress_msg(DownloadFlashingStatus::Verifying(0.5)),
+            "Verifying"
+        );
         assert_eq!(
             progress_msg(DownloadFlashingStatus::Customizing),
             "Customizing"
@@ -616,26 +493,9 @@ mod tests {
             "[3] Preparing  "
         );
         assert_eq!(
-            stage_msg(DownloadFlashingStatus::Verifying, 1),
+            stage_msg(DownloadFlashingStatus::Verifying(0.0), 1),
             "[1] Verifying"
         );
-    }
-
-    #[test]
-    fn local_string_file_reads_contents() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("bmap.txt");
-        std::fs::write(&path, "bmap-contents").unwrap();
-
-        let read = LocalStringFile::new(path.into_boxed_path()).into_fn();
-        assert_eq!(&*read().unwrap(), "bmap-contents");
-    }
-
-    #[test]
-    fn local_string_file_missing_path_errors() {
-        let read = LocalStringFile::new(PathBuf::from("/nonexistent/bmap.txt").into_boxed_path())
-            .into_fn();
-        assert!(read().is_err());
     }
 
     #[cfg(not(target_os = "macos"))]

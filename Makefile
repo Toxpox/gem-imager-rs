@@ -4,7 +4,7 @@ _HOST_TARGET = $(shell rustc --print host-tuple)
 _CARGO_TOML_VERSION = $(shell grep 'version =' Cargo.toml | sed 's/version = "\(.*\)"/\1/')
 _DATE = $(shell date +%F)
 _RUST_ARGS_BASE = --locked
-_RUST_ARGS = ${_RUST_ARGS_BASE} --features bcf_cc1352p7,zepto_uart
+_RUST_ARGS = ${_RUST_ARGS_BASE}
 _RUST_ARGS_CLI = ${_RUST_ARGS} --features dfu
 _RUST_ARGS_GUI = ${_RUST_ARGS} --features sd
 _PACKAGER_ARGS = -r -vvv --verbose
@@ -26,7 +26,7 @@ _GUI_BIN = target/${TARGET}/release/bb-imager-gui
 _GUI_PORTABLE_EXE = bb-imager-gui/dist/bb-imager-gui_$(VERSION)_$(word 1,$(subst -, ,$(TARGET))).exe
 
 ## variable: GUI_NAME: Change name for GUI related files.
-GUI_NAME ?= BeagleBoardImager
+GUI_NAME ?= org.t3gemstone.imager
 ## variable: CARGO_PATH: Path to cargo binary
 CARGO_PATH ?= $(shell which cargo)
 ## variable: RUST_BUILDER: The Rust builder to use. Possble choices - cargo (default), cross.
@@ -61,16 +61,8 @@ DESKTOP_DIR ?= $(PREFIX)/share/applications
 METAINFO_DIR ?= $(PREFIX)/share/metainfo
 ## variable: TARGET: Compilation Target. Default = host
 TARGET ?= $(_HOST_TARGET)
-## variable: PB2_MSPM0: Enable pb2_mspm0 feature. Only used in CLI.
-PB2_MSPM0 ?= 0
-## variable: ZEPTO_I2C: Enable zepto_i2c feature. Only supported in GUI.
-ZEPTO_I2C ?= $(if $(findstring linux,$(TARGET)),1)
-## variable: BCF_MSP430: Enable bcf_msp430 feature. Only disabled in snap package.
-BCF_MSP430 ?= 1
 ## variable: SYSTEM_DEPS: Use system dependencies. Mainly for linux.
 SYSTEM_DEPS ?= 0
-## variable: SHARED_HIDRAW: Use system hidraw. Requires rather recent version of hidraw.
-SHARED_HIDRAW ?= 0
 ## variable: UPDATER: Enable updater feature in GUI.
 UPDATER ?= 0
 ## variable: NOTIFY_RUST: Use notify-rust for notification. Not needed when using xdg-portal on linux.
@@ -92,37 +84,15 @@ ifeq ($(VERBOSE),1)
 	_RUST_ARGS_BASE += --verbose
 endif
 
-# Add zepto_i2c feature
-ifeq ($(ZEPTO_I2C),1)
-	_RUST_ARGS += --features zepto_i2c
-endif
-
-# Add bcf_msp430 feature
-ifeq ($(BCF_MSP430),1)
-	_RUST_ARGS += --features bcf_msp430
-endif
-
 # Add system-deps feature
 ifeq ($(SYSTEM_DEPS),1)
 	_RUST_ARGS += --no-default-features
 	_RUST_ARGS_GUI += --features system-deps
 endif
 
-# Add shared-hidraw feature
-ifeq ($(SHARED_HIDRAW),1)
-	_RUST_ARGS += --features shared-hidraw
-else
-	_RUST_ARGS += --features static-hidraw
-endif
-
 # Add offline flag is needed
 ifeq ($(OFFLINE),1)
 	_RUST_ARGS_BASE += --offline
-endif
-
-# Add pb2_mspm0 feature
-ifeq ($(PB2_MSPM0),1)
-	_RUST_ARGS_CLI += --features pb2_mspm0
 endif
 
 # Add updater feature
@@ -142,7 +112,7 @@ ifeq ($(NOTIFY_RUST),1)
 endif
 
 ifneq ($(APPIMAGE_RELEASE_TAG),)
-	_APPIMAGETOOL_ARGS += -u "gh-releases-zsync|beagleboard|bb-imager-rs|${APPIMAGE_RELEASE_TAG}|BeagleBoard_Imager-*-${APPIMAGE_ARCH}.AppImage.zsync"
+	_APPIMAGETOOL_ARGS += -u "gh-releases-zsync|t3gemstone|imager|${APPIMAGE_RELEASE_TAG}|T3Gemstone_Imager-*-${APPIMAGE_ARCH}.AppImage.zsync"
 endif
 
 ## build: build: Build both CLI and GUI
@@ -184,16 +154,15 @@ ifneq (${VERSION}, ${_CARGO_TOML_VERSION})
 endif
 
 _check_common:
-	$(_CARGO_CHECK) --all-targets --all-features --workspace --exclude bb-flasher-bcf \
+	$(_CARGO_CHECK) --all-targets --all-features --workspace \
 		--exclude bb-flasher --exclude bb-imager-gui --exclude bb-imager-cli
-	$(_CARGO_CHECK) --all-targets -p bb-flasher-bcf -F msp430,static
-	$(_CARGO_CHECK) --all-targets -p bb-flasher -F bcf,bcf_msp430,pb2_mspm0,dfu,static,mspm0_uart,mspm0_i2c,piped_image,sd
+	$(_CARGO_CHECK) --all-targets -p bb-flasher -F dfu,static,piped_image,sd
 
 _check_cli:
-	$(_CARGO_CHECK) --all-targets -p bb-imager-cli ${_RUST_ARGS_CLI} -F pb2_mspm0,zepto_i2c
+	$(_CARGO_CHECK) --all-targets -p bb-imager-cli ${_RUST_ARGS_CLI}
 
 _check_gui:
-	$(_CARGO_CHECK) --all-targets -p bb-imager-gui ${_RUST_ARGS_GUI} -F updater,zepto_i2c,pre-release
+	$(_CARGO_CHECK) --all-targets -p bb-imager-gui ${_RUST_ARGS_GUI} -F updater,pre-release
 	
 ## housekeeping: check: Run code quality checks.
 .PHONY: check
@@ -275,8 +244,8 @@ endif
 	sed -i "s/^version: .*/version: ${VERSION}/" docs/antora.yml
 	sed -i '/<releases>/a \
 \t\t<release version="$(VERSION)" date="$(_DATE)">\
-\t\t\t<url>https://github.com/beagleboard/bb-imager-rs/releases/tag/$(VERSION)</url>\
-\t\t</release>' bb-imager-gui/assets/packages/linux/flatpak/org.beagleboard.imagingutility.metainfo.xml
+\t\t\t<url>https://github.com/t3gemstone/imager/releases/tag/$(VERSION)</url>\
+\t\t</release>' bb-imager-gui/assets/packages/linux/flatpak/org.t3gemstone.imager.metainfo.xml
 	sed -i -E "s/^[[:space:]]*Version=\"[^\"]+\"/    Version=\"${VERSION}.0\"/" bb-imager-gui/Package.appxmanifest
 	sed -i -E "s/(<assemblyIdentity[[:space:]]+version=\")[^\"]*(\")/\1${VERSION}.0\2/" bb-imager-gui/assets/packages/windows/gui.exe.manifest
 	cargo build
@@ -286,7 +255,7 @@ endif
         	read -r -p "Create git commit and tag [y/N]: " CONTINUE; \
 	done ; \
 	[ $$CONTINUE = "y" ] || [ $$CONTINUE = "Y" ] || (echo "Aborting."; exit 1;)
-	git add Cargo.toml Cargo.lock bb-imager-gui/assets/packages/linux/flatpak/org.beagleboard.imagingutility.metainfo.xml docs/antora.yml \
+	git add Cargo.toml Cargo.lock bb-imager-gui/assets/packages/linux/flatpak/org.t3gemstone.imager.metainfo.xml docs/antora.yml \
 		snapcraft.*.yaml bb-imager-gui/Package.appxmanifest bb-imager-gui/assets/packages/windows/gui.exe.manifest
 	git commit -s -m "Bump version to ${VERSION}"
 	git tag ${VERSION}
@@ -311,13 +280,13 @@ package-gui-pacman: build-gui
 
 package-gui-appimage: build-gui
 	mkdir -p bb-imager-gui/dist
-	$(MAKE) _install_gui PREFIX=/usr DESTDIR=bb-imager-gui/dist/org.beagleboard.imagingutility.AppDir GUI_NAME=org.beagleboard.imagingutility
-	ln -srf bb-imager-gui/dist/org.beagleboard.imagingutility.AppDir/usr/bin/bb-imager-gui bb-imager-gui/dist/org.beagleboard.imagingutility.AppDir/AppRun
-	ln -srf bb-imager-gui/dist/org.beagleboard.imagingutility.AppDir/usr/share/applications/org.beagleboard.imagingutility.desktop bb-imager-gui/dist/org.beagleboard.imagingutility.AppDir/org.beagleboard.imagingutility.desktop
-	ln -srf bb-imager-gui/dist/org.beagleboard.imagingutility.AppDir/usr/share/icons/hicolor/128x128/apps/org.beagleboard.imagingutility.png bb-imager-gui/dist/org.beagleboard.imagingutility.AppDir/org.beagleboard.imagingutility.png
-	ln -srf bb-imager-gui/dist/org.beagleboard.imagingutility.AppDir/usr/share/metainfo/org.beagleboard.imagingutility.metainfo.xml bb-imager-gui/dist/org.beagleboard.imagingutility.AppDir/usr/share/metainfo/org.beagleboard.imagingutility.appdata.xml
-	cd bb-imager-gui/dist && appimagetool $(_APPIMAGETOOL_ARGS) org.beagleboard.imagingutility.AppDir BeagleBoard_Imager-$(_DEST_VERSION)-$(APPIMAGE_ARCH).AppImage
-	rm -rf bb-imager-gui/dist/org.beagleboard.imagingutility.AppDir
+	$(MAKE) _install_gui PREFIX=/usr DESTDIR=bb-imager-gui/dist/org.t3gemstone.imager.AppDir GUI_NAME=org.t3gemstone.imager
+	ln -srf bb-imager-gui/dist/org.t3gemstone.imager.AppDir/usr/bin/bb-imager-gui bb-imager-gui/dist/org.t3gemstone.imager.AppDir/AppRun
+	ln -srf bb-imager-gui/dist/org.t3gemstone.imager.AppDir/usr/share/applications/org.t3gemstone.imager.desktop bb-imager-gui/dist/org.t3gemstone.imager.AppDir/org.t3gemstone.imager.desktop
+	ln -srf bb-imager-gui/dist/org.t3gemstone.imager.AppDir/usr/share/icons/hicolor/128x128/apps/org.t3gemstone.imager.png bb-imager-gui/dist/org.t3gemstone.imager.AppDir/org.t3gemstone.imager.png
+	ln -srf bb-imager-gui/dist/org.t3gemstone.imager.AppDir/usr/share/metainfo/org.t3gemstone.imager.metainfo.xml bb-imager-gui/dist/org.t3gemstone.imager.AppDir/usr/share/metainfo/org.t3gemstone.imager.appdata.xml
+	cd bb-imager-gui/dist && appimagetool $(_APPIMAGETOOL_ARGS) org.t3gemstone.imager.AppDir T3Gemstone_Imager-$(_DEST_VERSION)-$(APPIMAGE_ARCH).AppImage
+	rm -rf bb-imager-gui/dist/org.t3gemstone.imager.AppDir
 
 package-gui-dmg: build-gui
 	$(CARGO_PATH) packager -p bb-imager-gui --target $(TARGET) ${_PACKAGER_ARGS} -f dmg
@@ -341,7 +310,7 @@ package-x86_64-unknown-linux-gnu: package-checks
 .PHONY: package-aarch64-unknown-linux-gnu
 package-aarch64-unknown-linux-gnu: package-checks
 	$(call package-linux-x86_64_aarch64,aarch64-unknown-linux-gnu)
-	$(MAKE) package-cli-deb package-cli-pacman TARGET=aarch64-unknown-linux-gnu PB2_MSPM0=1
+	$(MAKE) package-cli-deb package-cli-pacman TARGET=aarch64-unknown-linux-gnu
 
 ## package: package-x86_64-apple-darwin: Create all packages for x86_64-apple-darwin
 .PHONY: package-x86_64-apple-darwin
@@ -463,15 +432,15 @@ uninstall-cli:
 _install_gui:
 	$(info Install GUI)
 	install -Dm755 $(_GUI_BIN) $(DESTDIR)$(BINDIR)/bb-imager-gui
-	install -Dm644 bb-imager-gui/assets/packages/linux/BeagleBoardImager.desktop $(DESTDIR)$(DESKTOP_DIR)/$(GUI_NAME).desktop
+	install -Dm644 bb-imager-gui/assets/packages/linux/T3GemstoneImager.desktop $(DESTDIR)$(DESKTOP_DIR)/$(GUI_NAME).desktop
 	desktop-file-edit --set-icon=$(GUI_NAME) $(DESTDIR)$(DESKTOP_DIR)/$(GUI_NAME).desktop
 	install -Dm644 bb-imager-gui/assets/icons/icon.png $(DESTDIR)$(ICONS_DIR)/hicolor/128x128/apps/$(GUI_NAME).png
-	install -Dm644 bb-imager-gui/assets/packages/linux/flatpak/org.beagleboard.imagingutility.metainfo.xml $(DESTDIR)$(METAINFO_DIR)/$(GUI_NAME).metainfo.xml
+	install -Dm644 bb-imager-gui/assets/packages/linux/flatpak/org.t3gemstone.imager.metainfo.xml $(DESTDIR)$(METAINFO_DIR)/$(GUI_NAME).metainfo.xml
 
 ## install: install-gui: Install GUI. Intended for use in Linux.
 .PHONY: install-gui
 install-gui: _install_gui
-	install -Dm644 bb-imager-gui/assets/packages/linux/udev/10-beagle.rules $(DESTDIR)$(UDEV_RULESDIR)/10-beagle.rules
+	install -Dm644 bb-imager-gui/assets/packages/linux/udev/10-t3gemstone.rules $(DESTDIR)$(UDEV_RULESDIR)/10-t3gemstone.rules
 
 _fetch-gui-deps:
 	$(CARGO_PATH) fetch ${_RUST_ARGS_BASE} --manifest-path bb-imager-gui/Cargo.toml
@@ -486,7 +455,7 @@ package-gui-flatpak:
 uninstall-gui:
 	$(info Uninstall GUI)
 	rm -f $(DESTDIR)$(BINDIR)/bb-imager-gui
-	rm -f $(DESTDIR)$(UDEV_RULESDIR)/10-beagle.rules
+	rm -f $(DESTDIR)$(UDEV_RULESDIR)/10-t3gemstone.rules
 	rm -f $(DESTDIR)$(DESKTOP_DIR)/$(GUI_NAME).desktop
 	rm -f $(DESTDIR)$(ICONS_DIR)/hicolor/128x128/apps/$(GUI_NAME).png
 	rm -f $(DESTDIR)$(METAINFO_DIR)/$(GUI_NAME).metainfo.xml

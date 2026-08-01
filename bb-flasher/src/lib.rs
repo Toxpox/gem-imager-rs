@@ -8,20 +8,15 @@
 //!
 //! ```no_run
 //! use std::path::PathBuf;
-//! use bb_flasher::BBFlasher;
 //!
-//! #[tokio::main]
-//! async fn main() {
-//!     let img = bb_flasher::LocalImage::new(PathBuf::from("/tmp/abc.img.xz").into());
-//!     let target = PathBuf::from("/tmp/target").try_into().unwrap();
-//!     let customization =
-//!         bb_flasher::sd::FlashingSdLinuxConfig::sysconfig(None, None, None, None, None, None, None);
+//! let img = bb_flasher::LocalImage::new(PathBuf::from("/tmp/abc.img.xz").into());
+//! let target = PathBuf::from("/tmp/target").try_into().unwrap();
+//! let customization =
+//!     bb_flasher::sd::FlashingSdLinuxConfig::sysconfig(None, None, None, None, None, None, None);
 //!
-//!     let flasher = bb_flasher::sd::Flasher::without_bmap(img.into_image_future(), target, customization, None)
-//!         .flash(None)
-//!         .await
-//!         .unwrap();
-//! }
+//! bb_flasher::sd::Flasher::new(img.into_image_fn(), target, customization)
+//!     .flash(None, None)
+//!     .unwrap();
 //! ```
 //!
 //! # Features
@@ -31,19 +26,21 @@
 //!   applications.
 //! - `sd_macos_authopen`: Uses authopen to provide GUI prompt to open SD Cards in MacOS. Useful
 //!   for GUI applications.
-//! - `bcf`: Provde support for flashing the main processor (CC1352P7) in BeagleConnect Freedom.
-//! - `bcf_msp430`: Provide support for flashing MSP430 in BeagleConnect Freedom, which acts as the
-//!   USB to UART bridge.
-//! - `pb2_mspm0`: Provides support to flash PocketBeagle 2 MSPM0. Needs root permissions.
-//! - `pb2_mspm0_dbus`: Use bb-imager-serivce to flash PocketBeagle 2 as a normal user.
+//! - `dfu`: Provide USB DFU flashing.
+//! - `t3_gem_init`: Safe serializer for the T3 GemStone `config.ini` first-boot file. Implied by
+//!   `sd`, and separate from it because the eMMC/DFU path writes the same file into a staging
+//!   image.
 
 mod common;
 mod flasher;
 pub mod img;
+#[cfg(feature = "t3_gem_init")]
+pub mod t3_gem_init;
 
 use std::path::Path;
 
 pub use common::*;
+#[allow(unused_imports)]
 pub use flasher::*;
 
 /// An Os Image present in the local filesystem
@@ -65,21 +62,18 @@ impl LocalImage {
         self.0.file_name().unwrap()
     }
 
+    /// Open the image for flashing.
+    ///
+    /// The extract gate is [`img::ExtractGate::LocalFile`]: the user picked this file themselves,
+    /// so there is no published digest to hold it to. Nothing downstream may call such a write
+    /// "verified".
     pub fn into_image_fn(self) -> impl FnOnce() -> std::io::Result<(img::OsImage, u64)> {
         move || {
-            let img = img::OsImage::from_path(&self.0)?;
+            let img = img::OsImage::from_path(&self.0, img::ExtractGate::LocalFile)?;
             let size = img.size();
 
             Ok((img, size))
         }
-    }
-
-    #[cfg(feature = "sd")]
-    pub fn into_archive_fn(
-        self,
-        tx: Option<std::sync::mpsc::SyncSender<f32>>,
-    ) -> impl FnOnce() -> std::io::Result<img::OsArchive> {
-        move || img::OsArchive::from_path(&self.0, tx)
     }
 }
 

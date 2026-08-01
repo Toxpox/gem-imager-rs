@@ -1,0 +1,16 @@
+{
+  "files": [
+    {
+      "name": "tiboot3.bin",
+      "sha256": "b677db13afd0b4104fdbd17281c20fec234fbb4d6908647e3a940ea07a0c2acc"
+    },
+    {
+      "name": "tispl.bin",
+      "sha256": "cb0cdea0bd4c6eb430905702069b74719a5081755ea1a3e93b0dac526c16fd0e"
+    },
+    {
+      "name": "u-boot.img",
+      "sha256": "96414fabe62bc3c15d98b78534e03c631b2a2f4a0d7541e435832c1dcb82c6d3"
+    }
+  ]
+}

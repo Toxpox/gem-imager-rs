@@ -108,10 +108,11 @@ pub(crate) struct OsImage {
     pub(crate) url: Url,
     pub(crate) image_download_size: Option<i64>,
     pub(crate) image_download_sha256: [u8; 32],
+    /// Extracted-side digest, when the catalog publishes one (the integrity policy).
+    pub(crate) extract_sha256: Option<[u8; 32]>,
     pub(crate) extract_size: i64,
     pub(crate) release_date: chrono::NaiveDate,
     pub(crate) init_format: bb_config::config::InitFormat,
-    pub(crate) bmap: Option<Url>,
     pub(crate) info_text: Option<String>,
     pub(crate) support: Option<Url>,
 }
@@ -126,10 +127,10 @@ impl OsImage {
             url: value.get("url")?,
             image_download_size: value.get("image_download_size")?,
             image_download_sha256: value.get("image_download_sha256")?,
+            extract_sha256: value.get("extract_sha256")?,
             extract_size: value.get("extract_size")?,
             release_date: value.get("release_date")?,
             init_format: value.get("init_format")?,
-            bmap: value.get("bmap")?,
             info_text: value.get("info_text")?,
             support: value.get("support")?,
         })
@@ -443,8 +444,8 @@ impl Db {
         let mut stmt = exec.prepare_cached(
             r#"
             INSERT INTO os_images(name, parent_id, description, icon, url,
-                image_download_size, image_download_sha256, extract_size,
-                release_date, init_format, bmap, info_text, remote_config_id, support)
+                image_download_size, image_download_sha256, extract_sha256, extract_size,
+                release_date, init_format, info_text, remote_config_id, support)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
             "#,
         )?;
@@ -456,10 +457,10 @@ impl Db {
             img.url,
             img.image_download_size.map(|x| i64::try_from(x).unwrap()),
             img.image_download_sha256,
+            img.extract_sha256.map(|x| x.to_vec()),
             i64::try_from(img.extract_size).unwrap(),
             img.release_date,
             img.init_format,
-            img.bmap,
             img.info_text,
             remote_config_id,
             img.support
@@ -562,8 +563,8 @@ impl Db {
         let mut stmt = db.prepare_cached(
             r#"
             SELECT id, name, description, icon, url, image_download_size,
-                image_download_sha256, extract_size, release_date, init_format,
-                bmap, info_text, support
+                image_download_sha256, extract_sha256, extract_size, release_date,
+                init_format, info_text, support
             FROM os_images WHERE id = $1"#,
         )?;
         stmt.query_row([id], OsImage::from_row)

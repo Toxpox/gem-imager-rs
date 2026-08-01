@@ -21,7 +21,6 @@ fn flash_applies_customization_through_public_api() {
     let img_size = image_bytes.len() as u64;
 
     let img_resolver = move || Ok((Cursor::new(image_bytes), img_size));
-    let bmap: Option<fn() -> std::io::Result<Box<str>>> = None;
 
     const FILE_NAME: &str = "customization.txt";
     const FILE_DATA: &[u8] = b"hello from the flasher test";
@@ -41,7 +40,6 @@ fn flash_applies_customization_through_public_api() {
     // on the customization loop, so it flashes without a progress channel.
     bb_flasher_sd::flash(
         img_resolver,
-        bmap,
         Destination::File(mock.path().into()),
         None,
         std::iter::once(customization),

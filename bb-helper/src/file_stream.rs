@@ -4,13 +4,51 @@
 
 use std::{
     io,
-    path::Path,
-    sync::{Arc, Condvar, Mutex},
+    path::{Path, PathBuf},
+    sync::{
+        Arc, Condvar, Mutex,
+        atomic::{AtomicU64, Ordering},
+    },
 };
 
 use tokio::io::{AsyncSeekExt, AsyncWriteExt};
 
 type SharedState = Arc<(Mutex<bool>, Condvar)>;
+
+/// Distinguishes the scratch files of concurrent [`WriterFileStream::persist`] calls that target
+/// the same final path.
+static PERSIST_NONCE: AtomicU64 = AtomicU64::new(0);
+
+/// Removes a half-written scratch file unless it was published.
+///
+/// the transport policy forbids a cancelled or partial download from being reachable under the
+/// final cache name; the scratch file must not survive as litter either.
+struct ScratchFile(Option<PathBuf>);
+
+impl ScratchFile {
+    fn new(path: PathBuf) -> Self {
+        Self(Some(path))
+    }
+
+    fn path(&self) -> &Path {
+        self.0
+            .as_deref()
+            .expect("scratch path is taken only when publishing or dropping")
+    }
+
+    /// Give up ownership after a successful rename, so the file is not deleted.
+    fn published(mut self) {
+        self.0 = None;
+    }
+}
+
+impl Drop for ScratchFile {
+    fn drop(&mut self) {
+        if let Some(path) = self.0.take() {
+            let _ = std::fs::remove_file(path);
+        }
+    }
+}
 
 /// Asynchronous writer half of a file-backed stream.
 ///
@@ -26,17 +64,49 @@ impl WriterFileStream {
         Self { file, writing }
     }
 
-    /// Persists the written data to a permanent file location.
+    /// Publishes the written data at `path`, atomically.
     ///
-    /// Copies all data from the temporary file to the specified path.
+    /// The copy goes to a scratch file next to `path` — same directory, therefore same filesystem,
+    /// so the final step is a rename and never a partial copy. The scratch file is flushed and
+    /// `fsync`ed before the rename, so a crash cannot leave `path` naming a file whose contents
+    /// were still in the page cache. If anything fails, `path` keeps whatever it held before and
+    /// the scratch file is removed (the transport policy).
     pub async fn persist(&mut self, path: &Path) -> io::Result<()> {
-        let mut f = tokio::fs::File::create(path).await?;
-        self.file.seek(io::SeekFrom::Start(0)).await?;
+        let parent = path.parent().ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "persist target must have a parent directory",
+            )
+        })?;
+        let file_name = path.file_name().ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "persist target must name a file",
+            )
+        })?;
 
-        tokio::io::copy(&mut self.file, &mut f).await?;
+        let scratch = ScratchFile::new(parent.join(format!(
+            "{}.part-{}-{}",
+            file_name.to_string_lossy(),
+            std::process::id(),
+            PERSIST_NONCE.fetch_add(1, Ordering::Relaxed)
+        )));
 
-        // Causes errors if not present
-        f.flush().await?;
+        {
+            let mut f = tokio::fs::File::create(scratch.path()).await?;
+            self.file.seek(io::SeekFrom::Start(0)).await?;
+
+            tokio::io::copy(&mut self.file, &mut f).await?;
+
+            // Causes errors if not present
+            f.flush().await?;
+            // Rename only publishes the directory entry; without this the bytes themselves are
+            // not guaranteed to have reached the device.
+            f.sync_all().await?;
+        }
+
+        tokio::fs::rename(scratch.path(), path).await?;
+        scratch.published();
 
         Ok(())
     }

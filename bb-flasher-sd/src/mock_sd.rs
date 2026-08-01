@@ -13,6 +13,7 @@ const FIRST_LBA: u32 = 2048;
 pub struct MockSd {
     file: tempfile::NamedTempFile,
     fail: CancellationToken,
+    sync_fail: CancellationToken,
 }
 
 impl Default for MockSd {
@@ -68,11 +69,22 @@ impl MockSd {
         Self {
             file: img,
             fail: CancellationToken::default(),
+            sync_fail: CancellationToken::default(),
         }
     }
 
+    /// Cancel to make every `read`/`write`/`seek` fail.
     pub fn fail_token(&self) -> CancellationToken {
         self.fail.clone()
+    }
+
+    /// Cancel to make only the sync fail, with every write still reporting success.
+    ///
+    /// This is the case a write-error injection cannot reach: a device that accepted every byte
+    /// into its cache and then lost power, which is indistinguishable from a good flash unless the
+    /// sync failure itself is treated as fatal.
+    pub fn sync_fail_token(&self) -> CancellationToken {
+        self.sync_fail.clone()
     }
 
     pub fn as_file(&self) -> &std::fs::File {
@@ -126,8 +138,21 @@ impl Read for MockSd {
     }
 }
 
-impl crate::helpers::Eject for MockSd {
-    fn eject(self) -> io::Result<()> {
+impl crate::helpers::Commit for MockSd {
+    /// Honours [`MockSd::fail_token`] so tests can inject a sync failure — the case where the
+    /// device is pulled after the last successful `write` but before the data is durable.
+    fn commit(&mut self) -> io::Result<()> {
+        if self.fail.is_cancelled() || self.sync_fail.is_cancelled() {
+            return Err(io::Error::new(io::ErrorKind::QuotaExceeded, "Fail"));
+        }
+
+        self.file.flush()?;
         self.as_file().sync_all()
+    }
+}
+
+impl crate::helpers::Eject for MockSd {
+    fn eject(mut self) -> io::Result<()> {
+        crate::helpers::Commit::commit(&mut self)
     }
 }
