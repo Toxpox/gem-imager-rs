@@ -168,13 +168,14 @@ kendine yok oluyor; kullanıcının cache temizlemesi gerekmiyor.
 
 ## 4. Açık kalanlar
 
-1. **Faz 3'ün GUI bütünlük bağlantısı hâlâ ölü.** `helpers.rs`'teki `extract_gate`, `open`,
-   `into_image_fn` "never used" uyarıları duruyor. Bridge `extract_sha256`'yı modele taşıyor, ama
-   GUI'nin indirme yolu bu değeri `ExtractGate::Declared`'a bağlamıyor — yani indirilen imaj Faz
-   3'ün extract kapısından **geçmiyor**. Faz 4'ün read-back'i yazılan baytları doğrular, fakat
-   yanlış imajın indirilmiş olmasını yakalayamaz. **Sıradaki iş bu olmalı.**
-   > Bu madde bu fazın kapsamında sayılabilirdi ve kapatılmadı: bridge veriyi taşıyor, tüketici
-   > tarafı eksik.
+1. ~~**Faz 3'ün GUI bütünlük bağlantısı hâlâ ölü.**~~ **DÜZELTME (2026-08-01): bu madde yanlıştı.**
+   Kapı Faz 3'ten beri bağlı ve çalışıyor. Kanıt ve incelemenin ortaya çıkardığı *gerçek* sorun
+   için §6.
+   > Özgün metin, kayıt için: *"`helpers.rs`'teki `extract_gate`, `open`, `into_image_fn` 'never
+   > used' uyarıları duruyor. Bridge `extract_sha256`'yı modele taşıyor, ama GUI'nin indirme yolu bu
+   > değeri `ExtractGate::Declared`'a bağlamıyor — yani indirilen imaj Faz 3'ün extract kapısından
+   > geçmiyor. Faz 4'ün read-back'i yazılan baytları doğrular, fakat yanlış imajın indirilmiş
+   > olmasını yakalayamaz. Sıradaki iş bu olmalı."*
 2. **CLI'da kart seçimi yok.** `bb-imager-cli` katalog okumuyor; yalnız `flash sd` ve `flash dfu`
    alt komutları var. T3 orada da görünmez.
 3. **Çevrimdışı ilk açılış boş.** Gömülü `devices` boşaltıldığı için ilk çalıştırmada ağ yoksa kart
@@ -231,3 +232,91 @@ Dördüncüsü (`bb-imager-gui/src/message.rs`) bu fazın commit'ine dahil oldu,
 fonksiyonel olarak da değişti. Kalan üçü ayrı bir `style:` commit'i olmalı veya
 `git checkout --` ile geri alınmalı. (Geri alma bu oturumda denendi, izin katmanı tarafından
 reddedildi.)
+
+---
+
+## 6. Düzeltme — §4.1 yanlıştı (2026-08-01)
+
+Faz 5 bittikten sonra §4 madde 1 "sıradaki iş" olarak incelendi. **İddia yanlış çıktı: extract
+kapısı GUI indirme yoluna bağlıydı ve çalışıyordu.** Aşağıdaki düzeltme, hatanın nasıl yapıldığını
+da kaydediyor; çünkü aynı tuzağa tekrar düşmek kolay.
+
+### 6.1 Zincir aslında tamdı
+
+```
+flash()
+  → SelectedImage::into_image_fn()
+  → RemoteImage::into_image_fn()      helpers.rs:334
+  → RemoteImage::extract_gate()       helpers.rs:279  → ExtractGate::Declared
+  → OsImage::from_path / from_piped(gate)
+  → OsImage::read()                   img/mod.rs:88   — her bayt sayılıp hash'leniyor
+  → ExtractVerifier::settle()         EOF'ta iki kapı da kontrol ediliyor
+```
+
+Veri yolu da tamdı: `bridge.rs` `extract_sha256`'yı `Some(...)` olarak taşıyor, `os_images`
+tablosunda `extract_sha256` sütunu var, `RemoteImage::new` değeri alıyor (`helpers.rs:79`). Cache
+yolu ve canlı indirme yolu **aynı** gate nesnesini kullanıyor.
+
+Kapıyı bağlayan commit `0bd8c4d — "feat(gui): name the archive hash correctly and enforce the
+extracted gate"`, yani **Faz 3**. Bu rapor yazıldığında iş çoktan yapılmıştı.
+
+### 6.2 Yanlış teşhisin sebebi: feature bayrağı
+
+Raporun dayandığı "never used" uyarıları gerçekti ama yanıltıcıydı. `flash()`'in match kolları
+`#[cfg(feature = "sd")]` ile işaretli ve **`sd`, `bb-imager-gui`'nin default feature'ı değil**
+(`default = ["static"]`). Dolayısıyla:
+
+- `cargo check -p bb-imager-gui` → `into_image_fn` çağrılmıyor → "never used".
+- `cargo check -p bb-imager-gui --features sd` (Makefile'ın `_RUST_ARGS_GUI`'si) → temiz.
+
+Bu tam olarak `instruction.md` §4 çalışma kuralı 12'nin uyardığı durum: *"Doğrulama için çıplak
+`cargo check`/`cargo test` kullanma. Feature bayrakları büyük kod bloklarını kapatır ve çıplak
+komutlar bunları sessizce atlayıp yanlış 'yeşil' üretir."* Burada ters yönde çalıştı — yanlış
+*kırmızı* üretti ve var olmayan bir iş maddesi doğurdu.
+
+### 6.3 Gerçekten eksik olan: test edilmemiş bir varsayım
+
+Kapı yalnız decoder EOF bildirdiğinde `settle` oluyor. Yani tüm garanti, yazıcının *deklare edilen
+bayt sayısına ulaşınca durmayıp* EOF'a kadar okumasına bağlı (`read_aligned`, `flashing/mod.rs:124`).
+Bunu hiçbir test doğrulamıyordu: bu davranış bir gün regresyona uğrasa kapı **sessizce hiç
+ateşlenmez**, flash başarılı görünürdü.
+
+`bb-flasher`'a iki test eklendi (`sd::Flasher` üzerinden, dosya hedefiyle, cihaz gerekmiyor):
+
+- `a_declared_gate_mismatch_fails_the_whole_flash` — doğru boyut/yanlış digest tüm flash'ı düşürüyor.
+- `a_matching_declared_gate_flashes_to_completion` — doğru digest tamamlanıyor, yani üstteki test
+  beyan edilen sebepten kırılıyor, "bu yol zaten hiç çalışmıyor" diye değil.
+
+### 6.4 Gerçek sorun: hata sebebi kullanıcıya ulaşmıyordu
+
+İlk test beklenmedik biçimde kırıldı ve sebebi öğreticiydi. Kapı ateşleniyor, flash **başarısız
+oluyor** — ama kullanıcının gördüğü metin şuydu:
+
+```
+Unknown Error during IO. Please check logs for more information.
+```
+
+`bb-flasher-sd` decoder'ın `io::Error`'ını catch-all `Error::IoError` varyantına sarıyor; GUI de
+(`main.rs:300`) `e.to_string()` ile yalnız **en dıştaki** mesajı basıyordu. Sonuç: yanlış ya da
+bozuk imaj indirilmesi, dolu disk veya izin hatasıyla **birebir aynı** görünüyordu. İşe yarayacak
+tek eylem — "tekrar indir" — kullanıcı için keşfedilebilir değildi.
+
+Bütünlük hattının ön yüzde gerçekten koptuğu yer burasıydı: hata yutulmuyor, **teşhisi** yutuluyordu.
+Bayt sayıları ve mismatch bilgisi hatanın içinde zaten vardı, sadece ekrana çıkmıyordu.
+`format!("{e:#}")` ile kaynak zinciri basılıyor artık.
+
+### 6.5 Commit
+
+```
+a57de08  fix(gui): report why a flash failed instead of "Unknown Error during IO"
+```
+
+`bb-flasher` 68 test geçiyor; clippy ve fmt temiz (kalan iki uyarı dokunulmayan dosyalarda ve bu
+işten önce de vardı).
+
+### 6.6 §4 madde 1'in yerine geçen açık madde
+
+Kapı bağlı ve testli. Geriye kalan gerçek boşluk daha dar: **GUI sınırında `extract_gate()`'in
+`Declared` döndürdüğünü doğrulayan bir test yok.** Kapının kendisi `bb-flasher`'da testli, veri
+yolu `bb-config` ve `db` testlerinde testli, ama "köprülenmiş bir T3 imajı için GUI gerçekten
+`Declared` üretiyor mu" iddiası uçtan uca hiçbir testte yer almıyor. Küçük bir test, ucuz.
