@@ -42,6 +42,11 @@ pub(crate) struct Board {
     pub(crate) specification: Vec<(String, String)>,
     pub(crate) oshw: Option<String>,
     pub(crate) flasher: config::Flasher,
+    /// Whether this board accepts a DFU write to onboard eMMC.
+    ///
+    /// One half of the destination intersection in `instruction.md` §6.3; the other halves are the
+    /// selected image and whether this build has a reachable DFU backend.
+    pub(crate) emmc_dfu: bool,
     pub(crate) instructions: Option<String>,
 }
 
@@ -58,6 +63,7 @@ impl Board {
             specification: serde_json::from_slice(&spec).unwrap(),
             oshw: value.get("oshw")?,
             flasher: value.get("flasher")?,
+            emmc_dfu: value.get("emmc_dfu")?,
             instructions: value.get("instructions")?,
         })
     }
@@ -381,16 +387,18 @@ impl Db {
             description,
             icon,
             flasher,
+            emmc_dfu,
             instructions,
             oshw,
             specification,
             documentation
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         ON CONFLICT(name) DO UPDATE SET
             description = excluded.description,
             icon = excluded.icon,
             flasher = excluded.flasher,
+            emmc_dfu = excluded.emmc_dfu,
             instructions = excluded.instructions,
             oshw = excluded.oshw,
             specification = excluded.specification,
@@ -404,6 +412,7 @@ impl Db {
                 board.description,
                 board.icon,
                 board.flasher,
+                board.emmc_dfu,
                 board.instructions,
                 board.oshw,
                 spec,
@@ -550,8 +559,8 @@ impl Db {
         let db = self.db.lock().unwrap();
         let mut stmt = db.prepare_cached(
             r#"
-        SELECT id, name, icon, description, documentation, specification, oshw, 
-            flasher, instructions
+        SELECT id, name, icon, description, documentation, specification, oshw,
+            flasher, emmc_dfu, instructions
         FROM boards
         WHERE id = $1"#,
         )?;

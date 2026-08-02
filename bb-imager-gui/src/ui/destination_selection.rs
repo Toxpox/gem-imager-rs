@@ -1,3 +1,4 @@
+use bb_i18n::Msg;
 use iced::{
     Element,
     widget::{self, text},
@@ -13,14 +14,15 @@ use crate::{
 const ICON_WIDTH: u32 = 60;
 
 pub(crate) fn view<'a>(state: &'a ChooseDestState) -> Element<'a, BBImagerMessage> {
+    let lang = state.common.lang();
     page_type1(
         dest_list_pane(state),
         dest_view_pane(state),
         [
-            widget::button("BACK")
+            widget::button(lang.text(Msg::Back))
                 .on_press(BBImagerMessage::Back)
                 .style(widget::button::secondary),
-            widget::button("NEXT")
+            widget::button(lang.text(Msg::Next))
                 .on_press_maybe(state.selected_dest.as_ref().map(|_| BBImagerMessage::Next)),
         ],
     )
@@ -45,7 +47,7 @@ fn dest_list_pane<'a>(state: &'a ChooseDestState) -> Element<'a, BBImagerMessage
             .style(svg_icon_style)
             .into();
 
-            let label: Element<'_, _> = match dest.subtitle() {
+            let label: Element<'_, _> = match dest.subtitle(state.common.lang()) {
                 Some(x) => widget::column![text(dest.to_string()).size(18), text(x)]
                     .width(iced::Length::Fill)
                     .into(),
@@ -58,7 +60,7 @@ fn dest_list_pane<'a>(state: &'a ChooseDestState) -> Element<'a, BBImagerMessage
 
     let filter_toggle = widget::container(
         widget::toggler(!state.filter_destination)
-            .label("Show all destinations")
+            .label(state.common.lang().text(Msg::ShowAllDestinations))
             .on_toggle(|x| BBImagerMessage::DestinationFilter(!x)),
     )
     .padding(16);
@@ -66,6 +68,7 @@ fn dest_list_pane<'a>(state: &'a ChooseDestState) -> Element<'a, BBImagerMessage
     helpers::list_pane(
         &state.search_text,
         &state.common.scroll_id,
+        state.common.lang(),
         [filter_toggle.into(), helpers::list_separator()],
         items,
     )
@@ -98,12 +101,15 @@ fn dest_view_pane<'a>(state: &'a crate::state::ChooseDestState) -> Element<'a, B
             helpers::detail_pane(col, &state.common.scroll_id)
         }
         None => {
-            let col = widget::column![helpers::placeholder_heading("Please Select a Destination")];
+            let lang = state.common.lang();
+            let col = widget::column![helpers::placeholder_heading(
+                lang.text(Msg::SelectDestinationPrompt)
+            )];
 
             let col = match state.instruction() {
                 Some(x) => col.extend([
                     widget::rule::horizontal(2).into(),
-                    text("Special instructions")
+                    text(lang.text(Msg::SpecialInstructions))
                         .size(16)
                         .font(constants::FONT_BOLD)
                         .into(),

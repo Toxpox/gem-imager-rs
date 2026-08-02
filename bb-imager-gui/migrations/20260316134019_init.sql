@@ -14,6 +14,9 @@ CREATE TABLE boards
 	description TEXT NOT NULL,
 	icon TEXT,
 	flasher INTEGER NOT NULL,
+	-- Whether the board accepts a DFU write to onboard eMMC. Defaults to 0: a board the catalog
+	-- says nothing about must never grow a destination that erases onboard storage.
+	emmc_dfu INTEGER NOT NULL DEFAULT 0,
 	instructions TEXT,
 	oshw TEXT,
 	specification BLOB,

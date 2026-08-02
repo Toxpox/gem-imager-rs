@@ -76,7 +76,8 @@ pub enum BootManifestError {
         /// What was wrong with it.
         reason: String,
     },
-    /// The same artifact name appeared more than once with different hashes.
+    /// The same artifact name appeared more than once. Even identical duplicates are ambiguous
+    /// publication errors and are rejected before DFU starts.
     ConflictingArtifact(String),
 }
 
@@ -96,10 +97,9 @@ impl fmt::Display for BootManifestError {
                     "boot manifest hash for `{artifact}` is unusable: {reason}"
                 )
             }
-            Self::ConflictingArtifact(name) => write!(
-                f,
-                "boot manifest publishes `{name}` twice with different hashes"
-            ),
+            Self::ConflictingArtifact(name) => {
+                write!(f, "boot manifest publishes `{name}` more than once")
+            }
         }
     }
 }
@@ -143,9 +143,7 @@ pub fn parse_boot_manifest(
             sha256,
         };
 
-        if let Some(existing) = by_name.get(&parsed.name)
-            && existing.sha256 != parsed.sha256
-        {
+        if by_name.contains_key(&parsed.name) {
             return Err(BootManifestError::ConflictingArtifact(parsed.name));
         }
 
@@ -261,6 +259,21 @@ mod tests {
         let body = br#"{"files":[
             {"name":"tiboot3.bin","sha256":"b677db13afd0b4104fdbd17281c20fec234fbb4d6908647e3a940ea07a0c2acc"},
             {"name":"tiboot3.bin","sha256":"0000000000000000000000000000000000000000000000000000000000000002"},
+            {"name":"tispl.bin","sha256":"cb0cdea0bd4c6eb430905702069b74719a5081755ea1a3e93b0dac526c16fd0e"},
+            {"name":"u-boot.img","sha256":"96414fabe62bc3c15d98b78534e03c631b2a2f4a0d7541e435832c1dcb82c6d3"}
+        ]}"#;
+
+        assert!(matches!(
+            with_required(|req| parse_boot_manifest(body, req)),
+            Err(BootManifestError::ConflictingArtifact(_))
+        ));
+    }
+
+    #[test]
+    fn an_identical_duplicate_is_also_refused() {
+        let body = br#"{"files":[
+            {"name":"tiboot3.bin","sha256":"b677db13afd0b4104fdbd17281c20fec234fbb4d6908647e3a940ea07a0c2acc"},
+            {"name":"tiboot3.bin","sha256":"b677db13afd0b4104fdbd17281c20fec234fbb4d6908647e3a940ea07a0c2acc"},
             {"name":"tispl.bin","sha256":"cb0cdea0bd4c6eb430905702069b74719a5081755ea1a3e93b0dac526c16fd0e"},
             {"name":"u-boot.img","sha256":"96414fabe62bc3c15d98b78534e03c631b2a2f4a0d7541e435832c1dcb82c6d3"}
         ]}"#;

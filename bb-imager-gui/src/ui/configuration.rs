@@ -4,6 +4,7 @@ use iced::{
 };
 
 use bb_flasher::t3_gem_init::{Hostname, Secret, Ssid, WifiCountry};
+use bb_i18n::Msg;
 
 use crate::{
     BBImagerMessage,
@@ -15,20 +16,23 @@ use crate::{
 const INPUT_WIDTH: u32 = 200;
 
 pub(crate) fn view<'a>(state: &'a crate::state::CustomizeState) -> Element<'a, BBImagerMessage> {
+    let lang = state.common.lang();
     page_type2(
         customization_pane(state),
         [
-            widget::button("RESET")
+            widget::button(lang.text(Msg::Reset))
                 .style(widget::button::danger)
                 .on_press(BBImagerMessage::ResetFlashingConfig),
-            widget::button("BACK")
+            widget::button(lang.text(Msg::Back))
                 .on_press(BBImagerMessage::Back)
                 .style(widget::button::secondary),
-            widget::button("NEXT").on_press_maybe(if state.customization.validate() {
-                Some(BBImagerMessage::Next)
-            } else {
-                None
-            }),
+            widget::button(lang.text(Msg::Next)).on_press_maybe(
+                if state.customization.validate() {
+                    Some(BBImagerMessage::Next)
+                } else {
+                    None
+                },
+            ),
         ],
     )
 }
@@ -55,6 +59,7 @@ fn t3_gem_init<'a>(
     config: &'a persistance::T3GemInitCustomization,
     desktop: bool,
 ) -> Element<'a, BBImagerMessage> {
+    let lang = state.common.lang();
     let wrap = move |c: persistance::T3GemInitCustomization| FlashingCustomization::T3GemInit {
         config: c,
         desktop,
@@ -65,7 +70,7 @@ fn t3_gem_init<'a>(
     // Account password
     col = col.push(
         widget::toggler(config.user_password.is_some())
-            .label("Set Password")
+            .label(lang.text(Msg::SetPassword))
             .on_toggle(move |t| {
                 let c = if t { Some(Default::default()) } else { None };
                 BBImagerMessage::UpdateFlashConfig(wrap(config.clone().update_user_password(c)))
@@ -73,7 +78,7 @@ fn t3_gem_init<'a>(
     );
     if let Some(password) = config.user_password.as_ref() {
         col = col.push(secret_input_with_label(
-            "Password",
+            lang.text(Msg::Password),
             "password",
             password,
             move |inp| wrap(config.clone().update_user_password(Some(inp.into()))),
@@ -85,7 +90,7 @@ fn t3_gem_init<'a>(
     // Wireless network
     col = col.push(
         widget::toggler(config.wifi.is_some())
-            .label("Configure Wireless LAN")
+            .label(lang.text(Msg::ConfigureWirelessLan))
             .on_toggle(move |t| {
                 let c = if t { Some(Default::default()) } else { None };
                 BBImagerMessage::UpdateFlashConfig(wrap(config.clone().update_wifi(c)))
@@ -94,7 +99,7 @@ fn t3_gem_init<'a>(
     if let Some(wifi) = config.wifi.as_ref() {
         col = col.extend([
             input_with_label(
-                "SSID",
+                lang.text(Msg::Ssid),
                 "SSID",
                 &wifi.ssid,
                 move |inp| {
@@ -106,7 +111,7 @@ fn t3_gem_init<'a>(
             )
             .into(),
             secret_input_with_label(
-                "Password",
+                lang.text(Msg::Password),
                 "passphrase or 64-digit key",
                 &wifi.password,
                 move |inp| {
@@ -117,7 +122,7 @@ fn t3_gem_init<'a>(
             )
             .into(),
             input_with_label(
-                "Country",
+                lang.text(Msg::Country),
                 "TR",
                 &wifi.country,
                 move |inp| {
@@ -128,10 +133,7 @@ fn t3_gem_init<'a>(
                 WifiCountry::parse(&wifi.country).is_err(),
             )
             .into(),
-            hint(
-                "The passphrase is converted to a network key before it is written, so it never \
-                 reaches the card. A 64-digit hexadecimal key is accepted as-is.",
-            ),
+            hint(lang.text(Msg::WifiKeyHint)),
         ]);
     }
 
@@ -139,7 +141,7 @@ fn t3_gem_init<'a>(
 
     // Timezone
     let toggle = widget::toggler(config.timezone.is_some())
-        .label("Set Timezone")
+        .label(lang.text(Msg::SetTimezone))
         .on_toggle(move |t| {
             let tz = if t { helpers::system_timezone() } else { None };
             BBImagerMessage::UpdateFlashConfig(wrap(config.clone().update_timezone(tz)))
@@ -150,9 +152,16 @@ fn t3_gem_init<'a>(
             let xc = config.clone();
             col.push(element_with_element(
                 toggle.into(),
-                widget::combo_box(&state.common.timezones, "Timezone", Some(tz), move |t| {
-                    BBImagerMessage::UpdateFlashConfig(wrap(xc.clone().update_timezone(Some(t))))
-                })
+                widget::combo_box(
+                    &state.common.timezones,
+                    lang.text(Msg::Timezone),
+                    Some(tz),
+                    move |t| {
+                        BBImagerMessage::UpdateFlashConfig(wrap(
+                            xc.clone().update_timezone(Some(t)),
+                        ))
+                    },
+                )
                 .width(INPUT_WIDTH)
                 .into(),
             ))
@@ -164,7 +173,7 @@ fn t3_gem_init<'a>(
 
     // Hostname
     let toggle = widget::toggler(config.hostname.is_some())
-        .label("Set Hostname")
+        .label(lang.text(Msg::SetHostname))
         .on_toggle(move |t| {
             let hostname = if t { Some(String::new()) } else { None };
             BBImagerMessage::UpdateFlashConfig(wrap(config.clone().update_hostname(hostname)))
@@ -191,7 +200,7 @@ fn t3_gem_init<'a>(
 
     // Keymap
     let toggle = widget::toggler(config.keymap.is_some())
-        .label("Set Keymap")
+        .label(lang.text(Msg::SetKeymap))
         .on_toggle(move |t| {
             let keymap = if t {
                 Some(helpers::system_keymap().to_string())
@@ -211,11 +220,16 @@ fn t3_gem_init<'a>(
 
             col.push(element_with_element(
                 toggle.into(),
-                widget::combo_box(&state.common.keymaps, "Keymap", selection, move |t| {
-                    BBImagerMessage::UpdateFlashConfig(wrap(
-                        xc.clone().update_keymap(Some(t.to_string())),
-                    ))
-                })
+                widget::combo_box(
+                    &state.common.keymaps,
+                    lang.text(Msg::Keymap),
+                    selection,
+                    move |t| {
+                        BBImagerMessage::UpdateFlashConfig(wrap(
+                            xc.clone().update_keymap(Some(t.to_string())),
+                        ))
+                    },
+                )
                 .width(INPUT_WIDTH)
                 .into(),
             ))
@@ -228,7 +242,7 @@ fn t3_gem_init<'a>(
         col = col.push(widget::rule::horizontal(2));
         col = col.push(
             widget::toggler(config.vnc.is_some())
-                .label("Enable VNC")
+                .label(lang.text(Msg::EnableVnc))
                 .on_toggle(move |t| {
                     let c = if t { Some(Default::default()) } else { None };
                     BBImagerMessage::UpdateFlashConfig(wrap(config.clone().update_vnc(c)))
@@ -237,7 +251,7 @@ fn t3_gem_init<'a>(
         if let Some(vnc) = config.vnc.as_ref() {
             col = col.extend([
                 secret_input_with_label(
-                    "Password",
+                    lang.text(Msg::Password),
                     "up to 8 characters",
                     &vnc.password,
                     move |inp| {
@@ -254,21 +268,18 @@ fn t3_gem_init<'a>(
                 // Both facts are stated rather than hidden: the length limit is the protocol's, not
                 // the application's, and the leftover secret is a known SDK defect
                 // (the customization test contract).
-                hint(
-                    "VNC passwords are limited to 8 characters by the protocol. A longer one is \
-                     rejected rather than silently shortened.",
-                ),
-                hint(
-                    "Known issue: the board's first-boot script does not remove the VNC password \
-                     from the boot partition, so it stays readable on the card.",
-                ),
+                hint(lang.text(Msg::VncProtocolHint)),
+                hint(lang.text(Msg::VncKnownIssueHint)),
             ]);
         }
     }
 
     // Whatever is wrong with the form right now, shown next to the disabled NEXT button.
-    if let Some(err) = state.customization.validation_error() {
-        col = col.extend([widget::rule::horizontal(2).into(), error_text(err)]);
+    if let Some(err) = state.customization.validation_error(lang) {
+        col = col.extend([
+            widget::rule::horizontal(2).into(),
+            error_text(err.to_owned()),
+        ]);
     }
 
     detail_pane(col, &state.common.scroll_id)
@@ -331,12 +342,13 @@ fn linux_sd_card_common<'a>(
     config: &'a persistance::SdSysconfCustomization,
     wrap: impl Fn(persistance::SdSysconfCustomization) -> FlashingCustomization + Copy + 'static,
 ) -> widget::Column<'a, BBImagerMessage> {
+    let lang = state.common.lang();
     let mut col = widget::column([]);
 
     // Username and Password
     col = col.push(
         widget::toggler(config.user.is_some())
-            .label("Configure Username and Password")
+            .label(lang.text(Msg::ConfigureUsernamePassword))
             .on_toggle(move |t| {
                 let c = if t { Some(Default::default()) } else { None };
                 BBImagerMessage::UpdateFlashConfig(wrap(config.clone().update_user(c)))
@@ -345,7 +357,7 @@ fn linux_sd_card_common<'a>(
     if let Some(usr) = config.user.as_ref() {
         col = col.extend([
             input_with_label(
-                "Username",
+                lang.text(Msg::Username),
                 "username",
                 &usr.username,
                 move |inp| {
@@ -359,7 +371,7 @@ fn linux_sd_card_common<'a>(
             )
             .into(),
             input_with_label(
-                "Password",
+                lang.text(Msg::Password),
                 "password",
                 &usr.password,
                 move |inp| {
@@ -380,7 +392,7 @@ fn linux_sd_card_common<'a>(
     // Wifi
     col = col.push(
         widget::toggler(config.wifi.is_some())
-            .label("Configure Wireless LAN")
+            .label(lang.text(Msg::ConfigureWirelessLan))
             .on_toggle(move |t| {
                 let c = if t { Some(Default::default()) } else { None };
                 BBImagerMessage::UpdateFlashConfig(wrap(config.clone().update_wifi(c)))
@@ -389,7 +401,7 @@ fn linux_sd_card_common<'a>(
     if let Some(wifi) = config.wifi.as_ref() {
         col = col.extend([
             input_with_label(
-                "SSID",
+                lang.text(Msg::Ssid),
                 "SSID",
                 &wifi.ssid,
                 move |inp| {
@@ -403,7 +415,7 @@ fn linux_sd_card_common<'a>(
             )
             .into(),
             input_with_label(
-                "Password",
+                lang.text(Msg::Password),
                 "password",
                 &wifi.password,
                 move |inp| {
@@ -423,7 +435,7 @@ fn linux_sd_card_common<'a>(
 
     // Timezone
     let toggle = widget::toggler(config.timezone.is_some())
-        .label("Set Timezone")
+        .label(lang.text(Msg::SetTimezone))
         .on_toggle(move |t| {
             let tz = if t { helpers::system_timezone() } else { None };
             BBImagerMessage::UpdateFlashConfig(wrap(config.clone().update_timezone(tz)))
@@ -435,9 +447,16 @@ fn linux_sd_card_common<'a>(
             // back to a `Tz` for the combo box to show it as the current selection.
             col.push(element_with_element(
                 toggle.into(),
-                widget::combo_box(&state.common.timezones, "Timezone", Some(tz), move |t| {
-                    BBImagerMessage::UpdateFlashConfig(wrap(xc.clone().update_timezone(Some(t))))
-                })
+                widget::combo_box(
+                    &state.common.timezones,
+                    lang.text(Msg::Timezone),
+                    Some(tz),
+                    move |t| {
+                        BBImagerMessage::UpdateFlashConfig(wrap(
+                            xc.clone().update_timezone(Some(t)),
+                        ))
+                    },
+                )
                 .width(INPUT_WIDTH)
                 .into(),
             ))
@@ -449,7 +468,7 @@ fn linux_sd_card_common<'a>(
 
     // Hostname
     let toggle = widget::toggler(config.hostname.is_some())
-        .label("Set Hostname")
+        .label(lang.text(Msg::SetHostname))
         .on_toggle(move |t| {
             let hostname = if t { Some(String::new()) } else { None };
             BBImagerMessage::UpdateFlashConfig(wrap(config.clone().update_hostname(hostname)))
@@ -473,7 +492,7 @@ fn linux_sd_card_common<'a>(
 
     // Keymap
     let toggle = widget::toggler(config.keymap.is_some())
-        .label("Set Keymap")
+        .label(lang.text(Msg::SetKeymap))
         .on_toggle(move |t| {
             let keymap = if t {
                 Some(helpers::system_keymap().to_string())
@@ -496,11 +515,16 @@ fn linux_sd_card_common<'a>(
 
             col.push(element_with_element(
                 toggle.into(),
-                widget::combo_box(&state.common.keymaps, "Keymap", selection, move |t| {
-                    BBImagerMessage::UpdateFlashConfig(wrap(
-                        xc.clone().update_keymap(Some(t.to_string())),
-                    ))
-                })
+                widget::combo_box(
+                    &state.common.keymaps,
+                    lang.text(Msg::Keymap),
+                    selection,
+                    move |t| {
+                        BBImagerMessage::UpdateFlashConfig(wrap(
+                            xc.clone().update_keymap(Some(t.to_string())),
+                        ))
+                    },
+                )
                 .width(INPUT_WIDTH)
                 .into(),
             ))
@@ -512,7 +536,7 @@ fn linux_sd_card_common<'a>(
 
     // SSH Key
     col.extend([
-        text("SSH authorization public key").into(),
+        text(lang.text(Msg::SshAuthorizationKey)).into(),
         widget::center(
             widget::text_input("authorized key", config.ssh.as_deref().unwrap_or("")).on_input(
                 move |x| {
@@ -547,7 +571,7 @@ fn linux_sd_card_sysconfig<'a>(
     // Enable USB DHCP
     col = col.push(
         widget::toggler(config.usb_enable_dhcp == Some(true))
-            .label("Enable USB DHCP")
+            .label(state.common.lang().text(Msg::EnableUsbDhcp))
             .on_toggle(|x| {
                 BBImagerMessage::UpdateFlashConfig(FlashingCustomization::LinuxSdSysconfig(
                     config.clone().update_usb_enable_dhcp(Some(x)),

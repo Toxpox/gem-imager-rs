@@ -17,10 +17,11 @@
 //! validated by [`crate::t3::validate`], and only then translated into the shape the front-ends
 //! already render.
 //!
-//! # What is deliberately not translated
+//! # How capability crosses the bridge
 //!
-//! * **eMMC/DFU capability.** [`crate::config::Flasher`] can only express `SdCard`. Boards keep
-//!   their DFU profile in the canonical model; this bridge exposes only SD destinations.
+//! * **eMMC/DFU capability.** [`crate::config::Flasher`] can only express `SdCard`, so verified
+//!   DFU support travels as [`crate::config::Device::emmc_dfu`]. The full profile remains in the
+//!   canonical model; the front-end only needs to know whether it may offer the destination.
 
 use std::collections::HashSet;
 
@@ -62,8 +63,12 @@ fn board_to_device(board: &Board) -> Device {
         tags: board.tags.iter().cloned().collect(),
         icon: board.icon.clone(),
         description: board.description.clone(),
-        // See the module docs: the bridged view is SD-only by construction.
+        // `Flasher` still only names the SD path; the DFU capability travels beside it.
         flasher: Flasher::SdCard,
+        // Only a board with a *verified* DFU profile reports the capability. `emmc: true` in the
+        // catalog is not enough on its own — `board_capabilities` refuses to attach a profile to a
+        // board this build has no verified contract for.
+        emmc_dfu: board.capabilities.supports_dfu(),
         documentation: None,
         instructions: None,
         specification: Vec::new(),
@@ -328,6 +333,30 @@ mod tests {
                 img.name
             );
         }
+    }
+
+    /// The destination screen decides whether to offer DFU from this flag, so it has to survive the
+    /// bridge — and only for the board that has a verified profile.
+    #[test]
+    fn only_the_dfu_capable_board_reports_the_capability() {
+        let config = bridged(ProductScope::T3AndBeagleY);
+
+        let t3 = config
+            .imager
+            .devices
+            .iter()
+            .find(|d| d.name == "T3-GEM-O1")
+            .expect("T3-GEM-O1 must reach the front-end model");
+        let beagley = config
+            .imager
+            .devices
+            .iter()
+            .find(|d| d.name == "BeagleY-AI")
+            .expect("BeagleY-AI must reach the front-end model in the combined scope");
+
+        assert!(t3.emmc_dfu);
+        // `emmc: false` in the catalog, so DFU must never be offered for it.
+        assert!(!beagley.emmc_dfu);
     }
 
     /// A bridged document must not send the front-end back out for another config.

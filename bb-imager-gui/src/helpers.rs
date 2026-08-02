@@ -187,6 +187,15 @@ impl BoardImage {
             BoardImage::Image { support, .. } => support.as_ref(),
         }
     }
+
+    /// Whether this entry can be written over DFU to onboard eMMC.
+    ///
+    /// "Format SD Card" cannot: it is an SD-card operation, and there is no eMMC equivalent of
+    /// handing the user back a FAT32 card. Every real image can, local ones included — the boot
+    /// chain that carries it comes from the verified manifest, not from the image.
+    pub(crate) const fn supports_dfu(&self) -> bool {
+        matches!(self, Self::Image { .. })
+    }
 }
 
 impl std::fmt::Display for BoardImage {
@@ -202,6 +211,24 @@ pub(crate) fn system_timezone() -> Option<chrono_tz::Tz> {
     static SYSTEM_TIMEZONE: LazyLock<Option<chrono_tz::Tz>> =
         LazyLock::new(|| iana_time_zone::get_timezone().ok()?.parse().ok());
     *SYSTEM_TIMEZONE
+}
+
+/// The interface language implied by the system locale.
+///
+/// Returns `None` when the locale names a language this build does not carry, rather than
+/// answering "English": the caller pairs this with the stored preference, and conflating
+/// "the system says German" with "the user chose English" would hide the former in the logs.
+pub(crate) fn system_language() -> Option<bb_i18n::Lang> {
+    static SYSTEM_LANGUAGE: LazyLock<Option<bb_i18n::Lang>> = LazyLock::new(|| {
+        let prefs = whoami::lang_prefs().ok()?;
+
+        // `message_langs` is ordered by preference, so the first supported entry wins: a user
+        // whose list is [de, tr, en] gets Turkish rather than English.
+        prefs
+            .message_langs()
+            .find_map(|lang| bb_i18n::Lang::from_code(&lang.to_string()))
+    });
+    *SYSTEM_LANGUAGE
 }
 
 pub(crate) fn system_keymap() -> &'static str {
@@ -368,6 +395,14 @@ impl SelectedImage {
         }
     }
 
+    /// See [`BoardImage::staging_size_estimate`].
+    fn staging_size_estimate(&self) -> u64 {
+        match self {
+            Self::RemoteImage(x) => x.extract_size,
+            Self::LocalImage(x) => std::fs::metadata(x.path()).map(|m| m.len()).unwrap_or(0),
+        }
+    }
+
     fn into_image_fn(self) -> Box<dyn FnOnce() -> io::Result<(OsImage, u64)> + Send> {
         match self {
             SelectedImage::LocalImage(x) => Box::new(x.into_image_fn()),
@@ -404,7 +439,66 @@ pub(crate) async fn flash(
     chan: mpsc::SyncSender<DownloadFlashingStatus>,
     cancel_sync: bb_helper::cancel::CancellationToken,
 ) -> anyhow::Result<()> {
+    // A destination that is listed but unopenable fails here, before anything is downloaded or
+    // written. The sentence is deliberately phrased with the words `localized_flash_error` keys on,
+    // so this refusal reaches the user through the same single localization path as a failure that
+    // happens deeper in the backend.
+    if let Some((title, _)) = dst.unavailable_reason() {
+        return Err(match title {
+            bb_i18n::Msg::DfuPermissionTitle => anyhow::anyhow!(
+                "DFU device permission denied: the board is present but cannot be opened"
+            ),
+            _ => anyhow::anyhow!(
+                "DFU device driver missing: no WinUSB-compatible driver is bound to the board"
+            ),
+        });
+    }
+
+    // Held for the whole write, including the DFU re-enumeration gaps where the host is idle and
+    // therefore most likely to suspend.
+    let _awake = crate::keep_awake::KeepAwake::acquire();
+
     match (img, customization, dst) {
+        // The DFU path is two writes, not one. First the extracted, customized and read-back
+        // verified image is materialised into a staging file — the same SD writer, pointed at a
+        // file, so `config.ini` lands in the FAT partition exactly as it does on a card. Only then
+        // is that file streamed to the board behind the manifest-verified boot chain.
+        #[cfg(all(feature = "dfu", feature = "sd"))]
+        (BoardImage::Image { img, .. }, customization, Destination::T3Dfu(target)) => {
+            let identifier = target.identifier().into_owned();
+            let estimate = img.staging_size_estimate();
+            let customization = customization.sd_customization()?;
+
+            tokio::task::spawn_blocking(move || {
+                // Before the first byte is downloaded, not after.
+                let staging = crate::staging::StagingImage::create(estimate)?;
+                // The cache path commonly contains the account name. It adds no operational value
+                // here and must not accompany a staging image that may contain user secrets.
+                tracing::info!("Staging the customized image in the private application cache");
+
+                bb_flasher::sd::Flasher::with_file_dest(
+                    img.into_image_fn(),
+                    staging.path().to_path_buf(),
+                    customization,
+                )
+                .flash(Some(chan.clone()), Some(cancel_sync.clone()))?;
+
+                // `LocalImage` re-opens the staging file for the DFU stream. Its extract gate is
+                // `LocalFile`, which is correct here and not a loosening: these bytes were just
+                // written and read back against the catalog's extracted digest by the call above.
+                let image = bb_flasher::LocalImage::new(staging.path().into());
+                bb_flasher::dfu::Flasher::from_identifier(
+                    image.into_image_fn(),
+                    &identifier,
+                    Some(cancel_sync),
+                )?
+                .flash(Some(chan))
+
+                // `staging` is dropped here — on success, on error and on cancellation alike.
+            })
+            .await
+            .unwrap()
+        }
         #[cfg(feature = "sd")]
         (BoardImage::SdFormat { .. }, _, Destination::SdCard(t)) => {
             tokio::task::spawn_blocking(move || bb_flasher::sd::FormatFlasher::new(t).flash())
@@ -450,6 +544,9 @@ pub(crate) enum Destination {
     LocalFile(PathBuf),
     #[cfg(feature = "sd")]
     SdCard(bb_flasher::sd::Target),
+    /// Onboard eMMC of a T3-GEM-O1 in DFU mode, addressed by its physical USB port.
+    #[cfg(feature = "dfu")]
+    T3Dfu(bb_flasher::dfu::Target),
 }
 
 impl Display for Destination {
@@ -458,6 +555,8 @@ impl Display for Destination {
             Destination::LocalFile(_) => write!(f, "Save To File"),
             #[cfg(feature = "sd")]
             Destination::SdCard(target) => target.fmt(f),
+            #[cfg(feature = "dfu")]
+            Destination::T3Dfu(target) => target.fmt(f),
         }
     }
 }
@@ -469,12 +568,54 @@ impl Destination {
             return Some(item.size());
         }
 
+        // A DFU device exposes no capacity before the transfer starts: the eMMC size is known to
+        // the bootloader that has not been loaded yet. A guess would be worse than nothing.
         None
     }
 
     /// Download instead of flashing
     pub(crate) fn is_download_action(&self) -> bool {
         matches!(self, Self::LocalFile(_))
+    }
+
+    /// Why this destination cannot be written to right now, if it cannot.
+    ///
+    /// Returned as a message pair rather than a boolean: an unopenable board is listed on purpose,
+    /// and the whole reason for listing it is to be able to say *which* of the two fixes applies.
+    #[cfg(feature = "dfu")]
+    pub(crate) fn unavailable_reason(&self) -> Option<(bb_i18n::Msg, bb_i18n::Msg)> {
+        let Self::T3Dfu(target) = self else {
+            return None;
+        };
+
+        match target.access() {
+            bb_flasher::dfu::DeviceAccess::Available => None,
+            bb_flasher::dfu::DeviceAccess::PermissionDenied => Some((
+                bb_i18n::Msg::DfuPermissionTitle,
+                bb_i18n::Msg::DfuPermissionBody,
+            )),
+            bb_flasher::dfu::DeviceAccess::DriverMissing => Some((
+                bb_i18n::Msg::WinusbDriverMissingTitle,
+                bb_i18n::Msg::WinusbDriverMissingBody,
+            )),
+        }
+    }
+
+    /// Without the DFU backend there is no destination that can be listed-but-unusable.
+    #[cfg(not(feature = "dfu"))]
+    pub(crate) fn unavailable_reason(&self) -> Option<(bb_i18n::Msg, bb_i18n::Msg)> {
+        None
+    }
+
+    /// Whether this destination writes to the board's onboard eMMC.
+    ///
+    /// The review screen keys its instructions on this: DFU is the one flow where the user must
+    /// have done something to the hardware *before* pressing the button.
+    pub(crate) fn is_dfu(&self) -> bool {
+        #[cfg(feature = "dfu")]
+        return matches!(self, Self::T3Dfu(_));
+        #[cfg(not(feature = "dfu"))]
+        return false;
     }
 
     pub(crate) fn details(&self) -> Vec<(&'static str, String)> {
@@ -485,20 +626,93 @@ impl Destination {
                 ("Path", t.path().to_string_lossy().to_string()),
                 ("Size", pretty_bytes(t.size())),
             ],
+            #[cfg(feature = "dfu")]
+            Self::T3Dfu(t) => vec![
+                // `bus:physical-port-path:vendor:product` — what distinguishes two boards plugged
+                // into the same host.
+                ("USB Port", t.identifier().into_owned()),
+                ("Target", "Onboard eMMC (DFU)".to_owned()),
+            ],
         }
     }
 }
 
-pub(crate) fn destinations(flasher: config::Flasher, filter: bool) -> Vec<Destination> {
-    match flasher {
-        #[cfg(feature = "sd")]
-        config::Flasher::SdCard => bb_flasher::sd::Target::destinations(filter)
-            .into_iter()
-            .map(Destination::SdCard)
-            .collect(),
-        // Only reachable when the crate is built without the `sd` feature.
-        #[allow(unreachable_patterns)]
-        _ => unimplemented!(),
+/// Which write methods may be offered for the current board/image pair.
+///
+/// `instruction.md` §6.3: the destination list is the intersection of **board capability**,
+/// **image compatibility** and **platform backend availability** — never a property read off the
+/// image alone. Keeping the three factors in one small value is what stops a screen from
+/// re-deriving a subset of them and offering a destination the write path cannot honour.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) struct WriteMethods {
+    pub(crate) sd: bool,
+    pub(crate) dfu: bool,
+}
+
+impl WriteMethods {
+    /// Resolve the methods for a board/image pair.
+    ///
+    /// `board.emmc_dfu` comes from the catalog through the strict adapter, so a board without a
+    /// verified DFU profile — BeagleY-AI, or anything a future catalog adds — never reaches the
+    /// DFU branch regardless of what this build supports.
+    pub(crate) fn resolve(board: &crate::db::Board, img: &BoardImage) -> Self {
+        Self {
+            sd: cfg!(feature = "sd") && board.flasher == config::Flasher::SdCard,
+            dfu: cfg!(feature = "dfu") && board.emmc_dfu && img.supports_dfu(),
+        }
+    }
+
+    /// Whether no destination can be offered at all.
+    pub(crate) const fn is_empty(self) -> bool {
+        !self.sd && !self.dfu
+    }
+}
+
+pub(crate) fn destinations(methods: WriteMethods, filter: bool) -> Vec<Destination> {
+    let mut out: Vec<Destination> = Vec::new();
+
+    #[cfg(feature = "sd")]
+    if methods.sd {
+        out.extend(
+            bb_flasher::sd::Target::destinations(filter)
+                .into_iter()
+                .map(Destination::SdCard),
+        );
+    }
+
+    // Both kinds share one screen on purpose: a T3 with a card inserted and a T3 in DFU mode are
+    // two destinations for the same image, and hiding one behind a mode switch is how a user ends
+    // up writing to the wrong one.
+    #[cfg(feature = "dfu")]
+    if methods.dfu {
+        out.extend(
+            bb_flasher::dfu::Target::destinations(filter)
+                .into_iter()
+                .map(Destination::T3Dfu),
+        );
+    }
+
+    let _ = (methods, filter);
+    out
+}
+
+/// Keep the current selection only while it is still on offer.
+///
+/// The destination list is re-enumerated every second. A card that was removed, or a board that
+/// left DFU mode, must not stay selected behind a NEXT button that now leads to a write against a
+/// device that is gone. `LocalFile` is exempt: it is a path the user chose, not an attached device.
+pub(crate) fn keep_selected_destination(
+    selected: Option<Destination>,
+    available: &[Destination],
+) -> Option<Destination> {
+    match selected {
+        Some(Destination::LocalFile(p)) => Some(Destination::LocalFile(p)),
+        Some(dest) if available.contains(&dest) => Some(dest),
+        Some(dest) => {
+            tracing::info!("Clearing the selected destination: {dest} is no longer present");
+            None
+        }
+        None => None,
     }
 }
 
@@ -606,10 +820,35 @@ impl FlashingCustomization {
     /// The first problem with the current T3 form, for display next to the disabled NEXT button.
     ///
     /// Returns `None` when the form is valid or is not a T3 form.
-    pub(crate) fn validation_error(&self) -> Option<String> {
+    pub(crate) fn validation_error(&self, lang: bb_i18n::Lang) -> Option<&'static str> {
         match self {
             FlashingCustomization::T3GemInit { config, desktop } => {
-                config.build(*desktop).err().map(|e| e.to_string())
+                config.build(*desktop).err().map(|error| {
+                    use bb_flasher::t3_gem_init::T3GemInitError;
+                    let msg = match error {
+                        T3GemInitError::ControlCharacter { .. } => {
+                            bb_i18n::Msg::InvalidControlCharacter
+                        }
+                        T3GemInitError::InvalidHostname => bb_i18n::Msg::InvalidHostnameError,
+                        T3GemInitError::InvalidWifiCountry => bb_i18n::Msg::InvalidWifiCountryError,
+                        T3GemInitError::InvalidSsid => bb_i18n::Msg::InvalidSsidError,
+                        T3GemInitError::UnknownTimezone(_) => bb_i18n::Msg::UnknownTimezoneError,
+                        T3GemInitError::UnknownKeyboardLayout(_) => {
+                            bb_i18n::Msg::UnknownKeymapError
+                        }
+                        T3GemInitError::WifiPassphraseLength => {
+                            bb_i18n::Msg::InvalidWifiPasswordError
+                        }
+                        T3GemInitError::VncPasswordTooLong { .. } => {
+                            bb_i18n::Msg::VncPasswordTooLongError
+                        }
+                        T3GemInitError::EmptyPassword => bb_i18n::Msg::EmptyPasswordError,
+                        T3GemInitError::PasswordHash | T3GemInitError::Csprng => {
+                            bb_i18n::Msg::PasswordGenerationError
+                        }
+                    };
+                    lang.text(msg)
+                })
             }
             _ => None,
         }
@@ -647,6 +886,9 @@ async fn show_notification_xdg_portal(body: &str) -> ashpd::Result<()> {
 }
 
 pub(crate) async fn show_notification(body: String) -> anyhow::Result<()> {
+    #[cfg(all(not(target_os = "linux"), not(feature = "notify-rust")))]
+    let _ = &body;
+
     #[cfg(target_os = "linux")]
     if show_notification_xdg_portal(&body).await.is_ok() {
         return Ok(());
@@ -781,11 +1023,11 @@ impl From<crate::db::OsSublistListItem> for OsImageItem {
 }
 
 impl OsImageItem {
-    pub(crate) fn format(label: Cow<'static, str>) -> Self {
+    pub(crate) fn format() -> Self {
         Self {
             id: OsImageId::Format,
             icon: None,
-            label,
+            label: Cow::Borrowed(""),
         }
     }
 
@@ -793,7 +1035,7 @@ impl OsImageItem {
         Self {
             id: OsImageId::Local(flasher),
             icon: None,
-            label: Cow::Borrowed("Select Local Image"),
+            label: Cow::Borrowed(""),
         }
     }
 
@@ -801,8 +1043,12 @@ impl OsImageItem {
         matches!(self.id, OsImageId::OsSublist(_))
     }
 
-    pub(crate) fn label(&self) -> &str {
-        &self.label
+    pub(crate) fn localized_label(&self, lang: bb_i18n::Lang) -> &str {
+        match self.id {
+            OsImageId::Format => lang.text(bb_i18n::Msg::FormatSdCard),
+            OsImageId::Local(_) => lang.text(bb_i18n::Msg::SelectLocalImage),
+            OsImageId::OsImage(_) | OsImageId::OsSublist(_) => &self.label,
+        }
     }
 }
 
@@ -850,9 +1096,22 @@ impl<'a> DestinationItem<'a> {
         }
     }
 
-    pub(crate) fn subtitle(&self) -> Option<String> {
+    /// The second line under a destination.
+    ///
+    /// A card shows its capacity. A DFU board has none to show, and an entry with no second line
+    /// would be the least distinguishable item on a screen where picking the wrong one erases the
+    /// wrong storage — so it says what it is instead.
+    pub(crate) fn subtitle(&self, lang: bb_i18n::Lang) -> Option<String> {
         match self {
             DestinationItem::SaveToFile(_) => None,
+            // A board that is present but unopenable says so on the row itself, so the user does
+            // not have to start a write to discover it.
+            DestinationItem::Destination(d) if let Some((title, _)) = d.unavailable_reason() => {
+                Some(lang.text(title).to_owned())
+            }
+            DestinationItem::Destination(d) if d.is_dfu() => {
+                Some(lang.text(bb_i18n::Msg::DfuDestinationSubtitle).to_owned())
+            }
             DestinationItem::Destination(d) => d.size().map(crate::helpers::pretty_bytes),
         }
     }
@@ -970,26 +1229,27 @@ pub(crate) fn fetch_remote_subitems(
 
 pub(crate) fn sd_modifications_common(
     x: &crate::persistance::SdSysconfCustomization,
+    lang: bb_i18n::Lang,
 ) -> Vec<&'static str> {
     let mut ans = Vec::new();
 
     if x.user.is_some() {
-        ans.push("• User account configured");
+        ans.push(lang.text(bb_i18n::Msg::UserAccountConfigured));
     }
     if x.wifi.is_some() {
-        ans.push("• Wifi configured");
+        ans.push(lang.text(bb_i18n::Msg::WifiConfigured));
     }
     if x.hostname.is_some() {
-        ans.push("• Hostname configured");
+        ans.push(lang.text(bb_i18n::Msg::HostnameConfigured));
     }
     if x.keymap.is_some() {
-        ans.push("• Keymap configured");
+        ans.push(lang.text(bb_i18n::Msg::KeymapConfigured));
     }
     if x.timezone.is_some() {
-        ans.push("• Timezone configured");
+        ans.push(lang.text(bb_i18n::Msg::TimezoneConfigured));
     }
     if x.ssh.is_some() {
-        ans.push("• SSH Key configured");
+        ans.push(lang.text(bb_i18n::Msg::SshKeyConfigured));
     }
 
     ans
@@ -1008,6 +1268,7 @@ mod tests {
     use super::*;
     use crate::persistance::{
         GuiConfiguration, SdCustomizationUser, SdCustomizationWifi, SdSysconfCustomization,
+        T3GemInitCustomization,
     };
 
     #[test]
@@ -1047,8 +1308,26 @@ mod tests {
     }
 
     #[test]
+    fn t3_validation_errors_are_actionable_in_both_languages() {
+        let customization = FlashingCustomization::T3GemInit {
+            config: T3GemInitCustomization::default()
+                .update_hostname(Some("-invalid-hostname".into())),
+            desktop: true,
+        };
+
+        let en = customization.validation_error(bb_i18n::Lang::En).unwrap();
+        let tr = customization.validation_error(bb_i18n::Lang::Tr).unwrap();
+        assert!(en.contains("valid hostname"));
+        assert!(tr.contains("geçerli bir makine adı"));
+        assert_ne!(en, tr);
+    }
+
+    #[test]
     fn sd_modifications_common_lists_configured_fields() {
-        assert!(sd_modifications_common(&SdSysconfCustomization::default()).is_empty());
+        assert!(
+            sd_modifications_common(&SdSysconfCustomization::default(), bb_i18n::Lang::En)
+                .is_empty()
+        );
 
         let full = SdSysconfCustomization::default()
             .update_hostname(Some("h".into()))
@@ -1057,11 +1336,15 @@ mod tests {
             .update_ssh(Some("k".into()))
             .update_user(Some(SdCustomizationUser::new("u".into(), "p".into())))
             .update_wifi(Some(SdCustomizationWifi::default()));
-        let mods = sd_modifications_common(&full);
+        let mods = sd_modifications_common(&full, bb_i18n::Lang::En);
         assert_eq!(mods.len(), 6);
-        assert!(mods.contains(&"• User account configured"));
-        assert!(mods.contains(&"• Wifi configured"));
-        assert!(mods.contains(&"• SSH Key configured"));
+        assert!(mods.contains(&bb_i18n::Lang::En.text(bb_i18n::Msg::UserAccountConfigured)));
+        assert!(mods.contains(&bb_i18n::Lang::En.text(bb_i18n::Msg::WifiConfigured)));
+        assert!(mods.contains(&bb_i18n::Lang::En.text(bb_i18n::Msg::SshKeyConfigured)));
+
+        let tr = sd_modifications_common(&full, bb_i18n::Lang::Tr);
+        assert!(tr.contains(&bb_i18n::Lang::Tr.text(bb_i18n::Msg::UserAccountConfigured)));
+        assert_ne!(mods, tr);
     }
 
     #[test]
@@ -1184,7 +1467,7 @@ mod tests {
 
         assert_eq!(item.to_string(), "Save To File");
         assert!(!item.is_selected(&other));
-        assert!(item.subtitle().is_none());
+        assert!(item.subtitle(bb_i18n::Lang::En).is_none());
         match item.msg() {
             BBImagerMessage::SelectFileDest(name) => assert_eq!(name, "os.img"),
             other => panic!("expected SelectFileDest, got {other:?}"),
@@ -1201,7 +1484,109 @@ mod tests {
         assert!(item.is_selected(&dst));
         assert!(!item.is_selected(&other));
         // LocalFile has no size, so no subtitle.
-        assert!(item.subtitle().is_none());
+        assert!(item.subtitle(bb_i18n::Lang::En).is_none());
+    }
+
+    /// A board as the destination screen sees it, with only the fields the intersection reads
+    /// carrying meaning.
+    fn board(name: &str, emmc_dfu: bool) -> crate::db::Board {
+        crate::db::Board {
+            id: 1,
+            name: name.to_string(),
+            icon: None,
+            description: String::new(),
+            documentation: None,
+            specification: Vec::new(),
+            oshw: None,
+            flasher: config::Flasher::SdCard,
+            emmc_dfu,
+            instructions: None,
+        }
+    }
+
+    fn catalog_image() -> BoardImage {
+        let file = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(file.path(), b"0123456789").unwrap();
+        BoardImage::local(file.path().to_path_buf(), config::Flasher::SdCard)
+    }
+
+    /// T3 with a real image offers both destinations; the DFU half only exists when this build
+    /// can actually drive it.
+    #[test]
+    fn a_dfu_capable_board_offers_both_write_methods() {
+        let methods = WriteMethods::resolve(&board("T3-GEM-O1", true), &catalog_image());
+
+        assert_eq!(methods.sd, cfg!(feature = "sd"));
+        assert_eq!(methods.dfu, cfg!(feature = "dfu"));
+        assert!(!methods.is_empty() || (!cfg!(feature = "sd") && !cfg!(feature = "dfu")));
+    }
+
+    /// The regression this intersection exists for: a board without a verified DFU profile must
+    /// never be offered a destination that erases onboard storage, no matter what this build
+    /// supports.
+    #[test]
+    fn a_board_without_the_capability_is_never_offered_dfu() {
+        let methods = WriteMethods::resolve(&board("BeagleY-AI", false), &catalog_image());
+
+        assert!(!methods.dfu);
+        assert_eq!(methods.sd, cfg!(feature = "sd"));
+    }
+
+    /// "Format SD Card" is an SD-card operation. There is no eMMC equivalent, so the image half of
+    /// the intersection removes DFU even on a board that supports it.
+    #[test]
+    fn formatting_a_card_is_never_a_dfu_operation() {
+        let methods = WriteMethods::resolve(&board("T3-GEM-O1", true), &BoardImage::format());
+
+        assert!(!methods.dfu);
+        assert!(!BoardImage::format().supports_dfu());
+        assert!(catalog_image().supports_dfu());
+    }
+
+    /// A destination that vanished between two enumeration ticks — a card pulled out, a board that
+    /// left DFU mode — must not stay selected behind an enabled NEXT button.
+    #[test]
+    fn a_destination_that_disappeared_is_deselected() {
+        let present = Destination::LocalFile(PathBuf::from("/tmp/present.img"));
+        let gone = Destination::LocalFile(PathBuf::from("/tmp/gone.img"));
+
+        // `LocalFile` is a path the user chose rather than an attached device, so it is exempt.
+        assert_eq!(
+            keep_selected_destination(Some(gone.clone()), std::slice::from_ref(&present)),
+            Some(gone)
+        );
+        assert_eq!(
+            keep_selected_destination(Some(present.clone()), std::slice::from_ref(&present)),
+            Some(present)
+        );
+        assert_eq!(keep_selected_destination(None, &[]), None);
+    }
+
+    /// The DFU-only branch of the same rule, exercised with a real device value.
+    #[cfg(feature = "dfu")]
+    #[test]
+    fn an_unplugged_dfu_board_is_deselected() {
+        let Some(dest) = destinations(
+            WriteMethods {
+                sd: false,
+                dfu: true,
+            },
+            true,
+        )
+        .into_iter()
+        .next() else {
+            // No board attached to the machine running the suite; the SD-shaped case above already
+            // covers the logic, and asserting on absent hardware would be a false negative.
+            return;
+        };
+
+        assert!(dest.is_dfu());
+        // Still listed: kept. Gone from the list: cleared.
+        assert_eq!(
+            keep_selected_destination(Some(dest.clone()), std::slice::from_ref(&dest)),
+            Some(dest.clone())
+        );
+        assert_eq!(keep_selected_destination(Some(dest), &[]), None);
     }
 
     #[test]
@@ -1209,12 +1594,20 @@ mod tests {
         let local = OsImageItem::local(config::Flasher::SdCard);
         assert_eq!(local.id, OsImageId::Local(config::Flasher::SdCard));
         assert!(!local.is_sublist());
-        assert_eq!(local.label(), "Select Local Image");
+        assert_eq!(
+            local.localized_label(bb_i18n::Lang::En),
+            "Select Local Image"
+        );
+        assert_eq!(local.localized_label(bb_i18n::Lang::Tr), "Yerel imaj seç");
 
-        let format = OsImageItem::format("Format".into());
+        let format = OsImageItem::format();
         assert_eq!(format.id, OsImageId::Format);
         assert!(!format.is_sublist());
-        assert_eq!(format.label(), "Format");
+        assert_eq!(format.localized_label(bb_i18n::Lang::En), "Format SD Card");
+        assert_eq!(
+            format.localized_label(bb_i18n::Lang::Tr),
+            "SD kartı biçimlendir"
+        );
     }
 
     #[test]
@@ -1229,7 +1622,7 @@ mod tests {
         .into();
         assert_eq!(image.id, OsImageId::OsImage(5));
         assert!(!image.is_sublist());
-        assert_eq!(image.label(), "Debian");
+        assert_eq!(image.localized_label(bb_i18n::Lang::En), "Debian");
 
         let sublist: OsImageItem = crate::db::OsSublistListItem {
             id: 7,

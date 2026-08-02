@@ -16,6 +16,24 @@ pub enum DownloadFlashingStatus {
     /// long as the write it verifies, and a UI that shows no movement for minutes reads as a hang.
     Verifying(f32),
     Customizing,
+
+    // ---- DFU / eMMC phases -------------------------------------------------------------------
+    // The DFU chain is not one write. Collapsing it into `FlashingProgress` would mean either a
+    // bar that restarts four times or one whose first 3 % of bytes occupy most of the motion, and
+    // it would have to invent a number for the two phases that cannot be measured at all.
+    /// Resolving and verifying the three boot artifacts. Indeterminate.
+    ResolvingBootArtifacts,
+    /// Waiting for the board to re-enumerate after a reset. Indeterminate.
+    Reconnecting,
+    /// Transferring boot stage `stage` of three; the fraction is within that stage.
+    BootStage {
+        stage: u8,
+        progress: f32,
+    },
+    /// Streaming the raw image to onboard eMMC — the dominant cost.
+    RawWrite(f32),
+    /// Manifest, flush and final detach after the last byte. Indeterminate, and minutes long.
+    Finalizing,
 }
 
 /// A trait for modeling flasher targets.

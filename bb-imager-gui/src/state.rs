@@ -22,9 +22,34 @@ pub(crate) struct BBImagerCommon {
 
     pub(crate) scroll_id: widget::Id,
     pub(crate) db: db::Db,
+
+    /// The language every screen renders in.
+    ///
+    /// Resolved once at start-up from the stored preference, then the system locale, then the
+    /// default — and held here rather than looked up per view so a language change is a single
+    /// state transition instead of a cache that can go stale mid-flow.
+    pub(crate) lang: bb_i18n::Lang,
 }
 
 impl BBImagerCommon {
+    /// The language every screen renders in.
+    pub(crate) fn lang(&self) -> bb_i18n::Lang {
+        self.lang
+    }
+
+    /// Switch language and remember the choice.
+    ///
+    /// The persisted write is best-effort: failing to save a language preference must not
+    /// interrupt a flash in progress, so it is logged rather than surfaced.
+    pub(crate) fn set_lang(&mut self, lang: bb_i18n::Lang) {
+        self.lang = lang;
+        self.app_config = self.app_config.clone().update_language(lang);
+
+        if let Err(e) = self.app_config.save() {
+            tracing::error!("Failed to persist the language preference: {e}");
+        }
+    }
+
     pub(crate) fn updater_task(&self) -> Task<BBImagerMessage> {
         if cfg!(feature = "updater") {
             let downloader = self.downloader.clone();
@@ -108,7 +133,7 @@ impl ChooseOsState {
         // `Flasher` only has `SdCard` now, so every board offers the format and
         // local-image entries.
         imgs.extend([
-            OsImageItem::format("Format SD Card".into()),
+            OsImageItem::format(),
             OsImageItem::local(config::Flasher::SdCard),
         ]);
 
@@ -216,6 +241,12 @@ pub(crate) struct ChooseDestState {
     pub(crate) destinations: Vec<helpers::Destination>,
     pub(crate) filter_destination: bool,
     pub(crate) search_text: String,
+    /// Which write methods this board/image pair allows.
+    ///
+    /// Resolved once when the screen is entered rather than re-derived per frame, so the list, the
+    /// enumeration subscription and the instructions can never disagree about whether DFU is on
+    /// offer.
+    pub(crate) write_methods: helpers::WriteMethods,
 }
 
 impl ChooseDestState {
@@ -244,6 +275,11 @@ impl ChooseDestState {
 
 impl From<CustomizeState> for ChooseDestState {
     fn from(value: CustomizeState) -> Self {
+        // Recomputed rather than carried along: going BACK is also how a user reaches this screen
+        // after changing the image, and the write methods are a property of the pair.
+        let write_methods =
+            helpers::WriteMethods::resolve(&value.selected_board, &value.selected_image.1);
+
         Self {
             common: value.common,
             selected_board: value.selected_board,
@@ -252,6 +288,7 @@ impl From<CustomizeState> for ChooseDestState {
             destinations: Vec::new(),
             filter_destination: true,
             search_text: String::new(),
+            write_methods,
         }
     }
 }
@@ -263,6 +300,8 @@ pub(crate) struct CustomizeState {
     pub(crate) selected_image: (OsImageId, helpers::BoardImage),
     pub(crate) selected_dest: helpers::Destination,
     pub(crate) customization: helpers::FlashingCustomization,
+    /// Whether the review page is displaying the final destructive-action confirmation.
+    pub(crate) erase_confirmation: bool,
 }
 
 impl CustomizeState {
@@ -290,15 +329,15 @@ impl CustomizeState {
     pub(crate) fn modifications(&self) -> Vec<&'static str> {
         match &self.customization {
             helpers::FlashingCustomization::LinuxSdSysconfig(x) => {
-                let mut ans = helpers::sd_modifications_common(x);
+                let mut ans = helpers::sd_modifications_common(x, self.common.lang());
                 if x.usb_enable_dhcp == Some(true) {
-                    ans.push("• USB DHCP enabled");
+                    ans.push(self.common.lang().text(bb_i18n::Msg::UsbDhcpEnabled));
                 }
 
                 ans
             }
             helpers::FlashingCustomization::LinuxSdCloudInit(x) => {
-                helpers::sd_modifications_common(x)
+                helpers::sd_modifications_common(x, self.common.lang())
             }
             _ => Vec::new(),
         }
@@ -316,6 +355,13 @@ pub(crate) struct FlashingState {
     pub(crate) selected_image: (OsImageId, helpers::BoardImage),
     pub(crate) selected_dest: helpers::Destination,
     pub(crate) customization: helpers::FlashingCustomization,
+    /// Highest overall fraction reached so far.
+    ///
+    /// The write is a sequence of passes and each pass reports its own 0..1. Displaying those
+    /// directly makes the indicator fall back towards zero every time one pass hands over to the
+    /// next — which reads as "it started over", not as "it moved on". The screen therefore renders
+    /// one monotonic axis, and this is its high-water mark.
+    pub(crate) max_progress: f32,
 }
 
 impl FlashingState {
@@ -328,6 +374,7 @@ impl FlashingState {
         match u {
             bb_flasher::DownloadFlashingStatus::DownloadingProgress(_)
             | bb_flasher::DownloadFlashingStatus::FlashingProgress(_)
+            | bb_flasher::DownloadFlashingStatus::RawWrite(_)
                 if self.start_timestamp.is_none() =>
             {
                 self.start_timestamp = Some(Instant::now())
@@ -335,7 +382,111 @@ impl FlashingState {
             _ => {}
         }
 
+        if let Some(fraction) = flash_phase(u, self.selected_dest.is_dfu()).fraction {
+            self.max_progress = self.max_progress.max(fraction);
+        }
         self.progress = u;
+    }
+
+    /// What to draw right now: the label, and the fraction — or `None` while a phase with nothing
+    /// to count is running.
+    pub(crate) fn phase(&self) -> FlashPhase {
+        let phase = flash_phase(self.progress, self.selected_dest.is_dfu());
+        FlashPhase {
+            fraction: phase.fraction.map(|x| x.max(self.max_progress)),
+            ..phase
+        }
+    }
+}
+
+/// Where a status sits on the overall axis, and what it is called.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct FlashPhase {
+    pub(crate) label: bb_i18n::Msg,
+    /// `None` for phases whose duration cannot be measured — the board re-enumerating, or the eMMC
+    /// flush after the last byte. Those get an indeterminate indicator rather than an invented
+    /// number that would sit still and then jump.
+    pub(crate) fraction: Option<f32>,
+}
+
+/// Place a status on the single overall axis.
+///
+/// The two flows have different phase sets and very different cost distributions, so the weights
+/// are per flow. The DFU numbers follow `instruction.md` §13.4: the raw eMMC stream dominates, and
+/// the three boot artifacts — three orders of magnitude smaller — must not take a quarter of the
+/// bar each.
+pub(crate) fn flash_phase(status: bb_flasher::DownloadFlashingStatus, is_dfu: bool) -> FlashPhase {
+    use bb_flasher::DownloadFlashingStatus as S;
+    use bb_i18n::Msg;
+
+    let span = |base: f32, width: f32, x: f32| Some(base + width * x.clamp(0.0, 1.0));
+
+    match (status, is_dfu) {
+        (S::Preparing, _) => FlashPhase {
+            label: Msg::Preparing,
+            fraction: Some(0.0),
+        },
+
+        // ---- SD: download, write, read back, customize ---------------------------------------
+        (S::DownloadingProgress(x), false) => FlashPhase {
+            label: Msg::Downloading,
+            fraction: span(0.0, 0.50, x),
+        },
+        (S::FlashingProgress(x), false) => FlashPhase {
+            label: Msg::FlashingImage,
+            fraction: span(0.50, 0.35, x),
+        },
+        (S::Verifying(x), false) => FlashPhase {
+            label: Msg::VerifyingWrittenData,
+            fraction: span(0.85, 0.12, x),
+        },
+        (S::Customizing, false) => FlashPhase {
+            label: Msg::Customizing,
+            fraction: Some(0.98),
+        },
+
+        // ---- DFU: the same four passes against a staging file, then the board -----------------
+        (S::DownloadingProgress(x), true) => FlashPhase {
+            label: Msg::Downloading,
+            fraction: span(0.0, 0.30, x),
+        },
+        (S::FlashingProgress(x), true) => FlashPhase {
+            label: Msg::PreparingImage,
+            fraction: span(0.30, 0.15, x),
+        },
+        (S::Verifying(x), true) => FlashPhase {
+            label: Msg::VerifyingWrittenData,
+            fraction: span(0.45, 0.07, x),
+        },
+        (S::Customizing, true) => FlashPhase {
+            label: Msg::Customizing,
+            fraction: Some(0.53),
+        },
+        (S::ResolvingBootArtifacts, _) => FlashPhase {
+            label: Msg::ResolvingBootArtifacts,
+            fraction: None,
+        },
+        (S::Reconnecting, _) => FlashPhase {
+            label: Msg::WaitingForBoard,
+            fraction: None,
+        },
+        (S::BootStage { stage, progress }, _) => FlashPhase {
+            label: Msg::WritingBootloader,
+            // Three stages sharing 6 % of the axis: visible movement, honest weight.
+            fraction: span(
+                0.56 + f32::from(stage.saturating_sub(1)) * 0.02,
+                0.02,
+                progress,
+            ),
+        },
+        (S::RawWrite(x), _) => FlashPhase {
+            label: Msg::WritingToEmmc,
+            fraction: span(0.62, 0.33, x),
+        },
+        (S::Finalizing, _) => FlashPhase {
+            label: Msg::FinalizingWrite,
+            fraction: None,
+        },
     }
 }
 
@@ -404,6 +555,7 @@ impl From<FlashingFailState> for CustomizeState {
             selected_image: value.selected_image,
             selected_dest: value.selected_dest,
             customization: value.customization,
+            erase_confirmation: false,
         }
     }
 }
@@ -523,9 +675,127 @@ impl OverlayState {
 
 #[cfg(test)]
 mod tests {
-    use super::time_remaining_from;
+    use super::{flash_phase, time_remaining_from};
     use bb_flasher::DownloadFlashingStatus;
     use std::time::Duration;
+
+    /// The whole point of the shared axis: every phase of a DFU write, in the order the backend
+    /// emits them, must produce a non-decreasing fraction. Before this, staging ended near the top
+    /// of the bar and the DFU transfer restarted it at zero.
+    #[test]
+    fn a_dfu_write_never_moves_the_indicator_backwards() {
+        let sequence = [
+            DownloadFlashingStatus::Preparing,
+            DownloadFlashingStatus::DownloadingProgress(0.5),
+            DownloadFlashingStatus::DownloadingProgress(1.0),
+            DownloadFlashingStatus::FlashingProgress(0.0),
+            DownloadFlashingStatus::FlashingProgress(1.0),
+            DownloadFlashingStatus::Verifying(0.0),
+            DownloadFlashingStatus::Verifying(1.0),
+            DownloadFlashingStatus::Customizing,
+            DownloadFlashingStatus::ResolvingBootArtifacts,
+            DownloadFlashingStatus::Reconnecting,
+            DownloadFlashingStatus::BootStage {
+                stage: 1,
+                progress: 0.0,
+            },
+            DownloadFlashingStatus::BootStage {
+                stage: 3,
+                progress: 1.0,
+            },
+            DownloadFlashingStatus::RawWrite(0.0),
+            DownloadFlashingStatus::RawWrite(1.0),
+            DownloadFlashingStatus::Finalizing,
+        ];
+
+        let mut last = 0.0_f32;
+        for status in sequence {
+            // Unmeasurable phases report no fraction; they must not reset the axis either.
+            let Some(fraction) = flash_phase(status, true).fraction else {
+                continue;
+            };
+            // The epsilon covers f32 representation at a hand-over point (0.30 + 0.15 lands a
+            // fraction of a ulp above 0.45), not a real regression; `max_progress` clamps the
+            // rendered value anyway.
+            assert!(
+                fraction >= last - f32::EPSILON,
+                "{status:?} moved the indicator from {last} to {fraction}"
+            );
+            last = fraction;
+        }
+        assert!(last > 0.9, "the axis should be nearly full by the end");
+        assert!(
+            last < 1.0,
+            "the measurable work must not claim success before finalization"
+        );
+    }
+
+    /// The same rule on the SD flow, where the read-back pass used to restart the bar.
+    #[test]
+    fn an_sd_write_never_moves_the_indicator_backwards() {
+        let sequence = [
+            DownloadFlashingStatus::DownloadingProgress(1.0),
+            DownloadFlashingStatus::FlashingProgress(0.0),
+            DownloadFlashingStatus::FlashingProgress(1.0),
+            DownloadFlashingStatus::Verifying(0.0),
+            DownloadFlashingStatus::Verifying(1.0),
+            DownloadFlashingStatus::Customizing,
+        ];
+
+        let mut last = 0.0_f32;
+        for status in sequence {
+            let fraction = flash_phase(status, false).fraction.unwrap();
+            assert!(fraction >= last, "{status:?} moved {last} -> {fraction}");
+            last = fraction;
+        }
+    }
+
+    /// The three boot artifacts are three orders of magnitude smaller than the raw image, so they
+    /// must not occupy a comparable share of the axis.
+    #[test]
+    fn the_raw_emmc_stream_dominates_the_axis() {
+        let boot_share = flash_phase(
+            DownloadFlashingStatus::BootStage {
+                stage: 3,
+                progress: 1.0,
+            },
+            true,
+        )
+        .fraction
+        .unwrap()
+            - flash_phase(
+                DownloadFlashingStatus::BootStage {
+                    stage: 1,
+                    progress: 0.0,
+                },
+                true,
+            )
+            .fraction
+            .unwrap();
+        let raw_share = flash_phase(DownloadFlashingStatus::RawWrite(1.0), true)
+            .fraction
+            .unwrap()
+            - flash_phase(DownloadFlashingStatus::RawWrite(0.0), true)
+                .fraction
+                .unwrap();
+
+        assert!(
+            raw_share > boot_share * 4.0,
+            "raw {raw_share} vs boot {boot_share}"
+        );
+    }
+
+    /// Phases the backend cannot measure must say so rather than inventing a number.
+    #[test]
+    fn unmeasurable_phases_are_indeterminate() {
+        for status in [
+            DownloadFlashingStatus::ResolvingBootArtifacts,
+            DownloadFlashingStatus::Reconnecting,
+            DownloadFlashingStatus::Finalizing,
+        ] {
+            assert!(flash_phase(status, true).fraction.is_none());
+        }
+    }
 
     #[test]
     fn eta_scales_linearly_with_remaining_fraction() {

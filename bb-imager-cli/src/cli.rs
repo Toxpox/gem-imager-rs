@@ -121,12 +121,15 @@ pub enum TargetCommands {
     },
     #[cfg(feature = "dfu")]
     Dfu {
-        /// Identifer is in the following format: `{bus_num}:{address}:{vendor_id}:{product_id}`.
-        /// All fields are in hex.
+        /// Identifier format: `{bus}:{physical-port-path}:{vendor}:{product}` in hexadecimal.
+        /// A hub path is dot-separated, for example `03:02.07:0451:6165`.
         identifier: String,
-        /// Format {name} followed by {path}. Any number of firmware can be specified, which will
-        /// be flashed in a sequential order.
-        imgs: Vec<String>,
+        /// Extracted/customized raw image to stream to eMMC. Boot artifacts are resolved from the
+        /// verified T3 manifest and must not be supplied manually.
+        image: PathBuf,
+        /// Override the persistent content-addressed DFU cache (primarily for parity testing).
+        #[arg(long)]
+        cache_dir: Option<PathBuf>,
     },
 }
 
@@ -167,6 +170,36 @@ mod tests {
                     other => panic!("expected Sd, got {other:?}"),
                 }
             }
+            other => panic!("expected Flash, got {other:?}"),
+        }
+    }
+
+    #[cfg(feature = "dfu")]
+    #[test]
+    fn flash_dfu_parses_physical_path_image_and_cache() {
+        let opt = Opt::try_parse_from([
+            "bb-imager-cli",
+            "flash",
+            "dfu",
+            "03:02.07:0451:6165",
+            "staging.img",
+            "--cache-dir",
+            "dfu-cache",
+        ])
+        .expect("valid T3 DFU parity invocation");
+        match opt.command {
+            Commands::Flash { target, .. } => match *target {
+                TargetCommands::Dfu {
+                    identifier,
+                    image,
+                    cache_dir,
+                } => {
+                    assert_eq!(identifier, "03:02.07:0451:6165");
+                    assert_eq!(image, PathBuf::from("staging.img"));
+                    assert_eq!(cache_dir, Some(PathBuf::from("dfu-cache")));
+                }
+                other => panic!("expected Dfu, got {other:?}"),
+            },
             other => panic!("expected Flash, got {other:?}"),
         }
     }

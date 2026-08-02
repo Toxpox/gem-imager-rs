@@ -25,3 +25,47 @@ pub(crate) fn view(state: &BBImager) -> iced::Element<'_, BBImagerMessage> {
         _ => panic!("Unexpected message"),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    /// Review guard for `instruction.md` §11.2.
+    ///
+    /// Data supplied by catalogs/devices and technical placeholders may remain dynamic, but
+    /// buttons, toggler labels, headings and detail labels owned by this application must go
+    /// through `bb-i18n`. This intentionally checks source text: a new English literal should
+    /// fail in the same change that introduces it, before anybody has to notice it visually.
+    #[test]
+    fn user_facing_ui_controls_do_not_embed_runtime_literals() {
+        let files = [
+            ("app_info", include_str!("app_info.rs")),
+            ("board_selection", include_str!("board_selection.rs")),
+            ("configuration", include_str!("configuration.rs")),
+            (
+                "destination_selection",
+                include_str!("destination_selection.rs"),
+            ),
+            ("flash", include_str!("flash.rs")),
+            ("flash_finish", include_str!("flash_finish.rs")),
+            ("image_selection", include_str!("image_selection.rs")),
+            ("review", include_str!("review.rs")),
+        ];
+        let forbidden = [
+            "widget::button(\"",
+            "button(\"",
+            ".label(\"",
+            "placeholder_pane(\"",
+            "placeholder_heading(\"",
+            "detail_entry(\"",
+            "text(\"",
+        ];
+
+        for (name, source) in files {
+            for pattern in forbidden {
+                assert!(
+                    !source.contains(pattern),
+                    "{name}.rs contains user-facing literal pattern {pattern:?}; add a bb-i18n Msg key"
+                );
+            }
+        }
+    }
+}
