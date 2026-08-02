@@ -11,9 +11,39 @@ use serde::{Deserialize, Serialize};
 pub(crate) struct GuiConfiguration {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) sd_customization: Option<SdCustomization>,
+
+    /// The language the user picked, as an ISO 639-1 code.
+    ///
+    /// `None` means "never chosen", which is not the same as "English": it lets the system locale
+    /// decide on every start until the user states a preference. Stored as a string rather than
+    /// as [`bb_i18n::Lang`] so a config written by a future build that supports more languages
+    /// still loads here — an unknown code falls back to the system locale rather than failing.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    language: Option<String>,
 }
 
 impl GuiConfiguration {
+    /// The stored language, if the user picked one this build understands.
+    pub(crate) fn language(&self) -> Option<bb_i18n::Lang> {
+        let stored = self.language.as_deref()?;
+
+        match bb_i18n::Lang::from_code(stored) {
+            Some(lang) => Some(lang),
+            None => {
+                tracing::warn!(
+                    "Ignoring unsupported stored language {stored:?}; falling back to the system locale"
+                );
+                None
+            }
+        }
+    }
+
+    /// Record the user's choice. Consuming and returning `self` matches the other updaters here.
+    pub(crate) fn update_language(mut self, lang: bb_i18n::Lang) -> Self {
+        self.language = Some(lang.code().to_string());
+        self
+    }
+
     pub(crate) fn load() -> std::io::Result<Self> {
         let mut data = Vec::with_capacity(512);
         let config_p = Self::config_path().unwrap();

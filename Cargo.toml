@@ -11,7 +11,8 @@ members = [
 	"bb-helper",
 	"bb-flasher-dfu",
         "bb-drivelist",
-        "bb-iced-widgets"
+        "bb-iced-widgets",
+        "bb-i18n"
 ]
 
 [profile.release]

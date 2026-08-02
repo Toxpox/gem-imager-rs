@@ -33,6 +33,7 @@ pub mod canonical;
 pub mod diagnostic;
 pub mod raw;
 pub mod sha256;
+#[cfg(feature = "store")]
 pub mod store;
 pub mod validate;
 
@@ -49,6 +50,7 @@ pub use canonical::{
 pub use diagnostic::{DiagnosticSeverity, DiagnosticSummary, T3Diagnostic};
 pub use raw::RawT3Catalog;
 pub use sha256::{Sha256, Sha256ParseError};
+#[cfg(feature = "store")]
 pub use store::{CURRENT_SCHEMA_VERSION, StoreError, T3CatalogStore};
 pub use validate::{
     CatalogProvenance, T3CatalogError, T3CatalogParse, ValidatedT3Catalog, parse_catalog,

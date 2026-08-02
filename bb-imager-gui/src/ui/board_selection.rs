@@ -1,3 +1,4 @@
+use bb_i18n::Msg;
 use iced::{Element, widget};
 
 use crate::{BBImagerMessage, state::ChooseBoardState, ui::helpers};
@@ -5,10 +6,11 @@ use crate::{BBImagerMessage, state::ChooseBoardState, ui::helpers};
 const ICON_WIDTH: u32 = 100;
 
 pub(crate) fn view<'a>(state: &'a ChooseBoardState) -> Element<'a, BBImagerMessage> {
+    let lang = state.common.lang();
     helpers::page_type1(
         board_list_pane(state),
         board_view_pane(state),
-        [widget::button("NEXT")
+        [widget::button(lang.text(Msg::Next))
             .on_press_maybe(state.selected_board.as_ref().map(|_| BBImagerMessage::Next))],
     )
 }
@@ -38,12 +40,18 @@ fn board_list_pane<'a>(state: &'a ChooseBoardState) -> Element<'a, BBImagerMessa
         })
         .map(Into::into);
 
-    helpers::list_pane(&state.search_text, &state.common.scroll_id, [], items)
+    helpers::list_pane(
+        &state.search_text,
+        &state.common.scroll_id,
+        state.common.lang(),
+        [],
+        items,
+    )
 }
 
 fn board_view_pane<'a>(state: &'a ChooseBoardState) -> Element<'a, BBImagerMessage> {
     match state.selected_board.as_ref() {
         Some(dev) => helpers::board_view_pane(dev, &state.common),
-        None => helpers::placeholder_pane("Please Select a Board"),
+        None => helpers::placeholder_pane(state.common.lang().text(Msg::SelectBoardPrompt)),
     }
 }

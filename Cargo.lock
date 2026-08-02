@@ -554,10 +554,20 @@ dependencies = [
 name = "bb-flasher-dfu"
 version = "1.0.13"
 dependencies = [
+ "bb-config",
+ "bb-downloader",
  "bb-helper",
- "dfu-libusb",
+ "const-hex",
+ "directories",
+ "httpmock",
  "rusb",
+ "serde_json",
+ "sha2",
+ "tempfile",
  "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "url",
 ]
 
 [[package]]
@@ -591,6 +601,10 @@ dependencies = [
  "tempfile",
  "tokio",
 ]
+
+[[package]]
+name = "bb-i18n"
+version = "1.0.13"
 
 [[package]]
 name = "bb-iced-widgets"
@@ -628,6 +642,7 @@ dependencies = [
  "bb-downloader",
  "bb-flasher",
  "bb-helper",
+ "bb-i18n",
  "bb-iced-widgets",
  "chrono",
  "chrono-tz",
@@ -638,6 +653,7 @@ dependencies = [
  "iced",
  "iced_aw",
  "image",
+ "libc",
  "notify-rust",
  "rfd",
  "rusqlite",
@@ -645,6 +661,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tempfile",
+ "thiserror 2.0.18",
  "tokio",
  "tokio-util",
  "tracing",
@@ -652,6 +669,7 @@ dependencies = [
  "url",
  "webbrowser",
  "whoami",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1458,30 +1476,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ffdd80ce8ce993de27e9f063a444a4d53ce8e8db4c1f00cc03af5ad5a9867a1e"
 dependencies = [
  "cipher",
-]
-
-[[package]]
-name = "dfu-core"
-version = "0.11.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bfdef35f2e2bb7c34d4891a41e35d62aae017e43e2c862b07c902951f9f2e22c"
-dependencies = [
- "bytes",
- "displaydoc",
- "log",
- "pretty-hex",
- "thiserror 2.0.18",
-]
-
-[[package]]
-name = "dfu-libusb"
-version = "0.6.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "83237f2a68033f7c4ed63d0a98e38ce54eb87f7cbf69ce4d36e216a7dc1820cc"
-dependencies = [
- "dfu-core",
- "rusb",
- "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -4654,12 +4648,6 @@ name = "presser"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e8cf8e6a8aa66ce33f63993ffc4ea4271eb5b0530a9002db8455ea6050c77bfa"
-
-[[package]]
-name = "pretty-hex"
-version = "0.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9a65843dfefbafd3c879c683306959a6de478443ffe9c9adf02f5976432402d7"
 
 [[package]]
 name = "proc-macro-crate"

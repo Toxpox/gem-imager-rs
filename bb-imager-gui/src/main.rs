@@ -12,8 +12,10 @@ use crate::{helpers::blocking_future, state::BBImagerCommon};
 mod constants;
 mod db;
 mod helpers;
+mod keep_awake;
 mod message;
 mod persistance;
+mod staging;
 mod state;
 mod ui;
 mod updater;
@@ -41,6 +43,11 @@ fn main() -> iced::Result {
         .expect("Failed to register tracing_subscriber");
 
     tracing::info!("Resolved GUI keymap: {:?}", helpers::system_keymap());
+
+    // A staging image is a full OS image carrying the user's Wi-Fi PSK and password hash. `Drop`
+    // removes it on every ordinary path; this covers the one it cannot — a previous run that was
+    // killed or crashed mid-write.
+    staging::cleanup_stale();
 
     // Force using the low power gpu since this is not a GPU intensive application
     unsafe { std::env::set_var("WGPU_POWER_PREF", "low") };
@@ -102,6 +109,10 @@ impl BBImager {
 
     fn new() -> (Self, Task<BBImagerMessage>) {
         let app_config = persistance::GuiConfiguration::load().unwrap_or_default();
+        let lang = app_config
+            .language()
+            .or_else(helpers::system_language)
+            .unwrap_or_default();
 
         let downloader = bb_downloader::Downloader::new(
             directories::ProjectDirs::from(
@@ -127,6 +138,7 @@ impl BBImager {
 
             scroll_id: widget::Id::unique(),
             db: db.clone(),
+            lang,
         };
 
         let db_task = Task::future(blocking_future(move || {
@@ -217,22 +229,24 @@ impl BBImager {
         const INTERVAL: std::time::Duration = std::time::Duration::from_secs(1);
 
         match self {
-            Self::ChooseDest(x) => Subscription::run_with(
+            // Nothing is enumerated for a pair with no write method: polling for SD cards on a
+            // board that cannot take one only produces destinations the write path would refuse.
+            Self::ChooseDest(x) if !x.write_methods.is_empty() => Subscription::run_with(
                 (
-                    x.selected_image.1.flasher(),
+                    x.write_methods,
                     x.filter_destination,
                     x.search_text.to_lowercase(),
                 ),
-                |(flasher, filter, search_text)| {
+                |(methods, filter, search_text)| {
                     let mut interval = interval(INTERVAL);
                     interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
                     iced::futures::stream::unfold(
-                        (*flasher, *filter, search_text.clone(), interval),
-                        async move |(flasher, filter, search_text, mut interval)| {
+                        (*methods, *filter, search_text.clone(), interval),
+                        async move |(methods, filter, search_text, mut interval)| {
                             interval.tick().await;
                             let dest: Vec<helpers::Destination> =
-                                blocking_future(move || helpers::destinations(flasher, filter))
+                                blocking_future(move || helpers::destinations(methods, filter))
                                     .await
                                     .into_iter()
                                     .filter(|t| {
@@ -242,7 +256,7 @@ impl BBImager {
                                     .collect();
 
                             let msg = BBImagerMessage::Destinations(dest);
-                            Some((msg, (flasher, filter, search_text, interval)))
+                            Some((msg, (methods, filter, search_text, interval)))
                         },
                     )
                 },
@@ -318,6 +332,7 @@ impl BBImager {
             selected_board: state.selected_board,
             cancel_flashing: h,
             progress: bb_flasher::DownloadFlashingStatus::Preparing,
+            max_progress: 0.0,
             start_timestamp: None,
             selected_image: state.selected_image,
             selected_dest: state.selected_dest,
@@ -405,6 +420,16 @@ impl BBImager {
                     .selected_image
                     .expect("Image should already be selected");
 
+                // Board capability × image compatibility × what this build can actually drive.
+                let write_methods =
+                    helpers::WriteMethods::resolve(&inner.selected_board, &selected_image.1);
+                tracing::info!(
+                    "Destinations for {}: SD={} DFU={}",
+                    inner.selected_board.name,
+                    write_methods.sd,
+                    write_methods.dfu
+                );
+
                 Self::ChooseDest(state::ChooseDestState {
                     common: inner.common,
                     selected_board: inner.selected_board,
@@ -413,6 +438,7 @@ impl BBImager {
                     destinations: Vec::new(),
                     filter_destination: true,
                     search_text: String::new(),
+                    write_methods,
                 })
             }
             Self::ChooseDest(inner) => {
@@ -430,6 +456,7 @@ impl BBImager {
                         selected_image: inner.selected_image,
                         selected_dest,
                         customization,
+                        erase_confirmation: false,
                     })
                 } else {
                     let temp = helpers::FlashingCustomization::new(
@@ -444,6 +471,7 @@ impl BBImager {
                         selected_image: inner.selected_image,
                         selected_dest,
                         customization: temp,
+                        erase_confirmation: false,
                     })
                 }
             }

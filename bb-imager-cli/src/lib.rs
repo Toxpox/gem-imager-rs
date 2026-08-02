@@ -64,9 +64,22 @@ fn flash(target: TargetCommands, quite: bool) {
                         ) => {
                             last_bar.as_ref().unwrap().set_position((p * 100.0) as u64);
                         }
+                        // The DFU stream, same treatment: one bar per stage of the chain.
+                        (
+                            DownloadFlashingStatus::RawWrite(p),
+                            DownloadFlashingStatus::RawWrite(_),
+                        )
+                        | (
+                            DownloadFlashingStatus::BootStage { progress: p, .. },
+                            DownloadFlashingStatus::BootStage { .. },
+                        ) => {
+                            last_bar.as_ref().unwrap().set_position((p * 100.0) as u64);
+                        }
                         // Create new bar when stage has changed
                         (DownloadFlashingStatus::DownloadingProgress(p), _)
                         | (DownloadFlashingStatus::FlashingProgress(p), _)
+                        | (DownloadFlashingStatus::RawWrite(p), _)
+                        | (DownloadFlashingStatus::BootStage { progress: p, .. }, _)
                         | (DownloadFlashingStatus::Verifying(p), _) => {
                             if let Some(b) = last_bar.take() {
                                 b.finish();
@@ -80,8 +93,13 @@ fn flash(target: TargetCommands, quite: bool) {
                             temp_bar.set_position((p * 100.0) as u64);
                             last_bar = Some(temp_bar);
                         }
-                        // Print stage when entering a new stage without progress
+                        // Print stage when entering a new stage without progress. The three DFU
+                        // phases with nothing to count belong here rather than on a bar that would
+                        // have to invent a position for them.
                         (DownloadFlashingStatus::Customizing, _)
+                        | (DownloadFlashingStatus::ResolvingBootArtifacts, _)
+                        | (DownloadFlashingStatus::Reconnecting, _)
+                        | (DownloadFlashingStatus::Finalizing, _)
                         | (DownloadFlashingStatus::Preparing, _) => {
                             if let Some(b) = last_bar.take() {
                                 b.finish();
@@ -184,24 +202,21 @@ fn flash_internal(
             .flash(chan, None)
         }
         #[cfg(feature = "dfu")]
-        TargetCommands::Dfu { identifier, imgs } => {
-            if imgs.len() % 2 == 1 {
-                panic!("Failed to parse input images");
+        TargetCommands::Dfu {
+            identifier,
+            image,
+            cache_dir,
+        } => {
+            let flasher = bb_flasher::dfu::Flasher::from_identifier(
+                LocalImage::new(image.into()).into_image_fn(),
+                &identifier,
+                None,
+            )
+            .unwrap();
+            match cache_dir {
+                Some(cache_dir) => flasher.with_cache_dir(cache_dir).flash(chan),
+                None => flasher.flash(chan),
             }
-
-            let img_list = imgs
-                .chunks_exact(2)
-                .map(|x| {
-                    (
-                        x[0].to_string(),
-                        LocalImage::new(PathBuf::from(&x[1]).into()).into_image_fn(),
-                    )
-                })
-                .collect();
-
-            bb_flasher::dfu::Flasher::from_identifier(img_list, &identifier, None)
-                .unwrap()
-                .flash(chan)
         }
     }
 }
@@ -444,6 +459,11 @@ const fn progress_msg(status: DownloadFlashingStatus) -> &'static str {
         DownloadFlashingStatus::FlashingProgress(_) => "Flashing",
         DownloadFlashingStatus::Verifying(_) => "Verifying",
         DownloadFlashingStatus::Customizing => "Customizing",
+        DownloadFlashingStatus::ResolvingBootArtifacts => "Boot files",
+        DownloadFlashingStatus::Reconnecting => "Reconnecting",
+        DownloadFlashingStatus::BootStage { .. } => "Bootloader",
+        DownloadFlashingStatus::RawWrite(_) => "eMMC write",
+        DownloadFlashingStatus::Finalizing => "Finishing",
     }
 }
 

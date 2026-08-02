@@ -1,3 +1,5 @@
+#![cfg(feature = "store")]
+
 //! Persistence and migration tests for the T3 catalog store (`instruction.md` §6.4, §6.5).
 
 use bb_config::t3::store::{CURRENT_SCHEMA_VERSION, HttpValidators, StoreError, T3CatalogStore};

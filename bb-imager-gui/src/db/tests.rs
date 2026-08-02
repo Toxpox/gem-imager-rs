@@ -198,6 +198,7 @@ fn add_config_inserts_device_into_board_list() {
         icon: None,
         description: "Test device".to_string(),
         flasher: bb_config::config::Flasher::SdCard,
+        emmc_dfu: false,
         documentation: None,
         instructions: None,
         specification: vec![],
@@ -259,6 +260,7 @@ fn add_config_updates_existing_device_with_same_name() {
         icon: None,
         description: "Old description".to_string(),
         flasher: bb_config::config::Flasher::SdCard,
+        emmc_dfu: false,
         documentation: None,
         instructions: None,
         specification: vec![],
@@ -297,6 +299,7 @@ fn add_config_updates_existing_device_with_same_name() {
         icon: None,
         description: "Updated description".to_string(),
         flasher: bb_config::config::Flasher::SdCard,
+        emmc_dfu: false,
         documentation: None,
         instructions: Some("New instructions".to_string()),
         specification: vec![("CPU".to_string(), "Test CPU".to_string())],
@@ -371,6 +374,7 @@ fn add_config_inserts_os_image_for_board() {
         instructions: None,
         oshw: None,
         specification: vec![],
+        emmc_dfu: false,
         documentation: None,
         tags: HashSet::from(["test_board".to_string()]),
     };
@@ -410,7 +414,11 @@ fn add_config_inserts_os_image_for_board() {
         .os_image_items(board_id, None)
         .expect("os_image_items should succeed");
 
-    assert!(items.iter().any(|x| x.label() == image.name));
+    assert!(
+        items
+            .iter()
+            .any(|x| x.localized_label(bb_i18n::Lang::En) == image.name)
+    );
 }
 
 /// This test verifies that os_image_by_id() returns the full OS image
@@ -449,6 +457,7 @@ fn os_image_by_id_returns_correct_data() {
         instructions: None,
         oshw: None,
         specification: vec![],
+        emmc_dfu: false,
         documentation: None,
         tags: HashSet::from(["test_board".to_string()]),
     };
@@ -492,8 +501,11 @@ fn os_image_by_id_returns_correct_data() {
         .os_image_items(board_id, None)
         .expect("os_image_items should succeed");
 
-    let crate::helpers::OsImageId::OsImage(image_id) =
-        items.iter().find(|x| x.label() == "Test OS").unwrap().id
+    let crate::helpers::OsImageId::OsImage(image_id) = items
+        .iter()
+        .find(|x| x.localized_label(bb_i18n::Lang::En) == "Test OS")
+        .unwrap()
+        .id
     else {
         panic!("Incorrect ID");
     };
@@ -546,6 +558,7 @@ fn add_config_inserts_os_sublist_for_board() {
         instructions: None,
         oshw: None,
         specification: vec![],
+        emmc_dfu: false,
         documentation: None,
         tags: HashSet::from(["test_board".to_string()]),
     };
@@ -593,7 +606,11 @@ fn add_config_inserts_os_sublist_for_board() {
         .os_image_items(board_id, None)
         .expect("os_image_items should succeed");
 
-    assert!(items.iter().any(|x| x.label() == "Test SubList"));
+    assert!(
+        items
+            .iter()
+            .any(|x| x.localized_label(bb_i18n::Lang::En) == "Test SubList")
+    );
 }
 
 /// This test verifies that board support propagates through multiple
@@ -631,6 +648,7 @@ fn nested_os_sublists_propagate_board_support() {
         instructions: None,
         oshw: None,
         specification: vec![],
+        emmc_dfu: false,
         documentation: None,
         tags: HashSet::from(["test_board".to_string()]),
     };
@@ -692,7 +710,9 @@ fn nested_os_sublists_propagate_board_support() {
         .expect("os_image_items should succeed");
 
     assert!(
-        items.iter().any(|x| x.label() == "Parent SubList"),
+        items
+            .iter()
+            .any(|x| x.localized_label(bb_i18n::Lang::En) == "Parent SubList"),
         "Parent sublist should be visible through recursive propagation"
     );
 }
@@ -731,6 +751,7 @@ fn remote_os_sublist_is_returned_for_board() {
         instructions: None,
         oshw: None,
         specification: vec![],
+        emmc_dfu: false,
         documentation: None,
         tags: HashSet::from(["test_board".to_string()]),
     };
@@ -816,6 +837,7 @@ fn remote_os_sublist_resolve_inserts_child_items_and_clears_url() {
         instructions: None,
         oshw: None,
         specification: vec![],
+        emmc_dfu: false,
         documentation: None,
         tags: HashSet::from(["test_board".to_string()]),
     };
@@ -883,7 +905,11 @@ fn remote_os_sublist_resolve_inserts_child_items_and_clears_url() {
 
     let items = db.os_image_items(board_id, Some(sublist_id)).unwrap();
 
-    assert!(items.iter().any(|x| x.label() == "Fetched OS"),);
+    assert!(
+        items
+            .iter()
+            .any(|x| x.localized_label(bb_i18n::Lang::En) == "Fetched OS"),
+    );
 }
 
 /// This test verifies that resolving a remote sublist multiple times
@@ -922,6 +948,7 @@ fn duplicate_remote_sublist_resolve_does_not_duplicate_os_items() {
         instructions: None,
         oshw: None,
         specification: vec![],
+        emmc_dfu: false,
         documentation: None,
         tags: HashSet::from(["test_board".to_string()]),
     };
@@ -992,7 +1019,10 @@ fn duplicate_remote_sublist_resolve_does_not_duplicate_os_items() {
     assert!(second.is_err());
 
     let items = db.os_image_items(board_id, Some(sublist_id)).unwrap();
-    let count = items.iter().filter(|x| x.label() == "Fetched OS").count();
+    let count = items
+        .iter()
+        .filter(|x| x.localized_label(bb_i18n::Lang::En) == "Fetched OS")
+        .count();
 
     assert_eq!(count, 1,);
 
@@ -1033,6 +1063,7 @@ fn board_list_search_filters_boards_case_insensitive() {
         instructions: None,
         oshw: None,
         specification: vec![],
+        emmc_dfu: false,
         documentation: None,
         tags: HashSet::from(["bbb".to_string()]),
     };
@@ -1045,6 +1076,7 @@ fn board_list_search_filters_boards_case_insensitive() {
         instructions: None,
         oshw: None,
         specification: vec![],
+        emmc_dfu: false,
         documentation: None,
         tags: HashSet::from(["beagleplay".to_string()]),
     };
@@ -1057,6 +1089,7 @@ fn board_list_search_filters_boards_case_insensitive() {
         instructions: None,
         oshw: None,
         specification: vec![],
+        emmc_dfu: false,
         documentation: None,
         tags: HashSet::from(["rpi".to_string()]),
     };

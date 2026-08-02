@@ -1,5 +1,6 @@
 use std::sync::LazyLock;
 
+use bb_i18n::Msg;
 use bb_iced_widgets::circle_bar;
 use iced::Element;
 use iced::advanced::text::highlighter::PlainText;
@@ -202,7 +203,7 @@ pub(crate) fn board_view_pane<'a>(
 
     if let Some(x) = &dev.documentation {
         btns.push(
-            widget::button(widget::text("DOCUMENTATION"))
+            widget::button(widget::text(state.lang().text(Msg::Documentation)))
                 .on_press(BBImagerMessage::OpenUrl(x.clone()))
                 .into(),
         );
@@ -292,10 +293,11 @@ pub(crate) fn list_separator<'a>() -> Element<'a, BBImagerMessage> {
 pub(crate) fn list_pane<'a>(
     search_text: &'a str,
     scroll_id: &widget::Id,
+    lang: bb_i18n::Lang,
     header: impl IntoIterator<Item = Element<'a, BBImagerMessage>>,
     items: impl IntoIterator<Item = Element<'a, BBImagerMessage>>,
 ) -> Element<'a, BBImagerMessage> {
-    let top = [search_box(search_text).into(), list_separator()];
+    let top = [search_box(search_text, lang).into(), list_separator()];
 
     widget::scrollable(
         widget::column(top.into_iter().chain(header).chain(items)).padding(LIST_COL_PADDING),
@@ -352,14 +354,14 @@ pub(crate) fn placeholder_pane<'a>(label: &'a str) -> Element<'a, BBImagerMessag
         .into()
 }
 
-fn search_box<'a>(inp: &'a str) -> widget::Container<'a, BBImagerMessage> {
+fn search_box<'a>(inp: &'a str, lang: bb_i18n::Lang) -> widget::Container<'a, BBImagerMessage> {
     widget::container(
         widget::row![
             widget::svg(SEARCH_ICON.clone())
                 .style(svg_icon_style)
                 .width(iced::Length::Shrink)
                 .height(18),
-            widget::text_input("SEARCH", inp)
+            widget::text_input(lang.text(Msg::Search), inp)
                 .style(|theme, status| {
                     let mut temp = widget::text_input::default(theme, status);
                     temp.border.width = 0.0;

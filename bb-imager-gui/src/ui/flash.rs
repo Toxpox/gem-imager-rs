@@ -1,3 +1,4 @@
+use bb_i18n::Msg;
 use bb_iced_widgets::progress_circle;
 use iced::{
     Element,
@@ -9,31 +10,31 @@ use crate::ui::helpers::{self, VIEW_COL_PADDING, detail_entry, page_type1};
 use crate::{BBImagerMessage, state::FlashingState};
 
 pub(crate) fn view(state: &FlashingState) -> Element<'_, BBImagerMessage> {
+    let lang = state.common.lang();
     page_type1(
         helpers::board_view_pane(&state.selected_board, &state.common),
         progress_view(state),
-        [button("Cancel")
+        [button(lang.text(Msg::Cancel))
             .style(widget::button::danger)
             .on_press(BBImagerMessage::FlashCancel)],
     )
 }
 
 fn progress_view(state: &FlashingState) -> Element<'_, BBImagerMessage> {
-    let (prog, label) = match state.progress {
-        bb_flasher::DownloadFlashingStatus::Preparing => (0.0, "Preparing ..."),
-        bb_flasher::DownloadFlashingStatus::DownloadingProgress(x) => (x, "Downloading ..."),
-        bb_flasher::DownloadFlashingStatus::FlashingProgress(x) => (x, "Flashing Image ..."),
-        // Its own pass with its own fraction — not a "nearly done" placeholder pinned at 99%.
-        bb_flasher::DownloadFlashingStatus::Verifying(x) => (x, "Verifying written data ..."),
-        bb_flasher::DownloadFlashingStatus::Customizing => (0.99, "Customizing ..."),
+    let lang = state.common.lang();
+    // One monotonic axis across every pass, and a spinner exactly where there is nothing to count
+    // — the board re-enumerating, or the eMMC flush. A percentage invented for those would sit
+    // still for minutes and then jump, which is indistinguishable from a hang.
+    let phase = state.phase();
+    let indicator: Element<'_, _> = match phase.fraction {
+        Some(x) => progress_circle(x, 10.0f32, GEMSTONE_ROSE, FONT_BOLD).into(),
+        None => iced_aw::Spinner::new().width(80).height(80).into(),
     };
 
-    let progress = progress_circle(prog, 10.0f32, GEMSTONE_ROSE, FONT_BOLD);
-
-    let mut col = widget::column![progress, widget::text(label)];
+    let mut col = widget::column![indicator, widget::text(lang.text(phase.label))];
     if let Some(x) = state.time_remaining() {
         col = col.push(detail_entry(
-            "Time Remaining",
+            lang.text(Msg::TimeRemaining),
             crate::helpers::pretty_duration(x),
         ));
     }

@@ -52,6 +52,15 @@ pub struct Device {
     /// The default [`Flasher`] for the board. This will be used when flasher type is not present
     /// in the OS image.
     pub flasher: Flasher,
+    /// Whether this board can be written over USB DFU to its onboard eMMC.
+    ///
+    /// [`Flasher`] cannot express this: it names *one* way to write an image, while a T3 board
+    /// accepts the same image over SD **and** over DFU (`instruction.md` §6.3). The destination
+    /// list is an intersection of board capability, image compatibility and platform backend
+    /// availability, and this field carries the first of the three. Defaults to `false`, so a
+    /// catalog that says nothing never grows a destination that erases onboard storage.
+    #[serde(default)]
+    pub emmc_dfu: bool,
     /// Link to board documentation
     pub documentation: Option<Url>,
     /// Special Instructions for flashing board.
@@ -103,6 +112,7 @@ impl InitFormat {
     }
 }
 
+#[cfg(feature = "store")]
 impl rusqlite::ToSql for InitFormat {
     fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
         let val: u8 = match self {
@@ -117,6 +127,7 @@ impl rusqlite::ToSql for InitFormat {
     }
 }
 
+#[cfg(feature = "store")]
 impl rusqlite::types::FromSql for InitFormat {
     fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
         value.as_i64().and_then(|val| match val {
@@ -284,6 +295,7 @@ pub enum Flasher {
     SdCard,
 }
 
+#[cfg(feature = "store")]
 impl rusqlite::ToSql for Flasher {
     fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
         let val: u8 = match self {
@@ -294,6 +306,7 @@ impl rusqlite::ToSql for Flasher {
     }
 }
 
+#[cfg(feature = "store")]
 impl rusqlite::types::FromSql for Flasher {
     fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
         value.as_i64().and_then(|val| match val {

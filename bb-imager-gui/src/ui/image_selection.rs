@@ -1,3 +1,4 @@
+use bb_i18n::Msg;
 use iced::{
     Element,
     widget::{self, button, text},
@@ -12,14 +13,15 @@ use crate::{
 const ICON_WIDTH: u32 = 60;
 
 pub(crate) fn view<'a>(state: &'a crate::state::ChooseOsState) -> Element<'a, BBImagerMessage> {
+    let lang = state.common.lang();
     page_type1(
         os_list_pane(state),
         os_view_pane(state),
         [
-            widget::button("BACK")
+            widget::button(lang.text(Msg::Back))
                 .on_press(BBImagerMessage::Back)
                 .style(widget::button::secondary),
-            widget::button("NEXT")
+            widget::button(lang.text(Msg::Next))
                 .on_press_maybe(state.selected_image.as_ref().map(|_| BBImagerMessage::Next)),
         ],
     )
@@ -68,7 +70,10 @@ fn os_list_pane<'a>(state: &'a crate::state::ChooseOsState) -> Element<'a, BBIma
                     .into(),
                 };
 
-                let mut contents = vec![icon, helpers::list_label(img.label()).into()];
+                let mut contents = vec![
+                    icon,
+                    helpers::list_label(img.localized_label(state.common.lang())).into(),
+                ];
                 if img.is_sublist() {
                     contents.push(
                         widget::svg(helpers::ARROW_FORWARD_IOS_ICON.clone())
@@ -93,7 +98,10 @@ fn os_list_pane<'a>(state: &'a crate::state::ChooseOsState) -> Element<'a, BBIma
                 .style(svg_icon_style);
             vec![
                 helpers::list_item(
-                    [icon.into(), helpers::list_label("Back").into()],
+                    [
+                        icon.into(),
+                        helpers::list_label(state.common.lang().text(Msg::Back)).into(),
+                    ],
                     false,
                     BBImagerMessage::GotoOsListParent,
                 )
@@ -101,13 +109,19 @@ fn os_list_pane<'a>(state: &'a crate::state::ChooseOsState) -> Element<'a, BBIma
             ]
         };
 
-        helpers::list_pane(&state.search_text, &state.common.scroll_id, back, items)
+        helpers::list_pane(
+            &state.search_text,
+            &state.common.scroll_id,
+            state.common.lang(),
+            back,
+            items,
+        )
     }
 }
 
 fn os_view_pane<'a>(state: &'a crate::state::ChooseOsState) -> Element<'a, BBImagerMessage> {
     match state.selected_image.as_ref() {
-        Some((_, img)) => {
+        Some((id, img)) => {
             let icon: Element<'a, BBImagerMessage> = match img.icon() {
                 crate::helpers::BoardImageIcon::Remote(url) => {
                     bb_iced_widgets::cached_icon(&state.common.img_handle_cache, url)
@@ -137,8 +151,14 @@ fn os_view_pane<'a>(state: &'a crate::state::ChooseOsState) -> Element<'a, BBIma
                 ));
             }
 
+            let display_name = match id {
+                crate::helpers::OsImageId::Format => {
+                    state.common.lang().text(Msg::FormatSdCard).to_owned()
+                }
+                _ => img.to_string(),
+            };
             col = col.push(
-                text(img.to_string())
+                text(display_name)
                     .size(24)
                     .align_x(iced::alignment::Alignment::Center)
                     .width(iced::Length::Fill),
@@ -176,23 +196,32 @@ fn os_view_pane<'a>(state: &'a crate::state::ChooseOsState) -> Element<'a, BBIma
                     BBImagerMessage::UpdateInitFormat,
                 );
                 col = col.push(
-                    widget::row![text("Init Format: ").font(constants::FONT_BOLD), el]
-                        .align_y(iced::Alignment::Center)
-                        .padding(iced::Padding::ZERO.right(16)),
+                    widget::row![
+                        text(format!("{}: ", state.common.lang().text(Msg::InitFormat)))
+                            .font(constants::FONT_BOLD),
+                        el
+                    ]
+                    .align_y(iced::Alignment::Center)
+                    .padding(iced::Padding::ZERO.right(16)),
                 )
             } else if init_formats.len() == 1 {
-                col = col.push(detail_entry("Init Format", init_formats[0].to_string()))
+                col = col.push(detail_entry(
+                    state.common.lang().text(Msg::InitFormat),
+                    init_formats[0].to_string(),
+                ))
             }
 
             if let Some(x) = img.support() {
-                let row =
-                    widget::row![button("SUPPORT").on_press(BBImagerMessage::OpenUrl(x.clone()))]
-                        .spacing(16);
+                let row = widget::row![
+                    button(state.common.lang().text(Msg::Support))
+                        .on_press(BBImagerMessage::OpenUrl(x.clone()))
+                ]
+                .spacing(16);
                 col = col.push(widget::center(row));
             }
 
             helpers::detail_pane(col, &state.common.scroll_id)
         }
-        None => helpers::placeholder_pane("Please Select an OS"),
+        None => helpers::placeholder_pane(state.common.lang().text(Msg::SelectOsPrompt)),
     }
 }

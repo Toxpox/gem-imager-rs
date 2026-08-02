@@ -4,7 +4,9 @@
 	<id>org.t3gemstone.imager</id>
 
 	<name>T3 Gemstone Imager</name>
+	<name xml:lang="tr">T3 Gemstone Imager</name>
 	<summary>Write T3 Gemstone OS images to SD cards</summary>
+	<summary xml:lang="tr">T3 Gemstone işletim sistemi imajlarını SD kartlara yazın</summary>
 	<developer id="org.t3gemstone">
 		<name>T3 Gemstone Devteam</name>
 	</developer>
@@ -16,9 +18,16 @@
 		<p>
 			The easiest way to install the latest operating system images for your T3 Gemstone board.
 		</p>
+		<p xml:lang="tr">
+			T3 Gemstone kartınız için en güncel işletim sistemi imajlarını kolayca kurun.
+		</p>
 		<p>
 			Preview release: this build writes to SD cards only. eMMC installation over DFU is not
 			available yet, and this application is not a replacement for gem-imager.
+		</p>
+		<p xml:lang="tr">
+			Önizleme sürümü: bu yapı yalnız SD kartlara yazar. DFU üzerinden eMMC kurulumu henüz
+			kullanılamaz ve bu uygulama gem-imager'ın yerine geçmez.
 		</p>
 	</description>
 

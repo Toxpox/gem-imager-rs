@@ -94,12 +94,42 @@ pub(crate) const KEYMAP_LAYOUTS: &[&str] = &[
 
 #[cfg(test)]
 mod tests {
-    use super::KEYMAP_LAYOUTS;
+    use super::{APP_NAME, KEYMAP_LAYOUTS, PACKAGE_QUALIFIER};
 
     /// The keymap combo box looks up its selection with `binary_search`, so new
     /// entries need to be inserted in byte order.
     #[test]
     fn keymap_layouts_sorted() {
         assert!(KEYMAP_LAYOUTS.is_sorted());
+    }
+
+    #[test]
+    fn canonical_product_identity_does_not_collide_with_gem_imager() {
+        assert_eq!(APP_NAME, "T3 Gemstone Imager");
+        assert_eq!(PACKAGE_QUALIFIER, ("org", "t3gemstone", "imager"));
+        assert_ne!(PACKAGE_QUALIFIER.2, "gem-imager");
+    }
+
+    #[test]
+    fn installed_identity_surfaces_use_the_canonical_product() {
+        let surfaces = [
+            include_str!("../Cargo.toml"),
+            include_str!("../Package.appxmanifest"),
+            include_str!("../assets/packages/windows/gui.exe.manifest"),
+            include_str!("../assets/packages/darwin/Info.plist"),
+            include_str!("../assets/packages/linux/T3GemstoneImager.desktop"),
+            include_str!("../assets/packages/linux/flatpak/org.t3gemstone.imager.metainfo.xml"),
+            include_str!("../../snapcraft.gui.yaml"),
+        ];
+
+        for surface in surfaces {
+            assert!(
+                surface.contains("T3 Gemstone Imager") || surface.contains("t3gemstone-imager"),
+                "packaging surface is missing the canonical product name"
+            );
+            assert!(!surface.contains("org.beagleboard.imagingutility"));
+            assert!(!surface.contains("BeagleBoard Imaging Utility"));
+            assert!(!surface.contains("org.t3gemstone.gem-imager"));
+        }
     }
 }

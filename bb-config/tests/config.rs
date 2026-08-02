@@ -1,3 +1,5 @@
+#![cfg(feature = "store")]
+
 //! Integration tests for the public `bb_config` parsing/serialization API.
 //!
 //! The checked-in `config.json` fixture has an empty `os_list`, so the crate's

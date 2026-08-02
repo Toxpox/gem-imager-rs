@@ -1,3 +1,4 @@
+use bb_i18n::Msg;
 use iced::{Element, widget};
 
 use crate::{
@@ -9,15 +10,17 @@ use crate::{
 const INP_BOX_WIDTH: u32 = 420;
 
 pub(crate) fn view<'a>(state: &'a OverlayState) -> Element<'a, BBImagerMessage> {
+    let lang = state.common().lang();
     page_type3(
         review_view(state),
-        [widget::button("BACK")
+        [widget::button(lang.text(Msg::Back))
             .on_press(BBImagerMessage::Back)
             .style(widget::button::secondary)],
     )
 }
 
 fn review_view<'a>(state: &'a OverlayState) -> Element<'a, BBImagerMessage> {
+    let lang = state.common().lang();
     let col = widget::column![
         widget::image(WINDOW_ICON.clone()),
         crate::constants::APP_NAME,
@@ -25,7 +28,12 @@ fn review_view<'a>(state: &'a OverlayState) -> Element<'a, BBImagerMessage> {
         crate::constants::APP_DESC,
         widget::rule::horizontal(2),
         element_with_label(
-            "Cache Directory",
+            lang.text(Msg::Language),
+            widget::pick_list(bb_i18n::Lang::ALL, Some(lang), BBImagerMessage::SetLanguage,).into()
+        ),
+        widget::rule::horizontal(2),
+        element_with_label(
+            lang.text(Msg::CacheDirectory),
             widget::text_input(&state.cache_dir, &state.cache_dir)
                 .width(INP_BOX_WIDTH)
                 .on_input(|_| BBImagerMessage::Null)
@@ -33,7 +41,7 @@ fn review_view<'a>(state: &'a OverlayState) -> Element<'a, BBImagerMessage> {
         ),
         widget::rule::horizontal(2),
         element_with_label(
-            "Log File",
+            lang.text(Msg::LogFile),
             widget::text_input(&state.log_path, &state.log_path)
                 .width(INP_BOX_WIDTH)
                 .on_input(|_| BBImagerMessage::Null)
