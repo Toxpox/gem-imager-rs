@@ -1,17 +1,17 @@
 //! Strict adapter for the T3 Gemstone image catalog.
 //!
 //! The remote document is never deserialized straight into GUI or database types. Three layers
-//! sit between the network and the rest of the application (the strict catalog boundary):
+//! sit between the network and the rest of the application (`instruction.md` §6.1):
 //!
 //! 1. [`raw`] — serde types close to the server schema. Almost everything is optional so a bad
 //!    entry becomes a diagnostic instead of aborting the document.
-//! 2. [`validate`] — enforces the the catalog validation rules invariants and emits a [`diagnostic::T3Diagnostic`] with a
+//! 2. [`validate`] — enforces the §6.2 invariants and emits a [`diagnostic::T3Diagnostic`] with a
 //!    JSON path for every entry it drops or downgrades.
 //! 3. [`canonical`] — the model the application actually uses.
 //!
 //! The BeagleBoard adapter in [`crate::config`] is *not* reusable here: the T3 schema has no
 //! `flasher` field, carries a separate `extract_sha256`, and expresses board capability through an
-//! `emmc` boolean plus `matching_type`. It also relies on `VecSkipError`, which the catalog validation rules forbids in
+//! `emmc` boolean plus `matching_type`. It also relies on `VecSkipError`, which §6.2 forbids in
 //! this adapter.
 //!
 //! ```no_run
@@ -57,5 +57,5 @@ pub use validate::{
     validate_catalog,
 };
 
-/// Canonical URL of the T3 image catalog (the T3 platform contract).
+/// Canonical URL of the T3 image catalog (`instruction.md` §3.1).
 pub const T3_CATALOG_URL: &str = "https://packages.t3gemstone.org/images/list.json";

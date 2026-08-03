@@ -1,6 +1,6 @@
 #![cfg(feature = "store")]
 
-//! Persistence and migration tests for the T3 catalog store (the storage contract, the catalog test contract).
+//! Persistence and migration tests for the T3 catalog store (`instruction.md` §6.4, §6.5).
 
 use bb_config::t3::store::{CURRENT_SCHEMA_VERSION, HttpValidators, StoreError, T3CatalogStore};
 use bb_config::t3::{ProductScope, ValidatedT3Catalog, parse_catalog};
@@ -302,7 +302,7 @@ fn a_corrupt_hash_column_is_reported_instead_of_being_silently_accepted() {
 }
 
 // ---------------------------------------------------------------------------
-// Last-known-good behaviour (the cache policy)
+// Last-known-good behaviour (`instruction.md` §8.3)
 // ---------------------------------------------------------------------------
 
 const LIVE_BOOT_MANIFEST: &[u8] = include_bytes!("fixtures/t3/boot_manifest.json");

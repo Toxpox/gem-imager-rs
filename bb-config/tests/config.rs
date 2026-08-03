@@ -233,7 +233,7 @@ fn sqlite_invalid_discriminant_errors() {
 }
 
 // ---------------------------------------------------------------------------
-// Extracted-side digest (the integrity policy)
+// Extracted-side digest (`instruction.md` §8.1)
 // ---------------------------------------------------------------------------
 
 /// The T3 catalog publishes `extract_sha256`; the legacy schema never did. Both have to survive
@@ -292,7 +292,7 @@ fn a_catalog_entry_without_an_extracted_digest_parses_as_absent() {
 }
 
 /// An unusable digest makes the whole entry unparsable — and the legacy list drops unparsable
-/// entries silently, which is precisely the behaviour the strict catalog boundary forbids for the T3
+/// entries silently, which is precisely the behaviour `instruction.md` §6.1 forbids for the T3
 /// adapter. Documented here so the difference between the two parsers stays visible: an image
 /// whose digest cannot be read simply disappears from this one.
 #[test]

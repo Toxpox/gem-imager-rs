@@ -96,7 +96,7 @@ pub enum InitFormat {
     ///
     /// This is a separate variant rather than a flag because the front-end selects its
     /// customization screen from this value, and the desktop screen offers a different field set
-    /// (the supported first-boot contract).
+    /// (`instruction.md` §10.1).
     GemInitDesktop,
 }
 
@@ -236,7 +236,7 @@ pub struct OsImage {
     ///
     /// The T3 catalog always publishes this; the legacy BeagleBoard schema never did, which is why
     /// it is optional here. Together with [`Self::extract_size`] it forms the extracted-side pair
-    /// of the four independent integrity gates in the integrity policy — the pair that decides
+    /// of the four independent integrity gates in `instruction.md` §8.1 — the pair that decides
     /// what is allowed to reach the board.
     #[serde(default, with = "hex_option")]
     pub extract_sha256: Option<[u8; 32]>,

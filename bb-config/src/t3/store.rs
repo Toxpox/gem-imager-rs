@@ -1,4 +1,4 @@
-//! Versioned, persistent SQLite storage for a validated T3 catalog (the storage contract).
+//! Versioned, persistent SQLite storage for a validated T3 catalog (`instruction.md` §6.4).
 //!
 //! Three things this module deliberately does *not* do:
 //!
@@ -108,7 +108,7 @@ CREATE INDEX idx_board_tags_tag    ON board_tags(tag);
 CREATE INDEX idx_image_devices_tag ON image_devices(tag);
 "#;
 
-/// v2 (the cache policy): remember *how* the last-known-good documents were fetched, and keep
+/// v2 (`instruction.md` §8.3): remember *how* the last-known-good documents were fetched, and keep
 /// a verified boot manifest across restarts.
 ///
 /// `ALTER TABLE ... ADD COLUMN` is used rather than a table rebuild so the catalog a user already
@@ -136,7 +136,7 @@ CREATE TABLE boot_manifest_artifacts (
 );
 "#;
 
-/// The HTTP cache validators a document was last fetched with (the transport policy).
+/// The HTTP cache validators a document was last fetched with (`instruction.md` §8.2).
 ///
 /// Storing them is what makes a refresh conditional: the client can ask "has this changed?" and
 /// keep the verified copy it already has when the answer is no.
@@ -285,7 +285,7 @@ impl T3CatalogStore {
     ///
     /// Only a catalog that has already been through [`crate::t3::validate`] can be passed here, so
     /// "stored" and "validated" cannot drift apart: an unparsable refresh never reaches this
-    /// method and therefore never displaces the last-known-good copy (the cache policy).
+    /// method and therefore never displaces the last-known-good copy (`instruction.md` §8.3).
     pub fn save_with_validators(
         &mut self,
         catalog: &ValidatedT3Catalog,
@@ -426,7 +426,7 @@ impl T3CatalogStore {
     /// Load the last-known-good boot manifest for a board.
     ///
     /// Returns `Ok(None)` when nothing has been stored, and an error when what is stored no longer
-    /// satisfies `required`. Neither result is a manifest, and the cache policy is explicit
+    /// satisfies `required`. Neither result is a manifest, and `instruction.md` §8.3 is explicit
     /// that without a verified manifest DFU does not start — there is deliberately no way to get a
     /// partial one out of this method.
     pub fn load_boot_manifest(

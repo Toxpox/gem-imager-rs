@@ -4,7 +4,7 @@ use std::fmt;
 
 /// A parsed SHA-256 digest.
 ///
-/// the catalog validation rules requires every catalog hash to be exactly 64 hex characters and to be
+/// `instruction.md` §6.2 requires every catalog hash to be exactly 64 hex characters and to be
 /// converted to `[u8; 32]` while parsing. Keeping the digest as a typed value (rather than a
 /// `String`) makes it impossible to compare a truncated or malformed hex string downstream, and
 /// makes the archive/extracted digests non-interchangeable at the type level.

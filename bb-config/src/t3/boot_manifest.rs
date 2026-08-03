@@ -1,4 +1,4 @@
-//! Strict parsing of the T3 boot artifact manifest (the cache policy).
+//! Strict parsing of the T3 boot artifact manifest (`instruction.md` §8.3).
 //!
 //! The manifest at `boot/t3-gem-o1/list.json` decides which bytes are written to the board before
 //! it can boot at all. The rule for it is stricter than for the image catalog: there is no

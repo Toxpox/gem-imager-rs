@@ -1,7 +1,7 @@
 //! Layer 3 of the T3 catalog adapter: the canonical model the rest of the application uses.
 //!
 //! Nothing here is deserialized directly from the network. Values only reach these types through
-//! [`crate::t3::validate`], which is where the the catalog validation rules invariants are enforced.
+//! [`crate::t3::validate`], which is where the `instruction.md` §6.2 invariants are enforced.
 
 use std::collections::BTreeSet;
 use std::time::Duration;
@@ -10,29 +10,29 @@ use url::Url;
 
 use crate::t3::sha256::Sha256;
 
-/// Board tag of the mandatory target board (the T3 platform contract).
+/// Board tag of the mandatory target board (`instruction.md` §3.1).
 pub const T3_BOARD_TAG: &str = "t3-gem-o1";
 
 /// Board tag of BeagleY-AI in the live T3 catalog.
 pub const BEAGLEY_BOARD_TAG: &str = "beagley-ai";
 
-/// USB vendor id the T3 board enumerates with in DFU mode (the T3 platform contract).
+/// USB vendor id the T3 board enumerates with in DFU mode (`instruction.md` §3.1).
 pub const T3_DFU_VENDOR_ID: u16 = 0x0451;
 
-/// USB product id the T3 board enumerates with in DFU mode (the T3 platform contract).
+/// USB product id the T3 board enumerates with in DFU mode (`instruction.md` §3.1).
 pub const T3_DFU_PRODUCT_ID: u16 = 0x6165;
 
-/// Boot manifest for the T3 board (the T3 platform contract).
+/// Boot manifest for the T3 board (`instruction.md` §3.1).
 pub const T3_BOOT_MANIFEST_URL: &str =
     "https://packages.t3gemstone.org/images/boot/t3-gem-o1/list.json";
 
 /// Upper bound on waiting for a DFU alt-setting to re-enumerate.
 ///
 /// The working reference retries device discovery at most 15 times at 1s intervals
-/// (the T3 DFU contract).
+/// (`instruction.md` §3.2).
 pub const T3_DFU_RECONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 
-/// DFU alt-setting the raw eMMC image is written to (the T3 DFU contract, stage 4).
+/// DFU alt-setting the raw eMMC image is written to (`instruction.md` §3.2, stage 4).
 pub const T3_RAW_EMMC_ALT_SETTING: &str = "rawemmc";
 
 /// How a board filters the image list.
@@ -77,16 +77,16 @@ impl T3InitFormat {
 
 /// What customization an image supports.
 ///
-/// the supported first-boot contract restricts the writable field set to what the current `gem-first-boot`
+/// `instruction.md` §10.1 restricts the writable field set to what the current `gem-first-boot`
 /// consumer actually reads; this type only records *which* consumer applies, never the values.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CustomizationProfile {
     /// Which first-boot consumer this image ships.
     pub init_format: T3InitFormat,
-    /// Whether this is a desktop variant, which the supported first-boot contract ties to VNC support.
+    /// Whether this is a desktop variant, which `instruction.md` §10.1 ties to VNC support.
     ///
     /// The T3 catalog exposes no explicit desktop flag, so this is derived from the image name.
-    /// It gates *offering* the VNC fields only; This must stay aligned with the real
+    /// It gates *offering* the VNC fields only; Faz 5 must confirm it against the real
     /// `gem-first-boot` consumer before those fields are written.
     pub desktop_variant: bool,
 }
@@ -94,7 +94,7 @@ pub struct CustomizationProfile {
 /// One stage of the T3 DFU boot chain.
 ///
 /// `artifact_name` and `alt_setting` are separate fields and must never be conflated
-/// (the catalog validation rules) — for `tiboot3.bin` they genuinely differ.
+/// (`instruction.md` §6.2) — for `tiboot3.bin` they genuinely differ.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DfuStageSpec {
     /// File name as published in the boot manifest.
@@ -126,7 +126,7 @@ impl DfuProfile {
     /// The verified profile for T3-GEM-O1.
     ///
     /// The boot manifest only publishes `name` and `sha256`; alt-settings, ordering and reset
-    /// behaviour come from the working-reference contract in the T3 DFU contract and are
+    /// behaviour come from the working-reference contract in `instruction.md` §3.2 and are
     /// therefore compile-time constants, not server-supplied data.
     pub fn t3_gem_o1() -> Self {
         let stages = [
@@ -189,7 +189,7 @@ impl BoardCapabilities {
 
 /// A way of getting an image onto a board.
 ///
-/// the target selection rules forbids treating DFU as an image's single flasher: the same T3 image
+/// `instruction.md` §6.3 forbids treating DFU as an image's single flasher: the same T3 image
 /// supports both destinations, so the write method is a property of the board/image pair.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum WriteMethod {
@@ -219,7 +219,7 @@ pub struct Board {
     /// Whether the board is inside the configured product scope.
     ///
     /// Out-of-scope boards stay in the model so a later scope change needs no re-parse
-    /// (the T3 platform contract); the product surface must filter on this flag.
+    /// (`instruction.md` §3.1); the product surface must filter on this flag.
     pub in_product_scope: bool,
 }
 
@@ -236,7 +236,7 @@ impl Board {
 
     /// Write methods available for this board/image pair.
     ///
-    /// This covers the first two factors of the the target selection rules intersection — board
+    /// This covers the first two factors of the `instruction.md` §6.3 intersection — board
     /// capability and image/board compatibility. Callers must still intersect the result with
     /// platform backend availability and physically attached targets.
     pub fn write_methods_for(&self, image: &Image) -> Vec<WriteMethod> {
@@ -255,10 +255,10 @@ impl Board {
     }
 }
 
-/// The four independent integrity gates for an image (the integrity policy).
+/// The four independent integrity gates for an image (`instruction.md` §8.1).
 ///
 /// Archive and extracted values are separate fields with distinct names so one can never stand in
-/// for the other (the catalog validation rules).
+/// for the other (`instruction.md` §6.2).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ImageIntegrity {
     /// SHA-256 of the compressed archive as downloaded.
@@ -301,7 +301,7 @@ impl Image {
     }
 }
 
-/// Which boards the product surface exposes (the product scope policy, ADR 0001).
+/// Which boards the product surface exposes (`instruction.md` §5.2, ADR 0001).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ProductScope {
     /// Only T3-GEM-O1 is offered. The safe default.

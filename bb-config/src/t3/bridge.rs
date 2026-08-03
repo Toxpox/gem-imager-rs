@@ -19,9 +19,13 @@
 //!
 //! # How capability crosses the bridge
 //!
-//! * **eMMC/DFU capability.** [`crate::config::Flasher`] can only express `SdCard`, so verified
-//!   DFU support travels as [`crate::config::Device::emmc_dfu`]. The full profile remains in the
-//!   canonical model; the front-end only needs to know whether it may offer the destination.
+//! [`crate::config::Flasher`] can only express `SdCard`, so the DFU capability travels as the
+//! separate [`crate::config::Device::emmc_dfu`] flag rather than as another flasher variant: the
+//! same T3 image is writable over SD *and* over DFU, which makes the write method a property of
+//! the board/image pair, not of the image (`instruction.md` §6.3). The full [`DfuProfile`] stays in
+//! the canonical model — the front-end only needs to know that the destination may be offered.
+//!
+//! [`DfuProfile`]: crate::t3::canonical::DfuProfile
 
 use std::collections::HashSet;
 
@@ -272,7 +276,7 @@ mod tests {
         assert_eq!(config.os_list.len(), 2);
     }
 
-    /// Both extracted gates must survive the translation; they are what the decoder and device read-back layers verify
+    /// Both extracted gates must survive the translation; they are what Faz 3 and Faz 4 verify
     /// against, and an image that arrives without them silently loses its integrity checking.
     #[test]
     fn both_integrity_gates_survive_the_bridge() {
@@ -315,7 +319,7 @@ mod tests {
         }
     }
 
-    /// VNC is only offered on desktop images (the supported first-boot contract), and desktop-ness comes from
+    /// VNC is only offered on desktop images (`instruction.md` §10.1), and desktop-ness comes from
     /// the canonical model rather than being re-derived here.
     #[test]
     fn only_desktop_images_offer_vnc() {

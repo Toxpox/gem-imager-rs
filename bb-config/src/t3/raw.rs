@@ -3,9 +3,9 @@
 //! These types deliberately do almost no validation. Every field that validation cares about is
 //! `Option`, so a malformed entry produces a *typed diagnostic with a JSON path* in layer 2
 //! rather than a serde error that aborts the whole document or, worse, a `VecSkipError` that drops
-//! it silently (the catalog validation rules).
+//! it silently (`instruction.md` §6.2).
 //!
-//! Unknown fields are ignored, which is serde's default and is what the catalog validation rules asks for
+//! Unknown fields are ignored, which is serde's default and is what `instruction.md` §6.2 asks for
 //! ("Bilinmeyen gelecekteki alanlar ileri uyumluluk için yok sayılabilir"). The live catalog
 //! already carries such a field (`random` on sub-list wrappers).
 //!
@@ -40,7 +40,7 @@ pub struct RawImager {
 ///
 /// Note there is no `flasher` field in the T3 schema: write capability is derived from `emmc`
 /// plus the compile-time T3 DFU profile, never from a single catalog-supplied flasher enum
-/// (the target selection rules).
+/// (`instruction.md` §6.3).
 #[derive(Debug, Clone, Deserialize)]
 pub struct RawDevice {
     /// Display name, e.g. `T3-GEM-O1`.

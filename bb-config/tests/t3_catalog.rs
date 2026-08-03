@@ -1,4 +1,4 @@
-//! Contract tests for the strict T3 catalog adapter (the catalog test contract).
+//! Contract tests for the strict T3 catalog adapter (`instruction.md` §6.5).
 //!
 //! `main_catalog.json` and `boot_manifest.json` are verbatim captures of the live service taken on
 //! 2026-07-31, so these tests double as schema-drift detectors.
@@ -420,7 +420,7 @@ fn the_live_catalog_reaches_the_front_end_model_with_both_product_boards() {
             "image \"{}\" targets no board in the product surface",
             img.name
         );
-        // The decoder and device read-back layers verify against these; an image that arrives without them flashes unverified.
+        // Faz 3/4 verify against these; an image that arrives without them flashes unverified.
         assert!(
             img.extract_sha256.is_some(),
             "{} lost its extracted digest",

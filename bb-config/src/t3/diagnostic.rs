@@ -1,6 +1,6 @@
 //! Typed, path-carrying diagnostics produced while validating a T3 catalog.
 //!
-//! the catalog validation rules forbids `VecSkipError`-style silent skipping in the T3 adapter: when an
+//! `instruction.md` §6.2 forbids `VecSkipError`-style silent skipping in the T3 adapter: when an
 //! entry is dropped, the caller must be able to say how many entries were rejected and why, and
 //! the UI must be able to surface and log that. Every diagnostic therefore carries the JSON path
 //! of the offending entry.
@@ -85,7 +85,7 @@ pub enum T3Diagnostic {
     /// A board parsed cleanly but is outside the configured product scope.
     ///
     /// The board is retained in the canonical model so a later scope decision does not require a
-    /// re-parse (the T3 platform contract), but it must not be shown on the product surface.
+    /// re-parse (`instruction.md` §3.1), but it must not be shown on the product surface.
     OutOfProductScope {
         /// JSON path of the entry.
         path: String,
@@ -103,7 +103,7 @@ pub enum T3Diagnostic {
     },
     /// A board advertised `emmc: true` but is not the T3 board, so no verified DFU profile exists.
     ///
-    /// Fail-closed: the board keeps SD support and loses DFU (the catalog validation rules).
+    /// Fail-closed: the board keeps SD support and loses DFU (`instruction.md` §6.2).
     EmmcWithoutVerifiedDfuProfile {
         /// JSON path of the entry.
         path: String,

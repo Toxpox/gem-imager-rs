@@ -1,4 +1,4 @@
-//! Layer 2 of the T3 catalog adapter: enforce the the catalog validation rules invariants.
+//! Layer 2 of the T3 catalog adapter: enforce the `instruction.md` §6.2 invariants.
 //!
 //! Every rejection produces a typed diagnostic carrying a JSON path, and the caller is told how
 //! many entries were dropped. Nothing is skipped silently — `VecSkipError` is deliberately absent
@@ -18,7 +18,7 @@ use crate::t3::diagnostic::T3Diagnostic;
 use crate::t3::raw::{RawDevice, RawOsListItem, RawT3Catalog};
 use crate::t3::sha256::Sha256;
 
-/// Where a catalog came from, so a cached copy can be attributed later (the storage contract).
+/// Where a catalog came from, so a cached copy can be attributed later (`instruction.md` §6.4).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CatalogProvenance {
     /// URL the document was fetched from.
@@ -27,7 +27,7 @@ pub struct CatalogProvenance {
     pub latest_version: Option<String>,
 }
 
-/// A catalog that has passed every the catalog validation rules invariant.
+/// A catalog that has passed every §6.2 invariant.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ValidatedT3Catalog {
     /// Boards that parsed cleanly, including those outside the product scope.
@@ -75,7 +75,7 @@ pub enum T3CatalogError {
     },
     /// No image entry survived validation.
     ///
-    /// the catalog validation rules: a completely empty result must never be reported as success.
+    /// `instruction.md` §6.2: a completely empty result must never be reported as success.
     NoUsableImages {
         /// How many image entries were dropped.
         rejected: usize,
@@ -245,7 +245,7 @@ fn validate_board(
 
 /// Derive write capability from `emmc` plus the compile-time verified DFU profile.
 ///
-/// the catalog validation rules: `emmc: true` may only produce a *verified* T3 DFU profile. A non-T3
+/// `instruction.md` §6.2: `emmc: true` may only produce a *verified* T3 DFU profile. A non-T3
 /// board claiming eMMC keeps SD and loses DFU, because no boot manifest exists for it.
 fn board_capabilities(
     emmc: bool,
