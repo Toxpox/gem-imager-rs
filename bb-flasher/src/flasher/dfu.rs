@@ -82,11 +82,42 @@ impl BBFlasherTarget for Target {
     }
 }
 
+/// Where the raw eMMC image comes from.
+///
+/// The distinction is not cosmetic: a one-shot reader has to be spooled to scratch storage before
+/// it can be hashed and then written, while a file that already holds the finished image is hashed
+/// where it lies. Taking the stream path for a file would cost a second full copy of a
+/// multi-gigabyte image in wall-clock time and in free space.
+enum RawSource<R> {
+    Stream(R),
+    File(PathBuf),
+}
+
 pub struct Flasher<R> {
-    raw_image: R,
+    raw_image: RawSource<R>,
     path: bb_flasher_dfu::UsbPath,
     cache_dir: PathBuf,
     cancel: Option<CancellationToken>,
+}
+
+/// The concrete source type for [`Flasher::from_staging_file`], which needs no reader at all.
+pub type NoStream = fn() -> io::Result<(crate::img::OsImage, u64)>;
+
+impl Flasher<NoStream> {
+    /// Flash an image that is already a file on disk, hashing it in place.
+    pub fn from_staging_file(
+        raw_image: impl Into<PathBuf>,
+        id: &str,
+        cancel: Option<CancellationToken>,
+    ) -> io::Result<Self> {
+        let (path, cache_dir) = parse_identifier(id)?;
+        Ok(Self {
+            raw_image: RawSource::File(raw_image.into()),
+            path,
+            cache_dir,
+            cancel,
+        })
+    }
 }
 
 impl<R> Flasher<R> {
@@ -95,44 +126,9 @@ impl<R> Flasher<R> {
         id: &str,
         cancel: Option<CancellationToken>,
     ) -> io::Result<Self> {
-        let ids = id.split(':').map(str::trim).collect::<Vec<_>>();
-        if ids.len() != 4 {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "identifier must be bus:physical-port-path:vendor:product",
-            ));
-        }
-        let bus = u8::from_str_radix(ids[0], 16)
-            .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid bus number"))?;
-        let ports = ids[1]
-            .split('.')
-            .map(|component| {
-                u8::from_str_radix(component, 16).map_err(|_| {
-                    io::Error::new(io::ErrorKind::InvalidInput, "invalid physical port path")
-                })
-            })
-            .collect::<io::Result<Vec<_>>>()?;
-        let vendor_id = u16::from_str_radix(ids[2], 16)
-            .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid vendor ID"))?;
-        let product_id = u16::from_str_radix(ids[3], 16)
-            .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid product ID"))?;
-        if vendor_id != bb_flasher_dfu::T3_DFU_VENDOR_ID
-            || product_id != bb_flasher_dfu::T3_DFU_PRODUCT_ID
-        {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                format!(
-                    "T3 DFU requires {:04x}:{:04x}",
-                    bb_flasher_dfu::T3_DFU_VENDOR_ID,
-                    bb_flasher_dfu::T3_DFU_PRODUCT_ID
-                ),
-            ));
-        }
-        let path = bb_flasher_dfu::UsbPath::new(bus, ports)
-            .map_err(|message| io::Error::new(io::ErrorKind::InvalidInput, message))?;
-        let cache_dir = bb_flasher_dfu::default_t3_cache_dir().map_err(io::Error::other)?;
+        let (path, cache_dir) = parse_identifier(id)?;
         Ok(Self {
-            raw_image,
+            raw_image: RawSource::Stream(raw_image),
             path,
             cache_dir,
             cancel,
@@ -143,6 +139,47 @@ impl<R> Flasher<R> {
         self.cache_dir = cache_dir.into();
         self
     }
+}
+
+/// Split a destination identifier into the USB path it names and the cache directory to use.
+fn parse_identifier(id: &str) -> io::Result<(bb_flasher_dfu::UsbPath, PathBuf)> {
+    let ids = id.split(':').map(str::trim).collect::<Vec<_>>();
+    if ids.len() != 4 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "identifier must be bus:physical-port-path:vendor:product",
+        ));
+    }
+    let bus = u8::from_str_radix(ids[0], 16)
+        .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid bus number"))?;
+    let ports = ids[1]
+        .split('.')
+        .map(|component| {
+            u8::from_str_radix(component, 16).map_err(|_| {
+                io::Error::new(io::ErrorKind::InvalidInput, "invalid physical port path")
+            })
+        })
+        .collect::<io::Result<Vec<_>>>()?;
+    let vendor_id = u16::from_str_radix(ids[2], 16)
+        .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid vendor ID"))?;
+    let product_id = u16::from_str_radix(ids[3], 16)
+        .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid product ID"))?;
+    if vendor_id != bb_flasher_dfu::T3_DFU_VENDOR_ID
+        || product_id != bb_flasher_dfu::T3_DFU_PRODUCT_ID
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!(
+                "T3 DFU requires {:04x}:{:04x}",
+                bb_flasher_dfu::T3_DFU_VENDOR_ID,
+                bb_flasher_dfu::T3_DFU_PRODUCT_ID
+            ),
+        ));
+    }
+    let path = bb_flasher_dfu::UsbPath::new(bus, ports)
+        .map_err(|message| io::Error::new(io::ErrorKind::InvalidInput, message))?;
+    let cache_dir = bb_flasher_dfu::default_t3_cache_dir().map_err(io::Error::other)?;
+    Ok((path, cache_dir))
 }
 
 impl<R> Flasher<R>
@@ -166,13 +203,22 @@ where
                 None
             };
 
-            bb_flasher_dfu::flash_t3(
-                self.raw_image,
-                self.path,
-                self.cache_dir,
-                progress,
-                self.cancel,
-            )
+            match self.raw_image {
+                RawSource::Stream(raw_image) => bb_flasher_dfu::flash_t3(
+                    raw_image,
+                    self.path,
+                    self.cache_dir,
+                    progress,
+                    self.cancel,
+                ),
+                RawSource::File(raw_image) => bb_flasher_dfu::flash_t3_file(
+                    raw_image,
+                    self.path,
+                    self.cache_dir,
+                    progress,
+                    self.cancel,
+                ),
+            }
             .map(|_| ())
             .map_err(Into::into)
         })
@@ -187,6 +233,9 @@ const fn translate_progress(value: bb_flasher_dfu::DfuProgress) -> DownloadFlash
     match value {
         bb_flasher_dfu::DfuProgress::BootArtifacts => {
             DownloadFlashingStatus::ResolvingBootArtifacts
+        }
+        bb_flasher_dfu::DfuProgress::ChecksummingImage(x) => {
+            DownloadFlashingStatus::ChecksummingImage(x)
         }
         bb_flasher_dfu::DfuProgress::Reconnecting => DownloadFlashingStatus::Reconnecting,
         bb_flasher_dfu::DfuProgress::BootStage { index, fraction } => {
@@ -211,6 +260,10 @@ mod tests {
         assert_eq!(
             translate_progress(bb_flasher_dfu::DfuProgress::BootArtifacts),
             DownloadFlashingStatus::ResolvingBootArtifacts
+        );
+        assert_eq!(
+            translate_progress(bb_flasher_dfu::DfuProgress::ChecksummingImage(0.5)),
+            DownloadFlashingStatus::ChecksummingImage(0.5)
         );
         assert_eq!(
             translate_progress(bb_flasher_dfu::DfuProgress::Reconnecting),

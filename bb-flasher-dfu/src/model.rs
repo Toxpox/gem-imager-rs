@@ -194,6 +194,12 @@ pub enum DfuProgress {
     /// Resolving and verifying the three boot artifacts. Not byte-measured: they are small and
     /// usually served from cache.
     BootArtifacts,
+    /// Reading the raw eMMC image end to end to establish the digest the write is verified against.
+    ///
+    /// Byte-measured on purpose: this pass touches the whole multi-gigabyte image before a single
+    /// USB packet is sent, and a screen that keeps saying "verifying boot files" through all of it
+    /// is indistinguishable from a hang.
+    ChecksummingImage(f32),
     /// Waiting for the board to disappear and come back on the same physical port.
     Reconnecting,
     /// Transferring boot stage `index` (1-based, of three); `fraction` is within that stage.

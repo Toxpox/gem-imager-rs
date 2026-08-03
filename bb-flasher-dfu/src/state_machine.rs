@@ -18,6 +18,8 @@ use crate::{
 const BOOT_STATUS_TIMEOUT: Duration = Duration::from_secs(15);
 const RAW_STATUS_TIMEOUT: Duration = Duration::from_secs(300);
 const DETACH_TIMEOUT: Duration = Duration::from_secs(1);
+/// How long a board gets to leave the bus after the host resets it.
+const PORT_CLEAR_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Debug, Clone, Copy)]
 struct BlockCounter {
@@ -99,6 +101,13 @@ pub fn flash_with_transport<T: DfuTransport>(
                 cancel,
             )?
         };
+        tracing::info!(
+            artifact = %input.stage.artifact_name,
+            alt_setting = %input.stage.alt_setting,
+            expected_size = input.stage.expected_size,
+            available_alts = ?device.alt_settings,
+            "DFU stage starting"
+        );
         transport.claim(&device, &input.stage.alt_setting)?;
         prepare_interface(transport)?;
 
@@ -120,14 +129,68 @@ pub fn flash_with_transport<T: DfuTransport>(
             }
         };
 
+        tracing::info!(
+            artifact = %input.stage.artifact_name,
+            bytes_sent,
+            still_connected = connected,
+            "DFU stage transferred"
+        );
+
         let terminal_evidence = match &input.stage.kind {
             DfuStageKind::BootArtifact { next_alt_setting } => {
+                // The final zero-length `DNLOAD` only *requests* the end of the transfer. Per DFU
+                // 1.1 the device leaves dfuDNLOAD-SYNC for dfuMANIFEST-SYNC when the host polls
+                // `GET_STATUS`, and manifestation is where the TI ROM acts on the artifact it just
+                // received. Skipping the poll leaves the ROM parked mid-transaction: it never
+                // treats the image as complete, never boots it, and the wait below then times out
+                // no matter what else the host sends.
                 if connected {
-                    tolerate_reset_disconnect(transport.detach(DETACH_TIMEOUT))?;
-                    if input.stage.reset_after {
-                        tolerate_reset_disconnect(transport.reset())?;
+                    let manifest = wait_for_boot_manifest(transport)?;
+                    tracing::info!(
+                        artifact = %input.stage.artifact_name,
+                        ?manifest,
+                        "boot artifact manifested"
+                    );
+                    match manifest {
+                        // Still on the bus after manifestation means the device is not going to
+                        // leave on its own. The TI ROM does (it jumps straight into the artifact,
+                        // which is why it reports `Disconnected`), but U-Boot's DFU gadget sits in
+                        // its download loop until the host lets go, and only then boots what it
+                        // was given — this is exactly why the documented flow drives it with
+                        // `dfu-util -R`. dfuMANIFEST-WAIT-RESET additionally *requires* the reset
+                        // per DFU 1.1, so both endings are handled the same way.
+                        BootManifest::Idle | BootManifest::WaitReset => {
+                            // `dfu-util -R` is DETACH *then* reset, and the order is not cosmetic.
+                            // U-Boot's gadget leaves its download loop from the detach trigger the
+                            // DETACH request sets; a bare bus reset only restarts the gadget, so
+                            // the board stays in DFU, never boots the artifact, and the next stage
+                            // writes into the instance that was supposed to have left.
+                            detach_before_reset(transport, &input.stage.artifact_name);
+                            tolerate_reset_disconnect(transport.reset())?;
+                            // The reset invalidates the handle, so releasing is best effort; the
+                            // session is dropped either way.
+                            let _ = transport.release();
+                            // Without this the next lookup can match the instance that is on its
+                            // way out: the R5 SPL publishes `tispl.bin` and `u-boot.img` at the
+                            // same time, so the alt-setting alone cannot tell the departing stage
+                            // from the one that replaces it.
+                            if !transport.wait_for_port_clear(
+                                vendor_id,
+                                product_id,
+                                &path,
+                                Instant::now() + PORT_CLEAR_TIMEOUT,
+                                cancel,
+                            )? {
+                                tracing::warn!(
+                                    artifact = %input.stage.artifact_name,
+                                    "board stayed on the bus after the reset"
+                                );
+                            }
+                        }
+                        BootManifest::Disconnected => {
+                            tolerate_reset_disconnect(transport.release())?;
+                        }
                     }
-                    tolerate_reset_disconnect(transport.release())?;
                 }
 
                 report(&mut progress, DfuProgress::Reconnecting);
@@ -413,6 +476,66 @@ fn wait_for_download_idle<T: DfuTransport>(
     }
 }
 
+/// How a boot artifact's manifestation ended.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BootManifest {
+    /// The device returned to dfuIDLE by itself — it declared itself manifestation tolerant.
+    Idle,
+    /// The device parked in dfuMANIFEST-WAIT-RESET and can only be freed by a USB reset.
+    WaitReset,
+    /// The device left the bus mid-manifestation, which for a boot artifact means it booted.
+    Disconnected,
+}
+
+/// Drive a boot artifact through manifestation.
+///
+/// Unlike [`wait_for_manifest`] a disconnect here is the *expected* ending rather than a failure:
+/// the ROM hands control to the artifact it just accepted, so the port drops before any final
+/// status can be read.
+fn wait_for_boot_manifest<T: DfuTransport>(transport: &mut T) -> Result<BootManifest> {
+    let deadline = Instant::now() + BOOT_STATUS_TIMEOUT;
+    loop {
+        let status = match transport.status() {
+            Ok(status) => status,
+            Err(error)
+                if transport_error_kind(&error)
+                    .is_some_and(TransportErrorKind::may_be_reset_disconnect) =>
+            {
+                return Ok(BootManifest::Disconnected);
+            }
+            Err(error) => return Err(error),
+        };
+        if status.status != 0 || status.state == DfuState::DfuError {
+            return Err(Error::UnexpectedState {
+                context: "manifesting a boot artifact",
+                state: status.state,
+                status: status.status,
+            });
+        }
+        match status.state {
+            DfuState::DfuIdle => return Ok(BootManifest::Idle),
+            DfuState::DfuManifestWaitReset => return Ok(BootManifest::WaitReset),
+            DfuState::DfuManifestSync | DfuState::DfuManifest | DfuState::DfuDnloadSync => {}
+            _ => {
+                return Err(Error::UnexpectedState {
+                    context: "manifesting a boot artifact",
+                    state: status.state,
+                    status: status.status,
+                });
+            }
+        }
+        if Instant::now() >= deadline {
+            return Err(Error::StatusTimeout("boot artifact manifest"));
+        }
+        transport.sleep(
+            status
+                .poll_timeout
+                .max(Duration::from_millis(1))
+                .min(deadline.saturating_duration_since(Instant::now())),
+        );
+    }
+}
+
 fn wait_for_manifest<T: DfuTransport>(transport: &mut T) -> Result<DfuTerminalEvidence> {
     let deadline = Instant::now() + RAW_STATUS_TIMEOUT;
     loop {
@@ -467,6 +590,22 @@ fn transport_error_kind(error: &Error) -> Option<TransportErrorKind> {
     match error {
         Error::Transport(source) => Some(source.kind),
         _ => None,
+    }
+}
+
+/// Send the `DFU_DETACH` that lets a U-Boot DFU gadget leave its download loop, then let the
+/// caller reset.
+///
+/// A failure here is logged and swallowed on purpose. A device that already left the bus, or one
+/// that stalls a request the DFU 1.1 state table only defines for appIDLE, is still driven out by
+/// the reset that follows — refusing would fail writes the reference `dfu-util -R` flow completes.
+fn detach_before_reset<T: DfuTransport>(transport: &mut T, artifact: &str) {
+    if let Err(error) = transport.detach(DETACH_TIMEOUT) {
+        tracing::warn!(
+            artifact,
+            %error,
+            "DFU detach before reset was refused; resetting anyway"
+        );
     }
 }
 
