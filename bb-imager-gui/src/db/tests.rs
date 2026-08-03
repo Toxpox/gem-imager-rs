@@ -1011,12 +1011,16 @@ fn duplicate_remote_sublist_resolve_does_not_duplicate_os_items() {
     )
     .expect("first resolve should succeed");
 
-    // Second resolve (duplicate call)
-    let second = db.os_remote_sublist_resolve(
+    // Second resolve (duplicate call). This used to be asserted as an error, which pinned the
+    // behaviour the image upsert exists to remove: a repeated image aborted the whole merge
+    // transaction and took the board list with it. Surviving the repeat is the point, so the
+    // guarantee is now that the call succeeds *and* still leaves exactly one image — which is
+    // what this test is named for.
+    db.os_remote_sublist_resolve(
         sublist_id,
         &[bb_config::config::OsListItem::Image(child_image)],
-    );
-    assert!(second.is_err());
+    )
+    .expect("a repeated resolve must not abort the merge");
 
     let items = db.os_image_items(board_id, Some(sublist_id)).unwrap();
     let count = items
