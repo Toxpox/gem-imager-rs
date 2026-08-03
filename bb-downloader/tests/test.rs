@@ -150,7 +150,7 @@ async fn test_download_json_no_cache_rejects_malformed_json() {
     mock.assert_calls(1);
 }
 
-/// the transport policy requires a maximum body size for catalog and manifest documents; without
+/// `instruction.md` §8.2 requires a maximum body size for catalog and manifest documents; without
 /// it a hostile or broken server can grow the client's memory without bound.
 #[cfg(feature = "json")]
 #[tokio::test]

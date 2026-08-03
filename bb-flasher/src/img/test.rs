@@ -333,7 +333,7 @@ async fn file_stream_zip_image_reads_first_entry_contents() {
 }
 
 // ---------------------------------------------------------------------------
-// Extracted-side integrity gates (the integrity policy, test matrix the integrity test matrix)
+// Extracted-side integrity gates (`instruction.md` §8.1, test matrix §8.4)
 //
 // These drive the gate through the real decoder rather than the verifier's unit tests, so they
 // also prove the gate is wired into `Read` for every code path the front-ends use.

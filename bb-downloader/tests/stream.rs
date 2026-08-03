@@ -1,7 +1,7 @@
 //! Integration tests for `Downloader::download_to_stream`, the streaming download path that owns
-//! the two archive-side integrity gates of the integrity policy, and for the transport rules of
-//! the transport policy. Together with the unit tests in `src/lib.rs` (scheme and redirect rules) these cover the
-//! the integrity test matrix matrix: wrong hash, short/long body, 404/500, redirect limit, cancellation leaving no
+//! the two archive-side integrity gates of `instruction.md` §8.1, and for the transport rules of
+//! §8.2. Together with the unit tests in `src/lib.rs` (scheme and redirect rules) these cover the
+//! §8.4 matrix: wrong hash, short/long body, 404/500, redirect limit, cancellation leaving no
 //! partial cache, two concurrent downloads of one hash, and a Unicode cache path.
 
 use bb_downloader::{

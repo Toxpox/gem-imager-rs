@@ -21,7 +21,7 @@ static PERSIST_NONCE: AtomicU64 = AtomicU64::new(0);
 
 /// Removes a half-written scratch file unless it was published.
 ///
-/// the transport policy forbids a cancelled or partial download from being reachable under the
+/// `instruction.md` §8.2 forbids a cancelled or partial download from being reachable under the
 /// final cache name; the scratch file must not survive as litter either.
 struct ScratchFile(Option<PathBuf>);
 
@@ -70,7 +70,7 @@ impl WriterFileStream {
     /// so the final step is a rename and never a partial copy. The scratch file is flushed and
     /// `fsync`ed before the rename, so a crash cannot leave `path` naming a file whose contents
     /// were still in the page cache. If anything fails, `path` keeps whatever it held before and
-    /// the scratch file is removed (the transport policy).
+    /// the scratch file is removed (`instruction.md` §8.2).
     pub async fn persist(&mut self, path: &Path) -> io::Result<()> {
         let parent = path.parent().ok_or_else(|| {
             io::Error::new(

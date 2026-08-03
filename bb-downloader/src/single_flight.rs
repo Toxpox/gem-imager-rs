@@ -1,4 +1,4 @@
-//! Per-hash serialization of downloads (the transport policy).
+//! Per-hash serialization of downloads (`instruction.md` §8.2).
 //!
 //! Two screens asking for the same image at the same time must not produce two network transfers
 //! racing to publish the same cache entry. Keying the lock on the archive digest — not the URL —

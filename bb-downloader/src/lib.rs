@@ -5,7 +5,7 @@
 //! - Async.
 //! - Caches downloaded files in a directory on the filesystem, addressed by content hash.
 //! - Verifies both the byte count and the SHA-256 of an archive before it is published to the
-//!   cache, and publishes atomically (the integrity policy, the transport policy).
+//!   cache, and publishes atomically (`instruction.md` §8.1, §8.2).
 //! - Refuses plaintext transports, non-2xx responses, unbounded bodies and unbounded redirect
 //!   chains by policy rather than by call site.
 //! - Collapses concurrent downloads of the same archive into a single transfer.
@@ -40,7 +40,7 @@ pub use reqwest::IntoUrl;
 
 /// What the catalog promises about a compressed archive.
 ///
-/// Two of the four gates of the integrity policy. The extracted-side gates live with the decoder
+/// Two of the four gates of `instruction.md` §8.1. The extracted-side gates live with the decoder
 /// in `bb-flasher`, because only the decoder sees the extracted bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ArchiveIntegrity {
@@ -48,7 +48,7 @@ pub struct ArchiveIntegrity {
     pub sha256: [u8; 32],
     /// Byte count of the compressed archive, when the catalog publishes one.
     ///
-    /// `Content-Length` is *not* used in its place: the transport policy treats the header as an
+    /// `Content-Length` is *not* used in its place: `instruction.md` §8.2 treats the header as an
     /// auxiliary hint, never as proof.
     pub size: Option<u64>,
 }
@@ -202,7 +202,7 @@ impl Downloader {
     /// be a post-hoc check on a finished file: the byte count and digest are computed over the same
     /// bytes that are handed to the reader, and a mismatch fails the whole operation. The verified
     /// content is only published to the cache after both gates pass, and the publish itself is
-    /// atomic (the transport policy).
+    /// atomic (`instruction.md` §8.2).
     ///
     /// Concurrent calls for the same digest are serialized; the loser of the race copies the
     /// now-cached bytes instead of fetching them again.
@@ -416,7 +416,7 @@ fn build_client(
         .map_err(io::Error::other)
 }
 
-/// Decide whether a redirect hop is allowed (the transport policy).
+/// Decide whether a redirect hop is allowed (`instruction.md` §8.2).
 ///
 /// Split out of the client builder so both rules are directly testable: a live plaintext mock
 /// server cannot produce an https-to-http hop, and a rule with no test is a rule that erodes.

@@ -261,7 +261,7 @@ mod mock_card {
         })
     }
 
-    /// the customization verification contract: the first-boot file is written to the FAT partition and then read
+    /// `instruction.md` §10.4: the first-boot file is written to the FAT partition and then read
     /// back from it. This drives the real MBR + FAT32 image, so it covers the partition lookup,
     /// the write and the verifying re-open.
     #[test]

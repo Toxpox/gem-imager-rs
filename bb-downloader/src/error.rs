@@ -1,6 +1,6 @@
 //! Typed download failures.
 //!
-//! the integrity policy makes the four integrity values independent hard gates, and the cache policy asks the
+//! `instruction.md` §8.1 makes the four integrity values independent hard gates, and §8.3 asks the
 //! UI to tell "we are offline, showing the previous catalog" apart from "what the server sent is
 //! wrong". Both need the *reason* a download failed, which a bare [`std::io::Error`] string cannot
 //! carry. The [`From`] conversion below keeps the existing `io::Result` call sites compiling.
@@ -76,7 +76,7 @@ pub enum DownloadError {
 
     /// The archive byte count did not match the catalog.
     ///
-    /// One of the four gates of the integrity policy; never downgraded to a warning.
+    /// One of the four gates of `instruction.md` §8.1; never downgraded to a warning.
     #[error("{url} delivered {actual} bytes but the catalog declares {expected}")]
     ArchiveSizeMismatch {
         /// URL that was requested.

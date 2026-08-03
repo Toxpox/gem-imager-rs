@@ -247,7 +247,7 @@ mod status_tests {
 
     /// The extract gate has to fail the **flash**, not merely the read.
     ///
-    /// the integrity policy puts the extracted digest between the decoder and the writer, and the
+    /// `instruction.md` §8.1 puts the extracted digest between the decoder and the writer, and the
     /// verifier only settles when the decoder reports EOF. That makes the whole guarantee depend on
     /// the writer reading all the way to EOF rather than stopping once it has the declared number of
     /// bytes. Nothing else asserts that, and if it ever regressed the gate would silently never fire

@@ -22,7 +22,8 @@ const XZ_MAGIC: [u8; 6] = [0xfd, 0x37, 0x7a, 0x58, 0x5a, 0x00];
 /// A decoded OS image, gated on the extracted values the catalog published.
 ///
 /// Every constructor takes an [`ExtractGate`]: whether the extracted bytes are checked is a
-/// decision the caller must make explicitly under the integrity policy.
+/// decision the caller must make explicitly, not a flag that can be left unset (`instruction.md`
+/// §8.1).
 pub struct OsImage {
     size: u64,
     img: OsImageCompression<OsImageSource>,

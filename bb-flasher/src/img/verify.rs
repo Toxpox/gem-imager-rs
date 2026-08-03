@@ -1,4 +1,4 @@
-//! The extracted-side integrity gates (the integrity policy).
+//! The extracted-side integrity gates (`instruction.md` §8.1).
 //!
 //! The downloader proves the *archive* is the archive the catalog published. That says nothing
 //! about the bytes that come out of the decoder, which are the bytes that actually reach the board.

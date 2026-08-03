@@ -1,4 +1,4 @@
-//! Transport rules every request in this crate obeys (the transport policy).
+//! Transport rules every request in this crate obeys (`instruction.md` §8.2).
 //!
 //! These are deliberately *policy*, not per-call arguments: a rule that each caller can forget is
 //! not a rule. [`TransportPolicy::default`] is the shipping configuration; the loosened
