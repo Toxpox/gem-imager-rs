@@ -42,6 +42,21 @@ fn main() -> iced::Result {
         .try_init()
         .expect("Failed to register tracing_subscriber");
 
+    // Release builds are `windows_subsystem = "windows"`, so a panic message has nowhere to go:
+    // there is no console, and the default hook does not touch tracing. A panic on a worker thread
+    // therefore left no trace at all while the screen sat on its last phase forever. Route panics
+    // into the same log file as everything else before any of them can happen.
+    {
+        let default_hook = std::panic::take_hook();
+        std::panic::set_hook(Box::new(move |info| {
+            tracing::error!(
+                "PANIC on thread {:?}: {info}",
+                std::thread::current().name().unwrap_or("<unnamed>")
+            );
+            default_hook(info);
+        }));
+    }
+
     tracing::info!("Resolved GUI keymap: {:?}", helpers::system_keymap());
 
     // A staging image is a full OS image carrying the user's Wi-Fi PSK and password hash. `Drop`
