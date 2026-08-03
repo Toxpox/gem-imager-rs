@@ -34,7 +34,7 @@ sha1 = { version = "0.10", optional = true }
 des = { version = "0.8", optional = true }
 cipher = { version = "0.4", optional = true }
 zeroize = { version = "1", optional = true }
-# The crypt(3) salt has to come from the OS CSPRNG (the secret-handling policy), never a userspace PRNG.
+# The crypt(3) salt has to come from the OS CSPRNG (`instruction.md` §10.3), never a userspace PRNG.
 getrandom = { version = "0.3", optional = true }
 chrono-tz = { version = "0.10", optional = true }
 

@@ -23,6 +23,9 @@ pub enum DownloadFlashingStatus {
     // it would have to invent a number for the two phases that cannot be measured at all.
     /// Resolving and verifying the three boot artifacts. Indeterminate.
     ResolvingBootArtifacts,
+    /// Hashing the staged image so the eMMC write can be verified against it. Byte-measured: it
+    /// reads the whole image before the first USB packet and would otherwise look like a stall.
+    ChecksummingImage(f32),
     /// Waiting for the board to re-enumerate after a reset. Indeterminate.
     Reconnecting,
     /// Transferring boot stage `stage` of three; the fraction is within that stage.

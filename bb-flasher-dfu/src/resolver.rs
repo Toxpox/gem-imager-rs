@@ -130,7 +130,12 @@ impl BootArtifactResolver {
         profile: &DfuProfile,
         cancel: Option<&CancellationToken>,
     ) -> Result<Vec<ResolvedBootArtifact>> {
+        // `enable_all` is not optional here. Without the IO and time drivers the first request
+        // this runtime makes panics with "there is no reactor running" instead of returning an
+        // error — and a panic on a blocking worker never reaches the failure screen, so the write
+        // stops dead on whatever phase was last announced.
         tokio::runtime::Builder::new_current_thread()
+            .enable_all()
             .build()
             .map_err(Error::ResolverIo)?
             .block_on(self.resolve(profile, cancel))

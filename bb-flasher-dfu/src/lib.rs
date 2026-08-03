@@ -405,6 +405,123 @@ where
     Ok(())
 }
 
+/// Read `reader` to its end, hashing every byte, optionally copying them into `sink`.
+///
+/// The progress it reports is what separates this pass from a hang: it walks the whole
+/// multi-gigabyte image before the first USB packet, so a caller that stays silent here leaves the
+/// front-end showing the previous phase for minutes.
+fn digest_raw_image(
+    reader: &mut dyn io::Read,
+    mut sink: Option<&mut std::fs::File>,
+    expected: u64,
+    chan: Option<&mpsc::SyncSender<DfuProgress>>,
+    cancel: Option<&CancellationToken>,
+) -> Result<[u8; 32]> {
+    let report = |fraction: f32| {
+        if let Some(sender) = chan {
+            let _ = sender.try_send(DfuProgress::ChecksummingImage(fraction));
+        }
+    };
+    // Roughly 200 updates over the whole image, and never more than one per 8 MiB: the channel
+    // drops on contention anyway, and the front-end only needs enough motion to show work.
+    let step = (expected / 200).max(8 * 1024 * 1024);
+    let mut next_report = step;
+    let mut hasher = Sha256::new();
+    let mut buffer = vec![0_u8; 1024 * 1024];
+    let mut copied = 0_u64;
+
+    report(0.0);
+    loop {
+        check_cancel(cancel)?;
+        let read = reader
+            .read(&mut buffer)
+            .map_err(|source| Error::ImageRead {
+                artifact: "rawemmc".to_owned(),
+                source,
+            })?;
+        if read == 0 {
+            break;
+        }
+        if let Some(file) = sink.as_mut() {
+            file.write_all(&buffer[..read]).map_err(Error::ResolverIo)?;
+        }
+        hasher.update(&buffer[..read]);
+        copied += read as u64;
+        if copied >= next_report {
+            next_report = copied + step;
+            report(copied as f32 / expected as f32);
+        }
+    }
+
+    if copied != expected {
+        return Err(Error::ShortImage {
+            artifact: "rawemmc".to_owned(),
+            expected,
+            actual: copied,
+        });
+    }
+    report(1.0);
+    Ok(hasher.finalize().into())
+}
+
+/// Spool a one-shot reader (typically a decompressor) into a scratch file so it can be hashed
+/// before the write starts and replayed afterwards.
+fn stage_raw_stream<R, I>(
+    raw_image: R,
+    chan: Option<&mpsc::SyncSender<DfuProgress>>,
+    cancel: Option<&CancellationToken>,
+) -> Result<DfuStageInput>
+where
+    R: FnOnce() -> io::Result<(I, u64)>,
+    I: io::Read,
+{
+    let (mut reader, advertised_size) = raw_image().map_err(Error::ResolverIo)?;
+    if advertised_size == 0 {
+        return Err(Error::EmptyImage("rawemmc".to_owned()));
+    }
+    let mut file = tempfile::tempfile().map_err(Error::ResolverIo)?;
+    let digest = digest_raw_image(&mut reader, Some(&mut file), advertised_size, chan, cancel)?;
+    file.flush().map_err(Error::ResolverIo)?;
+    file.rewind().map_err(Error::ResolverIo)?;
+    Ok(raw_emmc_input(digest, advertised_size, Box::new(file)))
+}
+
+/// Hash an image that is already a finished file, in place.
+///
+/// The stream path has to spool because its reader is one-shot; a file is not, and copying it
+/// would double both the wall-clock cost of this phase and the free space the whole operation
+/// needs — for a multi-gigabyte image on a small system disk, that second copy is the difference
+/// between working and failing.
+fn stage_raw_file(
+    path: &Path,
+    chan: Option<&mpsc::SyncSender<DfuProgress>>,
+    cancel: Option<&CancellationToken>,
+) -> Result<DfuStageInput> {
+    let mut file = std::fs::File::open(path).map_err(Error::ResolverIo)?;
+    let size = file.metadata().map_err(Error::ResolverIo)?.len();
+    if size == 0 {
+        return Err(Error::EmptyImage("rawemmc".to_owned()));
+    }
+    let digest = digest_raw_image(&mut file, None, size, chan, cancel)?;
+    file.rewind().map_err(Error::ResolverIo)?;
+    Ok(raw_emmc_input(digest, size, Box::new(file)))
+}
+
+fn raw_emmc_input(digest: [u8; 32], size: u64, reader: Box<dyn io::Read + Send>) -> DfuStageInput {
+    DfuStageInput {
+        stage: DfuStage {
+            kind: DfuStageKind::RawEmmc,
+            artifact_name: "rawemmc".to_owned(),
+            alt_setting: bb_config::t3::T3_RAW_EMMC_ALT_SETTING.to_owned(),
+            reset_after: false,
+            reconnect_timeout: bb_config::t3::T3_DFU_RECONNECT_TIMEOUT,
+            expected_sha256: digest,
+            expected_size: Some(size),
+        },
+        reader,
+    }
+}
+
 /// Resolve the verified T3 boot chain and flash one extracted/customized raw eMMC image.
 ///
 /// This is the production Phase 7 entry point. Unlike [`flash`], boot artifacts are never accepted
@@ -421,6 +538,44 @@ where
     R: FnOnce() -> io::Result<(I, u64)>,
     I: io::Read,
 {
+    flash_t3_inner(
+        |chan, cancel| stage_raw_stream(raw_image, chan, cancel),
+        path,
+        cache_dir,
+        chan,
+        cancel,
+    )
+}
+
+/// [`flash_t3`] for an image that is already a file on disk — the GUI's staging file, which was
+/// written and read-back verified before it got here.
+pub fn flash_t3_file(
+    raw_image: impl AsRef<Path>,
+    path: UsbPath,
+    cache_dir: impl AsRef<Path>,
+    chan: Option<mpsc::SyncSender<DfuProgress>>,
+    cancel: Option<CancellationToken>,
+) -> Result<FlashReport> {
+    let raw_image = raw_image.as_ref();
+    flash_t3_inner(
+        |chan, cancel| stage_raw_file(raw_image, chan, cancel),
+        path,
+        cache_dir,
+        chan,
+        cancel,
+    )
+}
+
+fn flash_t3_inner(
+    stage_raw: impl FnOnce(
+        Option<&mpsc::SyncSender<DfuProgress>>,
+        Option<&CancellationToken>,
+    ) -> Result<DfuStageInput>,
+    path: UsbPath,
+    cache_dir: impl AsRef<Path>,
+    chan: Option<mpsc::SyncSender<DfuProgress>>,
+    cancel: Option<CancellationToken>,
+) -> Result<FlashReport> {
     let cache_dir = cache_dir.as_ref();
     // Announced before the first network call: on a cold cache this phase can take a while, and a
     // screen that says nothing here looks like a hang before the board has even been touched.
@@ -438,50 +593,7 @@ where
         .collect::<Result<Vec<_>>>()?;
 
     check_cancel(cancel.as_ref())?;
-    let (mut reader, advertised_size) = raw_image().map_err(Error::ResolverIo)?;
-    if advertised_size == 0 {
-        return Err(Error::EmptyImage("rawemmc".to_owned()));
-    }
-    let mut file = tempfile::tempfile().map_err(Error::ResolverIo)?;
-    let mut hasher = Sha256::new();
-    let mut copied = 0_u64;
-    let mut buffer = vec![0_u8; 1024 * 1024];
-    loop {
-        check_cancel(cancel.as_ref())?;
-        let read = reader
-            .read(&mut buffer)
-            .map_err(|source| Error::ImageRead {
-                artifact: "rawemmc".to_owned(),
-                source,
-            })?;
-        if read == 0 {
-            break;
-        }
-        file.write_all(&buffer[..read]).map_err(Error::ResolverIo)?;
-        hasher.update(&buffer[..read]);
-        copied += read as u64;
-    }
-    if copied != advertised_size {
-        return Err(Error::ShortImage {
-            artifact: "rawemmc".to_owned(),
-            expected: advertised_size,
-            actual: copied,
-        });
-    }
-    file.flush().map_err(Error::ResolverIo)?;
-    file.rewind().map_err(Error::ResolverIo)?;
-    inputs.push(DfuStageInput {
-        stage: DfuStage {
-            kind: DfuStageKind::RawEmmc,
-            artifact_name: "rawemmc".to_owned(),
-            alt_setting: profile.raw_emmc_alt_setting,
-            reset_after: false,
-            reconnect_timeout: bb_config::t3::T3_DFU_RECONNECT_TIMEOUT,
-            expected_sha256: hasher.finalize().into(),
-            expected_size: Some(copied),
-        },
-        reader: Box::new(file),
-    });
+    inputs.push(stage_raw(chan.as_ref(), cancel.as_ref())?);
 
     let mut transport = RusbTransport::new();
     let mut callback = |value: DfuProgress| {
