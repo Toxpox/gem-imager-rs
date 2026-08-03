@@ -177,6 +177,10 @@ catalog! {
         en: "Verifying boot files ...",
         tr: "Boot dosyaları doğrulanıyor ..."
     },
+    ChecksummingImage {
+        en: "Checksumming image ...",
+        tr: "İmaj sağlaması hesaplanıyor ..."
+    },
     WaitingForBoard {
         en: "Waiting for the board to reconnect ...",
         tr: "Kartın yeniden bağlanması bekleniyor ..."

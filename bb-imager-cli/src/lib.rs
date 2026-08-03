@@ -72,6 +72,10 @@ fn flash(target: TargetCommands, quite: bool) {
                         | (
                             DownloadFlashingStatus::BootStage { progress: p, .. },
                             DownloadFlashingStatus::BootStage { .. },
+                        )
+                        | (
+                            DownloadFlashingStatus::ChecksummingImage(p),
+                            DownloadFlashingStatus::ChecksummingImage(_),
                         ) => {
                             last_bar.as_ref().unwrap().set_position((p * 100.0) as u64);
                         }
@@ -80,6 +84,7 @@ fn flash(target: TargetCommands, quite: bool) {
                         | (DownloadFlashingStatus::FlashingProgress(p), _)
                         | (DownloadFlashingStatus::RawWrite(p), _)
                         | (DownloadFlashingStatus::BootStage { progress: p, .. }, _)
+                        | (DownloadFlashingStatus::ChecksummingImage(p), _)
                         | (DownloadFlashingStatus::Verifying(p), _) => {
                             if let Some(b) = last_bar.take() {
                                 b.finish();
@@ -460,6 +465,7 @@ const fn progress_msg(status: DownloadFlashingStatus) -> &'static str {
         DownloadFlashingStatus::Verifying(_) => "Verifying",
         DownloadFlashingStatus::Customizing => "Customizing",
         DownloadFlashingStatus::ResolvingBootArtifacts => "Boot files",
+        DownloadFlashingStatus::ChecksummingImage(_) => "Checksum",
         DownloadFlashingStatus::Reconnecting => "Reconnecting",
         DownloadFlashingStatus::BootStage { .. } => "Bootloader",
         DownloadFlashingStatus::RawWrite(_) => "eMMC write",
