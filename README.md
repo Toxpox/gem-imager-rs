@@ -1,90 +1,44 @@
-# BeagleBoard Imager Rust
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/t3gemstone/gem-imager/main/.meta/logo-dark.png" />
+    <img src="https://raw.githubusercontent.com/t3gemstone/gem-imager/main/.meta/logo-light.png" alt="T3 Gemstone" width="360" />
+  </picture>
+</p>
 
-BeagleBoard Imaging Utility, a streamlined tool for creating, flashing, and managing OS images for BeagleBoard devices.
+# T3 Gemstone Imager
 
-# Contributing
+T3 Gemstone Imager is a Rust desktop application for downloading, configuring, and writing supported operating-system images to T3 Gemstone hardware.
 
-Please see [Contributing.adoc](./docs/modules/ROOT/pages/contributing.adoc)
+It writes images to SD cards and supports verified DFU flashing to the onboard eMMC on T3-GEM-O1. Image downloads and writes are checked for integrity before they are used.
 
-# Packaging
+## Getting started
 
-Please see [Packaging.adoc](./docs/modules/ROOT/pages/packaging.adoc)
+Install a current stable Rust toolchain and Git LFS, then clone and run the application:
 
-# Configuration
-
-The boards and images are configured using a `config.json` file. This file will typically reside in a remote server. It is quite similar to the one used in `bb-imager` with slight modifications to allow use with non-linux targets along with more verfication.
-
-See [config.json](config.json) for example.
-
-# GUI
-
-![BBImager Home Screen](./assets/screenshots/1_board_selection.webp)
-![BBImager Image Selection Screen](./assets/screenshots/2_image_selection.webp)
-![BBImager Destination Screen](./assets/screenshots/3_dest_selection.webp)
-![BBImager Configuration Screen](./assets/screenshots/4_customization.webp)
-![BBImager Review Screen](./assets/screenshots/5_review.webp)
-![BBImager Flashing Screen](./assets/screenshots/6_flashing.webp)
-![BBImager Flashing Finish Screen](./assets/screenshots/7_sucess.webp)
-
-# CLI
-
-## Home Help
-
-```shell
-❯ bb-imager-cli --help
-A streamlined tool for creating, flashing, and managing OS images for BeagleBoard devices.
-
-Usage: bb-imager-cli <COMMAND>
-
-Commands:
-  flash                Command to flash an image to a specific destination
-  list-destinations    Command to list available destinations for flashing based on the selected target
-  format               Command to format SD Card
-  generate-completion  Command to generate shell completion
-  help                 Print this message or the help of the given subcommand(s)
-
-Options:
-  -h, --help     Print help
-  -V, --version  Print version
+```sh
+git lfs install
+git clone https://github.com/Toxpox/gem-imager-rs.git
+cd gem-imager-rs
+cargo run -p bb-imager-gui
 ```
 
-## Flashing SD Card Help
+The command-line interface is also available:
 
-```shell
-❯ bb-imager-cli flash sd --help
-Flash an SD card with customizable settings for BeagleBoard devices
-
-Usage: bb-imager-cli flash sd [OPTIONS] <IMG> <DST>
-
-Arguments:
-  <IMG>  Local path to image file. Can be compressed (xz) or extracted file
-  <DST>  The destination device (e.g., `/dev/sdX` or specific device identifiers)
-
-Options:
-      --no-verify                      Disable checksum verification post-flash
-      --hostname <HOSTNAME>            Set a custom hostname for the device (e.g., "beaglebone")
-      --timezone <TIMEZONE>            Set the timezone for the device (e.g., "America/New_York")
-      --keymap <KEYMAP>                Set the keyboard layout/keymap (e.g., "us" for the US layout)
-      --user-name <USER_NAME>          Set a username for the default user. Requires `user_password`.
-                                       Required to enter GUI session due to regulatory requirements.
-      --user-password <USER_PASSWORD>  Set a password for the default user. Requires `user_name`.
-                                       Required to enter GUI session due to regulatory requirements.
-      --wifi-ssid <WIFI_SSID>          Configure a Wi-Fi SSID for network access. Requires `wifi_password`
-      --wifi-password <WIFI_PASSWORD>  Set the password for the specified Wi-Fi SSID. Requires `wifi_ssid`
-  -h, --help                           Print help
+```sh
+cargo run -p bb-imager-cli -- --help
 ```
 
-## Flashing image
+## Development
 
-```shell
-❯ bb-imager-cli flash --quiet sd $IMG_PATH /dev/sdX
+The workspace uses feature-gated components. Use the Makefile targets to check and test the same combinations used by CI:
+
+```sh
+make check
+make test
 ```
 
-# Creating Issues
+For T3 Gemstone software, images, and documentation, visit [t3gemstone.org](https://t3gemstone.org/en) and the [official documentation](https://docs.t3gemstone.org).
 
-While creating new issues for bugs, please attach logs from the application. Log files are created automatically by the GUI from v0.0.12.
+## License
 
-Log file locations by platform:
-- **Linux**: `$HOME/.cache/org.beagleboard.imagingutility.log`
-- **Windows**: `%USERPROFILE%\AppData\Local\beagleboard\imagingutility\org.beagleboard.imagingutility.log`
-- **macOS**: `$HOME/Library/Caches/org.beagleboard.imagingutility.log`
+This project is available under the [MIT License](LICENSE).
