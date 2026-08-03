@@ -466,6 +466,13 @@ pub(crate) fn flash_phase(status: bb_flasher::DownloadFlashingStatus, is_dfu: bo
             label: Msg::ResolvingBootArtifacts,
             fraction: None,
         },
+        // Reading the staged image end to end sits between the boot files and the first USB
+        // packet. It is measurable and slow, so it gets its own slice rather than hiding inside
+        // the indeterminate phase before it.
+        (S::ChecksummingImage(x), _) => FlashPhase {
+            label: Msg::ChecksummingImage,
+            fraction: span(0.53, 0.03, x),
+        },
         (S::Reconnecting, _) => FlashPhase {
             label: Msg::WaitingForBoard,
             fraction: None,
@@ -694,6 +701,8 @@ mod tests {
             DownloadFlashingStatus::Verifying(1.0),
             DownloadFlashingStatus::Customizing,
             DownloadFlashingStatus::ResolvingBootArtifacts,
+            DownloadFlashingStatus::ChecksummingImage(0.0),
+            DownloadFlashingStatus::ChecksummingImage(1.0),
             DownloadFlashingStatus::Reconnecting,
             DownloadFlashingStatus::BootStage {
                 stage: 1,

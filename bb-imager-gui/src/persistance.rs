@@ -116,7 +116,7 @@ impl SdCustomization {
 /// # What is not saved
 ///
 /// Every password field is `#[serde(skip)]`, so no secret reaches `config.json`
-/// (the secret-handling policy). Reloading the application therefore restores the network name but not
+/// (`instruction.md` §10.3). Reloading the application therefore restores the network name but not
 /// its passphrase, which is the intended trade: the alternative is a plaintext Wi-Fi key sitting in
 /// the user's config directory.
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
@@ -565,7 +565,7 @@ mod tests {
             }))
     }
 
-    /// the secret-handling policy: no secret may be persisted. This checks the serialized JSON text
+    /// `instruction.md` §10.3: no secret may be persisted. This checks the serialized JSON text
     /// directly, because that is the artefact that ends up on disk.
     #[test]
     fn no_t3_secret_is_ever_written_to_the_config_file() {

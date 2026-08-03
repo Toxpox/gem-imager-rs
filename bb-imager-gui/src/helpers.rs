@@ -258,9 +258,9 @@ pub(crate) fn system_keymap() -> &'static str {
 
 /// A catalog image, with the integrity values the catalog published for it.
 ///
-/// The two hashes are *not* interchangeable and never share a name (the catalog validation rules):
+/// The two hashes are *not* interchangeable and never share a name (`instruction.md` §6.2):
 /// `archive_sha256` covers the compressed download and is what the cache is addressed by;
-/// `extract_sha256` covers the bytes that reach the board. Previously this struct called the
+/// `extract_sha256` covers the bytes that reach the board. Before Faz 3 this struct called the
 /// archive hash `extract_sha256` while being handed `image_download_sha256`, so the extracted
 /// bytes were never checked at all.
 #[derive(Debug, Clone, serde::Serialize)]
@@ -483,12 +483,12 @@ pub(crate) async fn flash(
                 )
                 .flash(Some(chan.clone()), Some(cancel_sync.clone()))?;
 
-                // `LocalImage` re-opens the staging file for the DFU stream. Its extract gate is
-                // `LocalFile`, which is correct here and not a loosening: these bytes were just
-                // written and read back against the catalog's extracted digest by the call above.
-                let image = bb_flasher::LocalImage::new(staging.path().into());
-                bb_flasher::dfu::Flasher::from_identifier(
-                    image.into_image_fn(),
+                // The staging file is handed to the DFU stage as a file, not as a stream: it is
+                // already the finished image — written and read back against the catalog's
+                // extracted digest by the call above — so it is hashed where it lies instead of
+                // being copied a second time into scratch storage.
+                bb_flasher::dfu::Flasher::from_staging_file(
+                    staging.path(),
                     &identifier,
                     Some(cancel_sync),
                 )?
@@ -497,7 +497,14 @@ pub(crate) async fn flash(
                 // `staging` is dropped here — on success, on error and on cancellation alike.
             })
             .await
-            .unwrap()
+            // A panic on the blocking worker used to reach `unwrap()` and take the surrounding
+            // task with it, which left the screen frozen on its last phase with nothing written
+            // anywhere. Turning it into an error means the user sees a failure they can report.
+            .unwrap_or_else(|join_error| {
+                Err(anyhow::anyhow!(
+                    "the DFU write ended unexpectedly: {join_error}"
+                ))
+            })
         }
         #[cfg(feature = "sd")]
         (BoardImage::SdFormat { .. }, _, Destination::SdCard(t)) => {
@@ -1434,8 +1441,8 @@ mod tests {
         // which is why both BeagleBoard formats are offered rather than none.
         //
         // The T3 GemInit formats are deliberately absent: writing `config.ini` onto an arbitrary
-        // local image would be guessing that the image is a T3 one and could silently write an
-        // unsupported configuration.
+        // local image would be guessing that the image is a T3 one, and a first-boot file the image
+        // does not consume is the failure this whole phase exists to avoid.
         assert_eq!(
             img.supported_init_formats(),
             &[config::InitFormat::Sysconf, config::InitFormat::CloudInit]

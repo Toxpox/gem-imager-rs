@@ -51,7 +51,7 @@ fn customization_pane<'a>(state: &'a crate::state::CustomizeState) -> Element<'a
 /// The T3 GemStone first-boot screen.
 ///
 /// Only the fields the current `gem-first-boot` consumer actually reads are here
-/// (the supported first-boot contract). Disk encryption, SD-to-eMMC copy, the USB gadget toggles and the SSH
+/// (`instruction.md` §10.1). Disk encryption, SD-to-eMMC copy, the USB gadget toggles and the SSH
 /// options are deliberately absent: the consumer ignores those keys, so a switch for them would
 /// claim to configure something it does not.
 fn t3_gem_init<'a>(
@@ -267,7 +267,7 @@ fn t3_gem_init<'a>(
                 .into(),
                 // Both facts are stated rather than hidden: the length limit is the protocol's, not
                 // the application's, and the leftover secret is a known SDK defect
-                // (the customization test contract).
+                // (`instruction.md` §10.5).
                 hint(lang.text(Msg::VncProtocolHint)),
                 hint(lang.text(Msg::VncKnownIssueHint)),
             ]);

@@ -13,7 +13,7 @@
 //!
 //! # Why the field set is smaller than `gem-imager`'s
 //!
-//! the supported first-boot contract restricts the file to what the current consumer actually reads.
+//! `instruction.md` §10.1 restricts the file to what the current consumer actually reads.
 //! `cryptsetup`, `diskpasswd`, `writeimagetommc`, the USB gadget toggles and the SSH options are
 //! **not** written: `gem-first-boot` does not read them, so offering them would be a UI that claims
 //! to configure something it does not.
@@ -224,7 +224,7 @@ pub struct Timezone(String);
 impl Timezone {
     /// Validate a time zone against the IANA database compiled into the application.
     ///
-    /// This is the "only from the application's validated list" rule of the first-boot validation rules: the
+    /// This is the "only from the application's validated list" rule of `instruction.md` §10.2: the
     /// same database backs the GUI's time zone picker, so a value that passes here is one the user
     /// could have selected.
     pub fn parse(value: &str) -> Result<Self, T3GemInitError> {
@@ -495,7 +495,7 @@ mod tests {
     }
 
     /// Keys the current `gem-first-boot` does not read must not reach the file
-    /// (the supported first-boot contract). There is no API to set them, so this asserts the whole surface.
+    /// (`instruction.md` §10.1). There is no API to set them, so this asserts the whole surface.
     #[test]
     fn unsupported_keys_can_never_appear() {
         let config = T3GemInitConfig::new()
@@ -560,7 +560,7 @@ mod tests {
 
     /// Round-trip through an isolated parser that reads the file the way `source` would.
     ///
-    /// the customization test contract asks for a shell round-trip in which only the expected variables
+    /// `instruction.md` §10.5 asks for a shell round-trip in which only the expected variables
     /// appear and no command runs. Spawning a real shell would make the test depend on the host
     /// having one and on it never executing what it reads, so the parser is reimplemented here:
     /// it understands exactly `key=value` and `key='literal'` with the `'\''` splice, and treats

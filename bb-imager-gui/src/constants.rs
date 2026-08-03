@@ -2,7 +2,7 @@ use iced::color;
 
 pub(crate) const OSHW_BASE_URL: &str = "https://certification.oshwa.org";
 
-/// Updater endpoint for the T3 Gemstone fork.
+/// Provisional until the T3 release repository is created (Faz 9 owns the release wiring).
 /// The updater is feature-gated (`updater`) and is not enabled in the M1 preview packages.
 pub(crate) const LATEST_RELEASE_URL: &str =
     "https://api.github.com/repos/t3gemstone/imager/releases/latest";

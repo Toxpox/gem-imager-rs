@@ -39,7 +39,7 @@ pub(super) fn quote(field: &'static str, value: &str) -> Result<String, T3GemIni
 mod tests {
     use super::*;
 
-    /// The injection payloads from the customization test contract. None of them may leave the literal.
+    /// The injection payloads from `instruction.md` §10.5. None of them may leave the literal.
     #[test]
     fn shell_metacharacters_stay_inside_the_literal() {
         for payload in [

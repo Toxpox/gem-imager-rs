@@ -1,6 +1,6 @@
 //! A string that never reaches a log, a `Debug` dump, a snapshot or a crash report.
 //!
-//! the secret-handling policy requires secret types to be redacted in `Debug` output. That is not a
+//! `instruction.md` §10.3 requires secret types to be redacted in `Debug` output. That is not a
 //! style preference: the GUI derives `Debug` on its state, `tracing` renders `Debug` for structured
 //! fields, and panics print `Debug` for every value in scope. A plain `String` password would leak
 //! through all three.
@@ -86,7 +86,7 @@ pub(super) type DerivedSecret = Zeroizing<String>;
 mod tests {
     use super::*;
 
-    /// The snapshot test from the customization test contract: no formatting path may render the plaintext.
+    /// The snapshot test from `instruction.md` §10.5: no formatting path may render the plaintext.
     #[test]
     fn debug_output_never_contains_the_plaintext() {
         let s = Secret::new("hunter2-Ağ");

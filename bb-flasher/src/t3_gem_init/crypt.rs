@@ -77,7 +77,7 @@ pub(super) fn wpa_psk(ssid: &str, passphrase: &Secret) -> Result<DerivedSecret, 
 
 /// Validate a passphrase the user supplied as a ready-made 64-hex-digit PSK.
 ///
-/// Accepting it verbatim is required (the secret-handling policy) — re-running PBKDF2 over a PSK would
+/// Accepting it verbatim is required (`instruction.md` §10.3) — re-running PBKDF2 over a PSK would
 /// silently produce a key that does not match the network.
 pub(super) fn normalize_psk_hex(value: &Secret) -> Result<DerivedSecret, T3GemInitError> {
     let raw = value.expose();
@@ -117,7 +117,7 @@ pub(super) fn vnc_obfuscate(password: &Secret) -> Result<DerivedSecret, T3GemIni
 mod tests {
     use super::*;
 
-    /// the customization test contract: a fixed salt pins the algorithm, and an independent verifier
+    /// `instruction.md` §10.5: a fixed salt pins the algorithm, and an independent verifier
     /// (`sha512_check`, which re-derives from the emitted salt) confirms the string is a real
     /// crypt(3) hash rather than a lookalike.
     #[test]
@@ -243,7 +243,7 @@ mod tests {
         assert_eq!(const_hex::encode(block), "8ca64de9c1b123a7");
     }
 
-    /// the secret-handling policy: no silent truncation. A 9-byte password is an error, not 8 bytes of
+    /// `instruction.md` §10.3: no silent truncation. A 9-byte password is an error, not 8 bytes of
     /// it, because the user would otherwise be told a password that does not open the session.
     #[test]
     fn vnc_password_over_eight_bytes_is_rejected_not_truncated() {

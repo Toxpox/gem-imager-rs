@@ -53,7 +53,8 @@
 	<!--
 		Screenshots are deliberately absent. The upstream entries pointed at BeagleBoard captures
 		of a user interface this fork no longer ships, and a stale screenshot is worse than none:
-		it advertises the wrong product. Current T3 screenshots are required before this metadata block can be restored.
+		it advertises the wrong product. Faz 9 (packaging and release) captures T3 screenshots and
+		restores this block before the store listings go out.
 	-->
 
 	<releases>
