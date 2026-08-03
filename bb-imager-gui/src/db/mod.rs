@@ -450,34 +450,49 @@ impl Db {
         parent_id: Option<i64>,
         remote_config_id: Option<i64>,
     ) -> rusqlite::Result<i64> {
+        // The same image legitimately arrives more than once: a catalog entry that several boards
+        // accept is offered once per board, and the unique key below is exactly the statement that
+        // those are one image. Letting the conflict propagate aborts the whole merge transaction,
+        // and the board list is what is lost with it — not just the duplicate image.
+        //
+        // `DO UPDATE` rather than `DO NOTHING` because only an updating upsert produces a row for
+        // `RETURNING`; the assignment is a deliberate no-op, so the first copy's data stands and
+        // the second copy contributes only its board mapping below.
         let mut stmt = exec.prepare_cached(
             r#"
             INSERT INTO os_images(name, parent_id, description, icon, url,
                 image_download_size, image_download_sha256, extract_sha256, extract_size,
                 release_date, init_format, info_text, remote_config_id, support)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+            ON CONFLICT(name, description, icon, url, init_format)
+                DO UPDATE SET name = excluded.name
+            RETURNING id
             "#,
         )?;
-        let id = stmt.insert(rusqlite::params![
-            img.name,
-            parent_id,
-            img.description,
-            img.icon,
-            img.url,
-            img.image_download_size.map(|x| i64::try_from(x).unwrap()),
-            img.image_download_sha256,
-            img.extract_sha256.map(|x| x.to_vec()),
-            i64::try_from(img.extract_size).unwrap(),
-            img.release_date,
-            img.init_format,
-            img.info_text,
-            remote_config_id,
-            img.support
-        ])?;
+        let id = stmt.query_row(
+            rusqlite::params![
+                img.name,
+                parent_id,
+                img.description,
+                img.icon,
+                img.url,
+                img.image_download_size.map(|x| i64::try_from(x).unwrap()),
+                img.image_download_sha256,
+                img.extract_sha256.map(|x| x.to_vec()),
+                i64::try_from(img.extract_size).unwrap(),
+                img.release_date,
+                img.init_format,
+                img.info_text,
+                remote_config_id,
+                img.support
+            ],
+            |row| row.get(0),
+        )?;
 
+        // A repeated image maps to one more board; the pair itself must stay unique.
         let mut stmt = exec.prepare_cached(
             r#"
-            INSERT INTO os_image_boards(image_id, board_id)
+            INSERT OR IGNORE INTO os_image_boards(image_id, board_id)
             SELECT $1, b.board_id
             FROM board_tags b
             WHERE b.tag = $2
