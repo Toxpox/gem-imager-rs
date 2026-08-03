@@ -609,9 +609,19 @@ fn detach_before_reset<T: DfuTransport>(transport: &mut T, artifact: &str) {
     }
 }
 
+/// Accept the ways a device that was just reset reports that it is gone.
+///
+/// `LIBUSB_ERROR_NOT_FOUND` belongs here as much as a plain disconnect does: `libusb_reset_device`
+/// documents it as the answer when the device had to be re-enumerated, which is precisely the
+/// success case for a boot artifact — U-Boot's gadget leaves and the board comes back publishing
+/// the next stage's alt-setting. Refusing it fails the write at the exact moment it worked.
 fn tolerate_reset_disconnect(result: Result<()>) -> Result<()> {
     match result {
-        Err(Error::Transport(source)) if source.kind.may_be_reset_disconnect() => Ok(()),
+        Err(Error::Transport(source))
+            if source.kind.may_be_reset_disconnect() || source.kind.is_reset_reenumeration() =>
+        {
+            Ok(())
+        }
         other => other,
     }
 }

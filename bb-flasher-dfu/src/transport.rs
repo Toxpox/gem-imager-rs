@@ -161,6 +161,7 @@ impl RusbTransport {
         Error::Transport(TransportError::new(
             match error {
                 rusb::Error::NoDevice => TransportErrorKind::Disconnected,
+                rusb::Error::NotFound => TransportErrorKind::NotFound,
                 rusb::Error::Io => TransportErrorKind::Io,
                 rusb::Error::Timeout => TransportErrorKind::Timeout,
                 rusb::Error::Pipe => TransportErrorKind::Pipe,

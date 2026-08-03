@@ -139,6 +139,10 @@ pub struct DfuStatus {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TransportErrorKind {
     Disconnected,
+    /// `LIBUSB_ERROR_NOT_FOUND`. On a control transfer this is a genuine "no such
+    /// interface/alt-setting", but `libusb_reset_device` documents it as the *normal* answer when
+    /// the device had to be re-enumerated — see [`Self::is_reset_reenumeration`].
+    NotFound,
     Io,
     Timeout,
     Pipe,
@@ -156,6 +160,15 @@ impl TransportErrorKind {
             self,
             Self::Disconnected | Self::Io | Self::Timeout | Self::Pipe
         )
+    }
+
+    /// Whether this is how a *successful* device reset reports itself.
+    ///
+    /// Kept separate from [`Self::may_be_reset_disconnect`]: that predicate also guards the
+    /// streaming path, where a missing interface must stay an error instead of being read as "the
+    /// board booted".
+    pub const fn is_reset_reenumeration(self) -> bool {
+        matches!(self, Self::NotFound)
     }
 }
 

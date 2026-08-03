@@ -418,6 +418,34 @@ fn a_boot_stage_detach_the_device_refuses_does_not_fail_the_write() {
     transport.done();
 }
 
+/// `libusb_reset_device` reports `LIBUSB_ERROR_NOT_FOUND` when the device had to be re-enumerated.
+/// For a boot artifact that is the success case — the gadget left and the board comes back with the
+/// next stage's alt-setting — so it must not end the write.
+#[test]
+fn a_boot_stage_reset_that_re_enumerates_the_device_does_not_fail_the_write() {
+    let payloads = [b"boot".as_slice(), b"spl", b"uboot", b"raw-image"];
+    let mut events = successful_events(payloads, DfuState::DfuIdle);
+    let first_reset = events
+        .iter()
+        .position(|event| matches!(event, Event::Reset))
+        .expect("boot stages reset");
+    events[first_reset] = Event::Fail("reset", TransportErrorKind::NotFound);
+
+    let mut transport = MockTransport::new(events);
+    let report = flash_with_transport(
+        &mut transport,
+        inputs(payloads),
+        VID,
+        PID,
+        UsbPath::legacy(3, 7),
+        None,
+        None,
+    )
+    .unwrap();
+    assert_eq!(report.stages.len(), 4);
+    transport.done();
+}
+
 #[test]
 fn four_stages_run_in_exact_order_and_address_or_serial_changes_do_not_switch_ports() {
     let payloads = [b"boot".as_slice(), b"spl", b"uboot", b"raw-image"];
