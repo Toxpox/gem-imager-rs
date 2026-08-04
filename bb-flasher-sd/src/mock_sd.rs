@@ -1,4 +1,8 @@
 use std::io::{self, Read, Seek, SeekFrom, Write};
+use std::sync::{
+    Arc,
+    atomic::{AtomicUsize, Ordering},
+};
 
 use fscommon::{BufStream, StreamSlice};
 use mbrman::{CHS, MBR, MBRPartitionEntry};
@@ -14,6 +18,7 @@ pub struct MockSd {
     file: tempfile::NamedTempFile,
     fail: CancellationToken,
     sync_fail: CancellationToken,
+    prepare_count: Arc<AtomicUsize>,
 }
 
 impl Default for MockSd {
@@ -70,6 +75,7 @@ impl MockSd {
             file: img,
             fail: CancellationToken::default(),
             sync_fail: CancellationToken::default(),
+            prepare_count: Arc::new(AtomicUsize::new(0)),
         }
     }
 
@@ -85,6 +91,11 @@ impl MockSd {
     /// sync failure itself is treated as fatal.
     pub fn sync_fail_token(&self) -> CancellationToken {
         self.sync_fail.clone()
+    }
+
+    /// Number of times the platform customization lifecycle hook ran.
+    pub fn prepare_count(&self) -> Arc<AtomicUsize> {
+        Arc::clone(&self.prepare_count)
     }
 
     pub fn as_file(&self) -> &std::fs::File {
@@ -148,6 +159,13 @@ impl crate::helpers::Commit for MockSd {
 
         self.file.flush()?;
         self.as_file().sync_all()
+    }
+}
+
+impl crate::helpers::PrepareCustomization for MockSd {
+    fn prepare_customization(&mut self, _cancel: Option<&CancellationToken>) -> crate::Result<()> {
+        self.prepare_count.fetch_add(1, Ordering::SeqCst);
+        Ok(())
     }
 }
 

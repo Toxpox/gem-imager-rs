@@ -54,6 +54,8 @@ impl crate::helpers::Commit for MacOSFile {
     }
 }
 
+impl crate::helpers::PrepareCustomization for MacOSFile {}
+
 impl crate::helpers::Eject for MacOSFile {
     fn eject(mut self) -> std::io::Result<()> {
         crate::helpers::Commit::commit(&mut self)?;

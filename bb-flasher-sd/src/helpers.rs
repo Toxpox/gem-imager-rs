@@ -43,6 +43,17 @@ pub(crate) trait Commit {
     fn commit(&mut self) -> io::Result<()>;
 }
 
+/// Prepare the destination for raw filesystem writes performed by customization.
+///
+/// Most platforms need no extra work. Windows implements this as a post-partition-table volume
+/// refresh and lock, because writing the deferred first block can make the new filesystem mount
+/// while read-back verification is running.
+pub(crate) trait PrepareCustomization {
+    fn prepare_customization(&mut self, _cancel: Option<&CancellationToken>) -> crate::Result<()> {
+        Ok(())
+    }
+}
+
 impl Commit for std::fs::File {
     fn commit(&mut self) -> io::Result<()> {
         self.flush()?;
@@ -50,9 +61,17 @@ impl Commit for std::fs::File {
     }
 }
 
+impl PrepareCustomization for std::fs::File {}
+
 impl<T: Commit + ?Sized> Commit for &mut T {
     fn commit(&mut self) -> io::Result<()> {
         (**self).commit()
+    }
+}
+
+impl<T: PrepareCustomization + ?Sized> PrepareCustomization for &mut T {
+    fn prepare_customization(&mut self, cancel: Option<&CancellationToken>) -> crate::Result<()> {
+        (**self).prepare_customization(cancel)
     }
 }
 
@@ -186,6 +205,15 @@ where
     }
 }
 
+impl<F> PrepareCustomization for DeviceWrapper<F>
+where
+    F: PrepareCustomization,
+{
+    fn prepare_customization(&mut self, cancel: Option<&CancellationToken>) -> crate::Result<()> {
+        self.f.prepare_customization(cancel)
+    }
+}
+
 #[repr(align(4096))]
 #[derive(Debug)]
 pub(crate) struct DirectIoBuffer<const N: usize>([u8; N]);
@@ -263,6 +291,15 @@ where
     fn commit(&mut self) -> io::Result<()> {
         self.finish()?;
         self.inner.commit()
+    }
+}
+
+impl<W> PrepareCustomization for SdCardWrapper<W>
+where
+    W: PrepareCustomization,
+{
+    fn prepare_customization(&mut self, cancel: Option<&CancellationToken>) -> crate::Result<()> {
+        self.inner.prepare_customization(cancel)
     }
 }
 

@@ -349,6 +349,7 @@ mod mock_card {
     #[test]
     fn a_full_flash_writes_verifies_and_customizes() {
         let card = MockSd::new();
+        let prepare_count = card.prepare_count();
         let image: Box<[u8]> = std::fs::read(card.path()).unwrap().into_boxed_slice();
         let img_size = image.len() as u64;
 
@@ -361,6 +362,12 @@ mod mock_card {
             None,
         )
         .expect("a healthy card must flash, verify and customize");
+
+        assert_eq!(
+            prepare_count.load(std::sync::atomic::Ordering::SeqCst),
+            1,
+            "a customized flash must prepare the destination exactly once"
+        );
     }
 
     /// A device that accepts every write and then fails to sync must fail the flash. Reporting
@@ -431,6 +438,7 @@ mod mock_card {
     #[test]
     fn an_image_that_exactly_fills_the_card_is_accepted() {
         let card = MockSd::new();
+        let prepare_count = card.prepare_count();
         let image: Box<[u8]> = std::fs::read(card.path()).unwrap().into_boxed_slice();
         let img_size = image.len() as u64;
 
@@ -443,6 +451,12 @@ mod mock_card {
             None,
         )
         .expect("an image that exactly fits must be accepted");
+
+        assert_eq!(
+            prepare_count.load(std::sync::atomic::Ordering::SeqCst),
+            0,
+            "a flash without customization must not enter the platform preparation lifecycle"
+        );
     }
 }
 

@@ -141,6 +141,8 @@ impl crate::helpers::Commit for LinuxDrive {
     }
 }
 
+impl crate::helpers::PrepareCustomization for LinuxDrive {}
+
 #[cfg(feature = "udev")]
 impl Eject for LinuxDrive {
     fn eject(self) -> io::Result<()> {

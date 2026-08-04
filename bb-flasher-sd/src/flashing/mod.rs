@@ -8,7 +8,9 @@ use sha2::{Digest as _, Sha256};
 use crate::Result;
 use crate::customization::Customization;
 // `Commit` is reachable through the `Eject: Commit` supertrait bound, so it needs no import here.
-use crate::helpers::{DirectIoBuffer, Eject, chan_send, check_cancel, progress, read_at_least};
+use crate::helpers::{
+    DirectIoBuffer, Eject, PrepareCustomization, chan_send, check_cancel, progress, read_at_least,
+};
 
 #[cfg(test)]
 mod tests;
@@ -325,9 +327,12 @@ fn flash_internal<'a, R, Sd, C>(
 ) -> Result<()>
 where
     R: Read + Send,
-    Sd: Read + Write + Seek + Eject + std::fmt::Debug,
+    Sd: Read + Write + Seek + Eject + PrepareCustomization + std::fmt::Debug,
     C: Iterator<Item = (Box<str>, crate::ContentType<'a>)> + Send,
 {
+    let mut customizations = customizations.peekable();
+    let has_customizations = customizations.peek().is_some();
+
     tracing::info!("Resolving Image");
     let (img, img_size) = img()?;
 
@@ -352,6 +357,12 @@ where
     tracing::info!("Syncing {} bytes to the device", outcome.written);
     sd.commit()
         .map_err(|source| crate::Error::SyncFailed { source })?;
+
+    if has_customizations {
+        check_cancel(cancel.as_ref())?;
+        tracing::info!("Preparing destination for customization");
+        sd.prepare_customization(cancel.as_ref())?;
+    }
 
     tracing::info!("Verifying written data");
     verify_written(&mut sd, outcome, chan, cancel.as_ref())?;

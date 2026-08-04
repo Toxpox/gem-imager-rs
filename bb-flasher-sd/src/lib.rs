@@ -118,6 +118,39 @@ pub enum Error {
     #[cfg(windows)]
     #[error("Failed to clear SD Card.")]
     WindowsCleanError(std::process::Output),
+
+    #[cfg(windows)]
+    #[error("Failed to refresh the partition layout for physical disk {disk_number}.")]
+    WindowsVolumeRefresh {
+        #[source]
+        source: io::Error,
+        disk_number: u32,
+    },
+
+    #[cfg(windows)]
+    #[error("Failed to enumerate Windows volumes.")]
+    WindowsVolumeEnumeration {
+        #[source]
+        source: io::Error,
+    },
+
+    #[cfg(windows)]
+    #[error("Failed to lock Windows volume {volume} for raw customization writes.")]
+    WindowsVolumeLock {
+        #[source]
+        source: io::Error,
+        volume: Box<str>,
+    },
+
+    #[cfg(windows)]
+    #[error("No mountable volume appeared on physical disk {disk_number} for customization.")]
+    WindowsVolumeNotFound { disk_number: u32 },
+
+    #[cfg(windows)]
+    #[error(
+        "Volume {volume} spans physical disk {disk_number} and another disk; refusing to lock it."
+    )]
+    WindowsSpannedVolume { volume: Box<str>, disk_number: u32 },
 }
 
 /// Enumerate all SD Cards in system
