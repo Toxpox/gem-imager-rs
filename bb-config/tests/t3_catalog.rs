@@ -411,10 +411,9 @@ fn the_live_catalog_reaches_the_front_end_model_with_both_product_boards() {
         .iter()
         .flat_map(|d| d.tags.iter().map(String::as_str))
         .collect();
-    for item in &config.os_list {
-        let bb_config::config::OsListItem::Image(img) = item else {
-            panic!("the bridge only emits plain images");
-        };
+    // The bridge rebuilds the catalog's distribution/release wrappers, so the images sit at the
+    // leaves of a tree rather than in one flat list.
+    for img in leaf_images(&config.os_list) {
         assert!(
             img.devices.iter().any(|d| board_tags.contains(d.as_str())),
             "image \"{}\" targets no board in the product surface",
@@ -430,21 +429,28 @@ fn the_live_catalog_reaches_the_front_end_model_with_both_product_boards() {
     }
 }
 
+/// Every image in the tree, at whatever depth the bridge placed it.
+fn leaf_images(items: &[bb_config::config::OsListItem]) -> Vec<&bb_config::config::OsImage> {
+    items
+        .iter()
+        .flat_map(|item| match item {
+            bb_config::config::OsListItem::Image(img) => vec![img],
+            bb_config::config::OsListItem::SubList(list) => leaf_images(&list.subitems),
+            bb_config::config::OsListItem::RemoteSubList(_) => Vec::new(),
+        })
+        .collect()
+}
+
 /// The T3 board must carry at least one image of its own, otherwise selecting it is a dead end.
 #[test]
 fn the_t3_board_has_images_in_the_front_end_model() {
     let parsed = parse(LIVE_CATALOG, ProductScope::T3AndBeagleY);
     let config = bb_config::t3::catalog_to_config(&parsed.catalog);
 
-    let t3_images: Vec<&str> = config
-        .os_list
-        .iter()
-        .filter_map(|item| match item {
-            bb_config::config::OsListItem::Image(img) if img.devices.contains(T3_BOARD_TAG) => {
-                Some(img.name.as_str())
-            }
-            _ => None,
-        })
+    let t3_images: Vec<&str> = leaf_images(&config.os_list)
+        .into_iter()
+        .filter(|img| img.devices.contains(T3_BOARD_TAG))
+        .map(|img| img.name.as_str())
         .collect();
 
     assert!(

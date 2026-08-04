@@ -32,6 +32,13 @@ pub(crate) const APP_RELEASE: &str = if cfg!(feature = "pre-release") {
     env!("CARGO_PKG_VERSION")
 };
 pub(crate) const APP_DESC: &str = env!("CARGO_PKG_DESCRIPTION");
+/// Shown above the license on the info screen.
+///
+/// Upstream's notice stays. MIT requires the original copyright to travel with every copy, and a
+/// fork is a copy — dropping the line to make the About box look tidier would breach the licence
+/// this application ships under.
+pub(crate) const APP_COPYRIGHT: &str =
+    "\u{a9} 2026 T3 Gemstone Devteam \u{b7} \u{a9} 2024 Ayush Singh (BeagleBoard.org)";
 pub(crate) const APP_LINCESE: &str = include_str!("../../LICENSE");
 
 // Icons

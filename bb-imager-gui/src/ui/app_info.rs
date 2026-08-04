@@ -26,6 +26,9 @@ fn review_view<'a>(state: &'a OverlayState) -> Element<'a, BBImagerMessage> {
         crate::constants::APP_NAME,
         crate::constants::APP_RELEASE,
         crate::constants::APP_DESC,
+        // The full notice is in the license block below; this line is the one a user actually
+        // reads, so it names both holders rather than only the fork.
+        crate::constants::APP_COPYRIGHT,
         widget::rule::horizontal(2),
         element_with_label(
             lang.text(Msg::Language),

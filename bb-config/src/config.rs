@@ -19,6 +19,30 @@ pub struct Config {
     pub os_list: Vec<OsListItem>,
 }
 
+impl Config {
+    /// Number of images in [`Self::os_list`], counting through sub-lists.
+    ///
+    /// `os_list.len()` counts *entries*, which stopped meaning "images" once a list could nest.
+    /// Reporting the entry count as an image count is how a shrinking catalog starts looking like a
+    /// normal, smaller list.
+    ///
+    /// [`OsListItem::RemoteSubList`] contributes nothing: its images have not been fetched yet.
+    pub fn image_count(&self) -> usize {
+        fn count(items: &[OsListItem]) -> usize {
+            items
+                .iter()
+                .map(|item| match item {
+                    OsListItem::Image(_) => 1,
+                    OsListItem::SubList(list) => count(&list.subitems),
+                    OsListItem::RemoteSubList(_) => 0,
+                })
+                .sum()
+        }
+
+        count(&self.os_list)
+    }
+}
+
 /// Contains information regarding BeagleBoard Images version and a list of [BeagleBoard.org]
 /// boards along with information regarding each board.
 ///

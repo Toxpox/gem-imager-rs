@@ -1201,9 +1201,11 @@ pub(crate) async fn fetch_remote_config(
 
     let config = bb_config::t3::catalog_to_config(&parsed.catalog);
     tracing::info!(
+        // Not `os_list.len()`: the bridge nests images under distribution/release sub-lists, so the
+        // entry count is no longer the image count.
         "T3 catalog: {} board(s) and {} image(s) in scope",
         config.imager.devices.len(),
-        config.os_list.len()
+        config.image_count()
     );
 
     Ok(config)

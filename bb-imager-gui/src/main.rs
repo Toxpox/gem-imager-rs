@@ -79,6 +79,7 @@ fn main() -> iced::Result {
     let _ = notify_rust::set_application(constants::APP_ID);
 
     let settings = iced::window::Settings {
+        icon,
         min_size: Some(constants::WINDOW_SIZE),
         size: constants::WINDOW_SIZE,
         ..Default::default()

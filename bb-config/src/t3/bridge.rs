@@ -25,11 +25,33 @@
 //! the board/image pair, not of the image (`instruction.md` §6.3). The full [`DfuProfile`] stays in
 //! the canonical model — the front-end only needs to know that the destination may be offered.
 //!
+//! # How the list regains its shape
+//!
+//! The catalog publishes its images inside `subitems` wrappers — "Debian Images", "Ubuntu Images",
+//! "Pardus Images". [`crate::t3::validate`] flattens those on purpose: an image is validated the
+//! same way wherever it sits, and the wrapper survives only as [`Image::group`]. Rebuilding the
+//! tree is therefore this module's job, and it happens here rather than in the GUI because the
+//! front-end already renders arbitrarily deep [`OsListItem::SubList`] trees — it just never
+//! received one.
+//!
+//! Two levels are rebuilt:
+//!
+//! 1. **Distribution** — straight from [`Image::group`].
+//! 2. **Release** — derived from the URL path, because the catalog publishes no release field.
+//!    Every T3 image name is one of three strings (`(Minimal)`, `(Kiosk)`, `(Desktop)`), so
+//!    without this level the same name appears six times with no way to tell Jammy from Noble.
+//!
+//! Derivation is confined to [`release_key`] and never drops an image: one whose URL yields no
+//! release sits directly under its distribution instead of vanishing. A vanishing image is the
+//! exact failure this adapter exists to stop.
+//!
 //! [`DfuProfile`]: crate::t3::canonical::DfuProfile
 
 use std::collections::HashSet;
 
-use crate::config::{Config, Device, Flasher, Imager, InitFormat, OsImage, OsListItem};
+use url::Url;
+
+use crate::config::{Config, Device, Flasher, Imager, InitFormat, OsImage, OsListItem, OsSubList};
 use crate::t3::canonical::{Board, Image};
 use crate::t3::validate::ValidatedT3Catalog;
 
@@ -43,12 +65,13 @@ pub fn catalog_to_config(catalog: &ValidatedT3Catalog) -> Config {
 
     let devices = boards.iter().map(|board| board_to_device(board)).collect();
 
-    let os_list = catalog
+    let in_scope: Vec<&Image> = catalog
         .images
         .iter()
         .filter(|image| boards.iter().any(|board| board.accepts(image)))
-        .filter_map(|image| image_to_item(image, &boards))
         .collect();
+
+    let os_list = group_os_list(&in_scope, &boards);
 
     Config {
         imager: Imager {
@@ -105,14 +128,7 @@ fn init_format(image: &Image) -> InitFormat {
 /// icon anywhere is skipped — but loudly, never silently, because a vanishing image is the exact
 /// failure this module exists to stop.
 fn image_to_item(image: &Image, boards: &[&Board]) -> Option<OsListItem> {
-    let icon = image.icon.clone().or_else(|| {
-        boards
-            .iter()
-            .find(|board| board.accepts(image))
-            .and_then(|board| board.icon.clone())
-    });
-
-    let Some(icon) = icon else {
+    let Some(icon) = resolve_icon(image, boards) else {
         tracing::warn!(
             "Skipping T3 image \"{}\": neither the image nor any board that accepts it publishes \
              an icon, and the front-end model requires one",
@@ -137,6 +153,251 @@ fn image_to_item(image: &Image, boards: &[&Board]) -> Option<OsListItem> {
         info_text: None,
         support: None,
     }))
+}
+
+/// The icon the front-end model requires, falling back to a board that accepts the image.
+///
+/// Rather than invent a URL, the icon falls back to that of a board which accepts the image.
+fn resolve_icon(image: &Image, boards: &[&Board]) -> Option<Url> {
+    image.icon.clone().or_else(|| {
+        boards
+            .iter()
+            .find(|board| board.accepts(image))
+            .and_then(|board| board.icon.clone())
+    })
+}
+
+/// Rebuild the distribution/release tree the catalog publishes and [`crate::t3::validate`] flattens.
+///
+/// Catalog order is preserved: an ungrouped image keeps its slot, and a distribution occupies the
+/// slot of its first member. That way the list the user sees still tracks the order the catalog
+/// author chose, rather than an alphabetical order this module invented.
+fn group_os_list(images: &[&Image], boards: &[&Board]) -> Vec<OsListItem> {
+    /// A root slot, held in catalog order before the groups are turned into sub-lists.
+    enum Slot<'a> {
+        Loose(&'a Image),
+        Distribution(usize),
+    }
+
+    let mut slots: Vec<Slot<'_>> = Vec::new();
+    let mut distributions: Vec<(&str, Vec<&Image>)> = Vec::new();
+
+    for image in images {
+        let Some(group) = image.group.as_deref() else {
+            slots.push(Slot::Loose(image));
+            continue;
+        };
+
+        match distributions.iter().position(|(name, _)| *name == group) {
+            Some(index) => distributions[index].1.push(image),
+            None => {
+                slots.push(Slot::Distribution(distributions.len()));
+                distributions.push((group, vec![image]));
+            }
+        }
+    }
+
+    slots
+        .into_iter()
+        .filter_map(|slot| match slot {
+            Slot::Loose(image) => image_to_item(image, boards),
+            Slot::Distribution(index) => {
+                let (name, members) = &distributions[index];
+                distribution_sublist(name, members, boards)
+            }
+        })
+        .collect()
+}
+
+/// One distribution level, with a release level inside it when there is more than one release.
+///
+/// A single-release distribution collapses to a flat list of its images. Adding a level that only
+/// ever holds one child costs the user a click and shows them nothing they did not already know.
+fn distribution_sublist(name: &str, members: &[&Image], boards: &[&Board]) -> Option<OsListItem> {
+    let Some(icon) = members.iter().find_map(|image| resolve_icon(image, boards)) else {
+        tracing::warn!(
+            "Skipping T3 distribution \"{name}\": no image under it publishes an icon, and the \
+             front-end model requires one"
+        );
+        return None;
+    };
+
+    // Releases in first-appearance order, plus the images whose URL yielded no release at all.
+    let mut releases: Vec<(String, Vec<&Image>)> = Vec::new();
+    let mut undated: Vec<&Image> = Vec::new();
+
+    for image in members {
+        let Some(key) = release_key(image) else {
+            tracing::warn!(
+                "T3 image \"{}\" ({}) has no release segment in its URL; listing it directly under \
+                 \"{name}\" rather than dropping it",
+                image.name,
+                image.url
+            );
+            undated.push(image);
+            continue;
+        };
+
+        match releases.iter().position(|(existing, _)| *existing == key) {
+            Some(index) => releases[index].1.push(image),
+            None => releases.push((key, vec![image])),
+        }
+    }
+
+    // Newest release first; the user almost always wants the current one.
+    releases.sort_by(|a, b| newest_release_date(&b.1).cmp(&newest_release_date(&a.1)));
+
+    let mut subitems: Vec<OsListItem> = Vec::new();
+
+    if releases.len() > 1 {
+        subitems.extend(
+            releases
+                .iter()
+                .filter_map(|(key, images)| release_sublist(key, images, boards)),
+        );
+    } else if let Some((_, images)) = releases.first() {
+        subitems.extend(sorted_images(images, boards));
+    }
+
+    // Never nested behind a release they have no key for.
+    subitems.extend(sorted_images(&undated, boards));
+
+    if subitems.is_empty() {
+        tracing::warn!("Skipping T3 distribution \"{name}\": every image under it was dropped");
+        return None;
+    }
+
+    Some(OsListItem::SubList(OsSubList {
+        name: name.to_owned(),
+        // `OsSubList::description` is metadata: the front-end list pane renders only name and icon.
+        // Listing the releases keeps it honest and derived rather than invented.
+        description: releases
+            .iter()
+            .map(|(key, images)| release_label(key, images))
+            .collect::<Vec<_>>()
+            .join(", "),
+        icon,
+        flasher: Flasher::SdCard,
+        subitems,
+    }))
+}
+
+/// One release level, holding the variants (Desktop/Kiosk/Minimal) published for it.
+fn release_sublist(key: &str, images: &[&Image], boards: &[&Board]) -> Option<OsListItem> {
+    let icon = images.iter().find_map(|image| resolve_icon(image, boards))?;
+    let subitems = sorted_images(images, boards);
+
+    if subitems.is_empty() {
+        return None;
+    }
+
+    let label = release_label(key, images);
+
+    Some(OsListItem::SubList(OsSubList {
+        name: label.clone(),
+        description: label,
+        icon,
+        flasher: Flasher::SdCard,
+        subitems,
+    }))
+}
+
+/// Images in the order a user reads them: richest variant first, then by name for anything else.
+fn sorted_images(images: &[&Image], boards: &[&Board]) -> Vec<OsListItem> {
+    let mut ordered: Vec<&Image> = images.to_vec();
+    ordered.sort_by(|a, b| {
+        variant_rank(&a.name)
+            .cmp(&variant_rank(&b.name))
+            .then_with(|| a.name.cmp(&b.name))
+    });
+
+    ordered
+        .into_iter()
+        .filter_map(|image| image_to_item(image, boards))
+        .collect()
+}
+
+/// Which release an image belongs to, derived from its URL.
+///
+/// The catalog publishes no release field, so the URL is the only stable carrier:
+/// `.../images/{distro}/{release}/{board-tag}/{file}`. The board tag is located by matching against
+/// the image's own `devices`, so the segment *before* it is the release — no absolute position is
+/// assumed, and a URL that gains or loses a leading segment still resolves.
+///
+/// Returns `None` when the shape does not hold. Callers must list the image anyway.
+fn release_key(image: &Image) -> Option<String> {
+    let segments: Vec<&str> = image
+        .url
+        .path_segments()?
+        .filter(|segment| !segment.is_empty())
+        .collect();
+
+    let board_position = segments
+        .iter()
+        .position(|segment| image.devices.contains(*segment))?;
+
+    // A board tag in the first segment leaves no room for a release before it.
+    let release = segments.get(board_position.checked_sub(1)?)?;
+
+    (!release.is_empty()).then(|| release.to_lowercase())
+}
+
+/// The human-facing name of a release.
+///
+/// The catalog descriptions read `"A port of Ubuntu 22.04 (Jammy) with minimal packages"`, so the
+/// text between the two markers is the release as its publisher names it. That is preferred over
+/// anything derived from the URL slug, which is an implementation detail of the file layout.
+fn release_label(key: &str, images: &[&Image]) -> String {
+    images
+        .iter()
+        .find_map(|image| port_target(&image.description))
+        .unwrap_or_else(|| title_case(key))
+}
+
+/// Extract `X` from `"A port of X with ..."`, or `None` when the description is shaped differently.
+fn port_target(description: &str) -> Option<String> {
+    const PREFIX: &str = "A port of ";
+    const SUFFIX: &str = " with ";
+
+    let rest = description.strip_prefix(PREFIX)?;
+    let end = rest.find(SUFFIX)?;
+    let target = rest[..end].trim();
+
+    (!target.is_empty()).then(|| target.to_owned())
+}
+
+/// Fallback display name for a release slug: `jammy-deb` becomes `Jammy Deb`.
+fn title_case(key: &str) -> String {
+    key.split(['-', '_'])
+        .filter(|word| !word.is_empty())
+        .map(|word| {
+            let mut chars = word.chars();
+            match chars.next() {
+                Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+                None => String::new(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn newest_release_date(images: &[&Image]) -> Option<chrono::NaiveDate> {
+    images.iter().map(|image| image.release_date).max()
+}
+
+/// Variant ordering. Unrecognised names sort last rather than being reordered arbitrarily.
+fn variant_rank(name: &str) -> u8 {
+    let name = name.to_lowercase();
+
+    if name.contains("desktop") {
+        0
+    } else if name.contains("kiosk") {
+        1
+    } else if name.contains("minimal") {
+        2
+    } else {
+        3
+    }
 }
 
 #[cfg(test)]
@@ -372,5 +633,299 @@ mod tests {
                 .remote_configs
                 .is_empty()
         );
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Distribution / release grouping
+    // ---------------------------------------------------------------------------------------
+
+    const HASH_ARCHIVE: &str =
+        "668a83c94264c17e9e549284b50ec1f9ec1c0a1d171ede3a92797a458eabc198";
+    const HASH_EXTRACTED: &str =
+        "33afbc809f8c39c4a7472c49e26f7c5ac507c5b1d97df05c42ec83e97e1f6e51";
+
+    fn image_entry(name: &str, description: &str, url: &str, release_date: &str) -> String {
+        format!(
+            r#"{{
+              "name": "{name}",
+              "description": "{description}",
+              "icon": "https://packages.t3gemstone.org/images/icons/os.svg",
+              "url": "{url}",
+              "image_download_size": 807607316,
+              "image_download_sha256": "{HASH_ARCHIVE}",
+              "extract_size": 4096000000,
+              "extract_sha256": "{HASH_EXTRACTED}",
+              "release_date": "{release_date}",
+              "devices": ["t3-gem-o1"],
+              "init_format": "systemd"
+            }}"#
+        )
+    }
+
+    fn sublist_entry(name: &str, subitems: &[String]) -> String {
+        format!(
+            r#"{{
+              "name": "{name}",
+              "description": "{name} For T3 Gemstone",
+              "icon": "https://packages.t3gemstone.org/images/icons/distro.svg",
+              "subitems": [{}]
+            }}"#,
+            subitems.join(",")
+        )
+    }
+
+    /// A catalog in the live document's *grouped* shape: `subitems` wrappers per distribution, with
+    /// the release carried only by the URL path and the release name only by the description.
+    fn grouped_catalog() -> String {
+        let ubuntu = sublist_entry(
+            "Ubuntu Images",
+            &[
+                image_entry(
+                    "T3 Gemstone OS (Minimal)",
+                    "A port of Ubuntu 22.04 (Jammy) with minimal packages",
+                    "https://packages.t3gemstone.org/images/ubuntu/jammy/t3-gem-o1/minimal.img.xz",
+                    "2026-03-26",
+                ),
+                image_entry(
+                    "T3 Gemstone OS (Desktop)",
+                    "A port of Ubuntu 22.04 (Jammy) with a desktop environment",
+                    "https://packages.t3gemstone.org/images/ubuntu/jammy/t3-gem-o1/desktop.img.xz",
+                    "2026-03-26",
+                ),
+                image_entry(
+                    "T3 Gemstone OS (Minimal)",
+                    "A port of Ubuntu 24.04 (Noble) with minimal packages",
+                    "https://packages.t3gemstone.org/images/ubuntu/noble/t3-gem-o1/minimal.img.xz",
+                    "2026-06-08",
+                ),
+                image_entry(
+                    "T3 Gemstone OS (Kiosk)",
+                    "A port of Ubuntu 24.04 (Noble) with a kiosk shell",
+                    "https://packages.t3gemstone.org/images/ubuntu/noble/t3-gem-o1/kiosk.img.xz",
+                    "2026-06-08",
+                ),
+                image_entry(
+                    "T3 Gemstone OS (Desktop)",
+                    "A port of Ubuntu 24.04 (Noble) with a desktop environment",
+                    "https://packages.t3gemstone.org/images/ubuntu/noble/t3-gem-o1/desktop.img.xz",
+                    "2026-06-08",
+                ),
+            ],
+        );
+
+        let debian = sublist_entry(
+            "Debian Images",
+            &[
+                image_entry(
+                    "T3 Gemstone OS (Minimal)",
+                    "A port of Debian Bookworm with minimal packages",
+                    "https://packages.t3gemstone.org/images/debian/bookworm/t3-gem-o1/min.img.xz",
+                    "2026-03-26",
+                ),
+                image_entry(
+                    "T3 Gemstone OS (Desktop)",
+                    "A port of Debian Bookworm with a desktop environment",
+                    "https://packages.t3gemstone.org/images/debian/bookworm/t3-gem-o1/dsk.img.xz",
+                    "2026-03-26",
+                ),
+            ],
+        );
+
+        // Deliberately not in the `{distro}/{release}/{board}/` shape: the release cannot be
+        // derived, and the image must still be listed.
+        let pardus = sublist_entry(
+            "Pardus Images",
+            &[image_entry(
+                "T3 Gemstone OS (Minimal)",
+                "A port of Pardus Yirmiuc with minimal packages",
+                "https://packages.t3gemstone.org/images/pardus-legacy.img.xz",
+                "2026-03-26",
+            )],
+        );
+
+        let ungrouped = image_entry(
+            "T3 Gemstone OS (Legacy)",
+            "The pre-grouping top-level image",
+            "https://packages.t3gemstone.org/images/t3.img.xz",
+            "2026-01-01",
+        );
+
+        format!(
+            r#"{{
+              "imager": {{
+                "latest_version": "1.0.0",
+                "devices": [
+                  {{
+                    "name": "T3-GEM-O1",
+                    "description": "T3 Gemstone board",
+                    "tags": ["t3-gem-o1"],
+                    "matching_type": "exclusive",
+                    "emmc": true,
+                    "icon": "https://packages.t3gemstone.org/images/icons/t3.svg"
+                  }}
+                ]
+              }},
+              "os_list": [{ungrouped}, {ubuntu}, {debian}, {pardus}]
+            }}"#
+        )
+    }
+
+    fn grouped() -> Config {
+        let catalog = grouped_catalog();
+        let parsed = parse_catalog(catalog.as_bytes(), ProductScope::T3Only, SOURCE)
+            .expect("the grouped catalog shape must parse");
+        catalog_to_config(&parsed.catalog)
+    }
+
+    fn sublist<'a>(items: &'a [OsListItem], name: &str) -> &'a OsSubList {
+        items
+            .iter()
+            .find_map(|item| match item {
+                OsListItem::SubList(list) if list.name == name => Some(list),
+                _ => None,
+            })
+            .unwrap_or_else(|| panic!("expected a sub-list named {name}"))
+    }
+
+    /// Count the images at the leaves, however deep the tree goes.
+    fn leaf_names(items: &[OsListItem]) -> Vec<String> {
+        items
+            .iter()
+            .flat_map(|item| match item {
+                OsListItem::Image(img) => vec![img.name.clone()],
+                OsListItem::SubList(list) => leaf_names(&list.subitems),
+                OsListItem::RemoteSubList(_) => Vec::new(),
+            })
+            .collect()
+    }
+
+    /// The headline behaviour: the wrappers the catalog publishes come back as a browsable level
+    /// instead of being flattened into one long list.
+    #[test]
+    fn the_distribution_wrappers_come_back_as_sub_lists() {
+        let config = grouped();
+
+        let roots: Vec<&str> = config
+            .os_list
+            .iter()
+            .map(|item| match item {
+                OsListItem::Image(img) => img.name.as_str(),
+                OsListItem::SubList(list) => list.name.as_str(),
+                OsListItem::RemoteSubList(list) => list.name.as_str(),
+            })
+            .collect();
+
+        // Catalog order is preserved, and the ungrouped image keeps its own slot.
+        assert_eq!(
+            roots,
+            [
+                "T3 Gemstone OS (Legacy)",
+                "Ubuntu Images",
+                "Debian Images",
+                "Pardus Images"
+            ]
+        );
+    }
+
+    /// Without this level the user sees "T3 Gemstone OS (Desktop)" twice under Ubuntu with no way
+    /// to tell Jammy from Noble — the names are identical and only the URL differs.
+    #[test]
+    fn a_distribution_with_several_releases_gains_a_release_level() {
+        let config = grouped();
+        let ubuntu = sublist(&config.os_list, "Ubuntu Images");
+
+        let releases: Vec<&str> = ubuntu
+            .subitems
+            .iter()
+            .map(|item| match item {
+                OsListItem::SubList(list) => list.name.as_str(),
+                other => panic!("expected only release sub-lists, got {other:?}"),
+            })
+            .collect();
+
+        // Named as the publisher names them, newest first.
+        assert_eq!(releases, ["Ubuntu 24.04 (Noble)", "Ubuntu 22.04 (Jammy)"]);
+    }
+
+    /// A level that can only ever hold one child costs a click and teaches the user nothing.
+    #[test]
+    fn a_single_release_distribution_stays_flat() {
+        let config = grouped();
+        let debian = sublist(&config.os_list, "Debian Images");
+
+        assert!(
+            debian
+                .subitems
+                .iter()
+                .all(|item| matches!(item, OsListItem::Image(_))),
+            "a single-release distribution must not gain a release level"
+        );
+        assert_eq!(debian.subitems.len(), 2);
+    }
+
+    /// The silent-drop guard. Rebuilding the tree must move images, never lose them.
+    #[test]
+    fn no_image_is_lost_when_the_tree_is_rebuilt() {
+        let config = grouped();
+
+        assert_eq!(
+            leaf_names(&config.os_list).len(),
+            9,
+            "every in-scope image must survive somewhere in the tree"
+        );
+    }
+
+    /// Derivation is best-effort by design: an unparseable URL demotes the image one level, it does
+    /// not remove it.
+    #[test]
+    fn an_image_whose_url_has_no_release_segment_is_still_listed() {
+        let config = grouped();
+        let pardus = sublist(&config.os_list, "Pardus Images");
+
+        assert!(
+            matches!(pardus.subitems.as_slice(), [OsListItem::Image(_)]),
+            "the image must sit directly under its distribution, not disappear"
+        );
+    }
+
+    #[test]
+    fn variants_are_ordered_with_the_richest_first() {
+        let config = grouped();
+        let ubuntu = sublist(&config.os_list, "Ubuntu Images");
+        let OsListItem::SubList(noble) = &ubuntu.subitems[0] else {
+            panic!("expected the newest release to be a sub-list");
+        };
+
+        assert_eq!(
+            leaf_names(&noble.subitems),
+            [
+                "T3 Gemstone OS (Desktop)",
+                "T3 Gemstone OS (Kiosk)",
+                "T3 Gemstone OS (Minimal)"
+            ]
+        );
+    }
+
+    #[test]
+    fn the_release_key_comes_from_the_segment_before_the_board_tag() {
+        let catalog = grouped_catalog();
+        let parsed = parse_catalog(catalog.as_bytes(), ProductScope::T3Only, SOURCE)
+            .expect("the grouped catalog shape must parse");
+
+        let noble = parsed
+            .catalog
+            .images
+            .iter()
+            .find(|image| image.url.as_str().contains("/noble/"))
+            .expect("the fixture publishes a noble image");
+
+        assert_eq!(release_key(noble).as_deref(), Some("noble"));
+    }
+
+    #[test]
+    fn the_release_label_falls_back_to_the_slug_when_the_description_is_shaped_differently() {
+        assert_eq!(port_target("A port of Debian Bookworm with extras").as_deref(), Some("Debian Bookworm"));
+        assert_eq!(port_target("Some other description"), None);
+        assert_eq!(title_case("yirmiuc-deb"), "Yirmiuc Deb");
     }
 }
