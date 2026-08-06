@@ -1,5 +1,6 @@
 use std::fs::File;
 use std::io::{self, Read, Seek, Write};
+use std::os::fd::AsRawFd;
 use std::path::{Path, PathBuf};
 
 use crate::{Error, Result};
@@ -67,10 +68,23 @@ fn unmount_disk(path: &str) -> std::io::Result<()> {
     run_diskutil("unmountDisk", path)
 }
 
+// Darwin <sys/disk.h>: DKIOCSYNCHRONIZECACHE = _IO('d', 22).
+const DKIOCSYNCHRONIZECACHE: libc::c_ulong = 0x2000_6416;
+
+fn synchronize_disk_cache(file: &File) -> io::Result<()> {
+    let result = unsafe { libc::ioctl(file.as_raw_fd(), DKIOCSYNCHRONIZECACHE) };
+
+    if result == 0 {
+        Ok(())
+    } else {
+        Err(io::Error::last_os_error())
+    }
+}
+
 impl crate::helpers::Commit for MacOSFile {
     fn commit(&mut self) -> std::io::Result<()> {
         self.inner.flush()?;
-        self.inner.sync_all()
+        synchronize_disk_cache(&self.inner)
     }
 }
 
