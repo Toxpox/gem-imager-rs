@@ -31,6 +31,7 @@ const PREFIX: &str = "t3-staging-";
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum StagingError {
+    #[cfg_attr(test, allow(dead_code))]
     #[error("no application cache directory is available for the DFU staging image")]
     NoCacheDir,
     #[error("failed to prepare the DFU staging directory: {source}")]
@@ -48,9 +49,31 @@ pub(crate) enum StagingError {
 }
 
 /// Directory staging images live in.
+#[cfg(not(test))]
 pub(crate) fn staging_dir() -> Result<PathBuf, StagingError> {
     let dirs = crate::helpers::project_dirs().ok_or(StagingError::NoCacheDir)?;
     Ok(dirs.cache_dir().join("dfu-staging"))
+}
+
+/// Tests must not depend on the ACL or leftovers of the real per-user cache. A prior elevated GUI
+/// run can legitimately leave that directory administrator-owned; using it made ordinary
+/// asInvoker test binaries fail with `Access denied`. Each test thread gets an isolated path under
+/// the workspace target directory instead.
+#[cfg(test)]
+pub(crate) fn staging_dir() -> Result<PathBuf, StagingError> {
+    use std::hash::{Hash, Hasher};
+
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    std::thread::current().id().hash(&mut hasher);
+    Ok(std::env::current_dir()
+        .map_err(|source| StagingError::Io { source })?
+        .join("target")
+        .join("test-cache")
+        .join(format!(
+            "dfu-staging-{}-{}",
+            std::process::id(),
+            hasher.finish()
+        )))
 }
 
 /// A staging image that deletes itself.

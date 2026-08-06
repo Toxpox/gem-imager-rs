@@ -644,6 +644,7 @@ dependencies = [
  "bb-helper",
  "bb-i18n",
  "bb-iced-widgets",
+ "bb-winusb",
  "chrono",
  "chrono-tz",
  "const-hex",
@@ -660,6 +661,7 @@ dependencies = [
  "semver",
  "serde",
  "serde_json",
+ "sha2",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
@@ -670,6 +672,23 @@ dependencies = [
  "webbrowser",
  "whoami",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "bb-winusb"
+version = "1.0.13"
+dependencies = [
+ "rusb",
+ "sha2",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "bb-winusb-helper"
+version = "1.0.13"
+dependencies = [
+ "bb-winusb",
+ "embed-resource",
 ]
 
 [[package]]

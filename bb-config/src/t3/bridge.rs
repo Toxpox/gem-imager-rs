@@ -284,7 +284,9 @@ fn distribution_sublist(name: &str, members: &[&Image], boards: &[&Board]) -> Op
 
 /// One release level, holding the variants (Desktop/Kiosk/Minimal) published for it.
 fn release_sublist(key: &str, images: &[&Image], boards: &[&Board]) -> Option<OsListItem> {
-    let icon = images.iter().find_map(|image| resolve_icon(image, boards))?;
+    let icon = images
+        .iter()
+        .find_map(|image| resolve_icon(image, boards))?;
     let subitems = sorted_images(images, boards);
 
     if subitems.is_empty() {
@@ -639,10 +641,8 @@ mod tests {
     // Distribution / release grouping
     // ---------------------------------------------------------------------------------------
 
-    const HASH_ARCHIVE: &str =
-        "668a83c94264c17e9e549284b50ec1f9ec1c0a1d171ede3a92797a458eabc198";
-    const HASH_EXTRACTED: &str =
-        "33afbc809f8c39c4a7472c49e26f7c5ac507c5b1d97df05c42ec83e97e1f6e51";
+    const HASH_ARCHIVE: &str = "668a83c94264c17e9e549284b50ec1f9ec1c0a1d171ede3a92797a458eabc198";
+    const HASH_EXTRACTED: &str = "33afbc809f8c39c4a7472c49e26f7c5ac507c5b1d97df05c42ec83e97e1f6e51";
 
     fn image_entry(name: &str, description: &str, url: &str, release_date: &str) -> String {
         format!(
@@ -924,7 +924,10 @@ mod tests {
 
     #[test]
     fn the_release_label_falls_back_to_the_slug_when_the_description_is_shaped_differently() {
-        assert_eq!(port_target("A port of Debian Bookworm with extras").as_deref(), Some("Debian Bookworm"));
+        assert_eq!(
+            port_target("A port of Debian Bookworm with extras").as_deref(),
+            Some("Debian Bookworm")
+        );
         assert_eq!(port_target("Some other description"), None);
         assert_eq!(title_case("yirmiuc-deb"), "Yirmiuc Deb");
     }

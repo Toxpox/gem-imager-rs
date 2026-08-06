@@ -80,6 +80,20 @@ pub(crate) enum BBImagerMessage {
     /// Update destinations
     Destinations(Vec<helpers::Destination>),
 
+    /// Read-only Windows PnP state and the one-click WinUSB helper flow.
+    #[cfg(feature = "dfu-driver-mvp")]
+    DfuDriverProbe(bb_winusb::DriverState),
+    #[cfg(feature = "dfu-driver-mvp")]
+    DfuDriverInstall,
+    #[cfg(feature = "dfu-driver-mvp")]
+    DfuDriverInstallFinished(Result<bb_winusb::InstallOutcome, bb_winusb::InstallError>),
+    #[cfg(feature = "dfu-driver-mvp")]
+    DfuDriverDismiss,
+    #[cfg(feature = "dfu-driver-mvp")]
+    DfuDriverShowDetails,
+    #[cfg(feature = "dfu-driver-mvp")]
+    DfuDriverBackToOffer,
+
     /// Read-only editor
     EditorEvent(iced::widget::text_editor::Action),
 
@@ -334,6 +348,32 @@ pub(crate) fn update(state: &mut BBImager, message: BBImagerMessage) -> Task<BBI
                     helpers::keep_selected_destination(inner.selected_dest.take(), &x);
                 inner.destinations = x;
             }
+        }
+        #[cfg(feature = "dfu-driver-mvp")]
+        BBImagerMessage::DfuDriverProbe(driver_state) => {
+            state.common_mut().dfu_driver.on_probe(driver_state);
+        }
+        #[cfg(feature = "dfu-driver-mvp")]
+        BBImagerMessage::DfuDriverInstall => {
+            if state.common_mut().dfu_driver.begin_install() {
+                return crate::driver_ui::install_task();
+            }
+        }
+        #[cfg(feature = "dfu-driver-mvp")]
+        BBImagerMessage::DfuDriverInstallFinished(result) => {
+            state.common_mut().dfu_driver.finish_install(result);
+        }
+        #[cfg(feature = "dfu-driver-mvp")]
+        BBImagerMessage::DfuDriverDismiss => {
+            state.common_mut().dfu_driver.dismiss();
+        }
+        #[cfg(feature = "dfu-driver-mvp")]
+        BBImagerMessage::DfuDriverShowDetails => {
+            state.common_mut().dfu_driver.show_details();
+        }
+        #[cfg(feature = "dfu-driver-mvp")]
+        BBImagerMessage::DfuDriverBackToOffer => {
+            state.common_mut().dfu_driver.back_to_offer();
         }
         BBImagerMessage::SelectDest(x) => match state {
             BBImager::ChooseDest(inner) => {
@@ -795,7 +835,7 @@ mod i18n_tests {
         let finalization =
             localized_flash_error(Lang::En, "timed out while waiting for raw eMMC manifest");
 
-        assert!(driver.contains("Zadig"));
+        assert!(driver.contains("Gem Imager"));
         assert!(permission.contains("udev"));
         assert!(missing.contains("Nothing was written"));
         assert!(wrong_mode.contains("boot switch"));
@@ -839,7 +879,7 @@ mod i18n_tests {
         for (technical, marker) in [
             (
                 "DFU transport error: the WinUSB driver is not bound to this device",
-                "Zadig",
+                "tek tıklamayla",
             ),
             (
                 "2 devices match 0451:6165; choose one physical port",
@@ -875,14 +915,14 @@ mod i18n_tests {
         );
 
         assert!(permission.contains("udev"));
-        assert!(driver.contains("Zadig"));
+        assert!(driver.contains("Gem Imager"));
         assert_ne!(permission, driver);
         assert!(
             localized_flash_error(
                 Lang::Tr,
                 "DFU device driver missing: no WinUSB-compatible driver is bound to the board"
             )
-            .contains("Zadig")
+            .contains("tek tıklamayla")
         );
     }
 

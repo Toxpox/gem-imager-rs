@@ -10,53 +10,36 @@ use std::{
 };
 
 #[cfg(feature = "udev")]
-pub(crate) fn format(dst: &Path) -> Result<()> {
-    async fn format_inner(dst: &Path) -> io::Result<()> {
-        let dbus_client = udisks2::Client::new().await.map_err(io::Error::other)?;
+pub(crate) fn open(dst: &Path) -> Result<LinuxDrive> {
+    async fn unmount_filesystem(object: &udisks2::Object) -> anyhow::Result<()> {
+        let Ok(filesystem) = object.filesystem().await else {
+            return Ok(());
+        };
+        if filesystem.mount_points().await?.is_empty() {
+            return Ok(());
+        }
 
-        let devs = dbus_client
-            .manager()
-            .resolve_device(
-                HashMap::from([("path", dst.to_str().unwrap().into())]),
-                HashMap::new(),
-            )
-            .await
-            .map_err(io::Error::other)?;
-
-        let block = devs
-            .first()
-            .ok_or(io::Error::new(
-                io::ErrorKind::NotFound,
-                "Block device not found",
-            ))?
-            .to_owned();
-
-        let obj = dbus_client
-            .object(block)
-            .expect("Unexpected error")
-            .block()
-            .await
-            .map_err(io::Error::other)?;
-
-        obj.format(
-            "vfat",
-            HashMap::from([("update-partition-type", true.into())]),
-        )
-        .await
-        .map_err(io::Error::other)?;
-
+        tracing::info!("Unmounting Linux filesystem {}", object.object_path());
+        filesystem.unmount(HashMap::new()).await?;
         Ok(())
     }
-    let rt = tokio::runtime::Builder::new_current_thread()
-        .enable_io()
-        .build()
-        .unwrap();
-    rt.block_on(async move { format_inner(dst).await })
-        .map_err(|source| Error::FailedToFormat { source })
-}
 
-#[cfg(feature = "udev")]
-pub(crate) fn open(dst: &Path) -> Result<LinuxDrive> {
+    async fn unmount_existing_layout(
+        client: &udisks2::Client,
+        object: &udisks2::Object,
+    ) -> anyhow::Result<()> {
+        unmount_filesystem(object).await?;
+
+        let Ok(table) = object.partition_table().await else {
+            return Ok(());
+        };
+        for partition in table.partitions().await? {
+            let partition = client.object(partition)?;
+            unmount_filesystem(&partition).await?;
+        }
+        Ok(())
+    }
+
     async fn open_inner(dst: &Path) -> anyhow::Result<LinuxDrive> {
         let dbus_client = udisks2::Client::new().await?;
 
@@ -73,13 +56,12 @@ pub(crate) fn open(dst: &Path) -> Result<LinuxDrive> {
             .ok_or(anyhow::anyhow!("Block device not found",))?
             .to_owned();
 
-        let obj = dbus_client
-            .object(block)
-            .expect("Unexpected error")
-            .block()
-            .await?;
+        let object = dbus_client.object(block).expect("Unexpected error");
+        unmount_existing_layout(&dbus_client, &object).await?;
 
-        let fd = obj
+        let block = object.block().await?;
+
+        let fd = block
             .open_device("rw", HashMap::from([("flags", libc::O_DIRECT.into())]))
             .await?;
         let file =
@@ -103,6 +85,38 @@ pub(crate) fn open(dst: &Path) -> Result<LinuxDrive> {
 pub(crate) fn open(dst: &Path) -> Result<LinuxDrive> {
     use std::os::unix::fs::OpenOptionsExt;
 
+    if let Some(device) = bb_drivelist::drive_list().ok().and_then(|devices| {
+        devices
+            .into_iter()
+            .find(|device| Path::new(&device.raw) == dst)
+    }) {
+        for mount in device
+            .mountpoints
+            .iter()
+            .rev()
+            .filter(|mount| !mount.path.is_empty())
+        {
+            tracing::info!("Unmounting Linux mount point {}", mount.path);
+            let output = std::process::Command::new("umount")
+                .arg(&mount.path)
+                .output()
+                .map_err(|error| Error::FailedToOpenDestination {
+                    source: error.into(),
+                })?;
+            if !output.status.success() {
+                let message = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+                return Err(Error::FailedToOpenDestination {
+                    source: io::Error::other(if message.is_empty() {
+                        format!("umount failed with {}", output.status)
+                    } else {
+                        message
+                    })
+                    .into(),
+                });
+            }
+        }
+    }
+
     let file = std::fs::OpenOptions::new()
         .read(true)
         .write(true)
@@ -116,16 +130,10 @@ pub(crate) fn open(dst: &Path) -> Result<LinuxDrive> {
     })
 }
 
-#[cfg(not(feature = "udev"))]
 pub(crate) fn format(dst: &Path) -> Result<()> {
-    let sd = std::fs::OpenOptions::new()
-        .read(true)
-        .write(true)
-        .create(false)
-        .open(dst)?;
-
-    fatfs::format_volume(sd, fatfs::FormatVolumeOptions::default())
-        .map_err(|source| Error::FailedToFormat { source })
+    let disk_size = crate::helpers::destination_size(dst)?;
+    let drive = open(dst)?;
+    crate::helpers::format_device(drive, disk_size)
 }
 
 #[derive(Debug)]
@@ -140,8 +148,6 @@ impl crate::helpers::Commit for LinuxDrive {
         self.file.sync_all()
     }
 }
-
-impl crate::helpers::PrepareCustomization for LinuxDrive {}
 
 #[cfg(feature = "udev")]
 impl Eject for LinuxDrive {

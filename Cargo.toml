@@ -10,9 +10,11 @@ members = [
 	"bb-config",
 	"bb-helper",
 	"bb-flasher-dfu",
-        "bb-drivelist",
-        "bb-iced-widgets",
-        "bb-i18n"
+	"bb-drivelist",
+	"bb-iced-widgets",
+	"bb-i18n",
+	"bb-winusb",
+	"bb-winusb-helper"
 ]
 
 [profile.release]

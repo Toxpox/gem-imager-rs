@@ -29,6 +29,11 @@ pub(crate) struct BBImagerCommon {
     /// default — and held here rather than looked up per view so a language change is a single
     /// state transition instead of a cache that can go stale mid-flow.
     pub(crate) lang: bb_i18n::Lang,
+
+    /// Per-attachment WinUSB offer state. The probe itself is read-only; mutation is delegated
+    /// to the separately elevated helper.
+    #[cfg(feature = "dfu-driver-mvp")]
+    pub(crate) dfu_driver: crate::driver_ui::DfuDriverUiState,
 }
 
 impl BBImagerCommon {

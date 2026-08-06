@@ -3,8 +3,8 @@ use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::mem::{offset_of, size_of};
 use std::os::windows::fs::OpenOptionsExt;
 use std::os::windows::io::AsRawHandle;
+use std::os::windows::process::CommandExt;
 use std::path::Path;
-use std::process::Stdio;
 use std::time::{Duration, Instant};
 
 use bb_helper::cancel::CancellationToken;
@@ -14,10 +14,13 @@ use windows::Win32::{
         FILE_SHARE_READ, FILE_SHARE_WRITE, FindFirstVolumeW, FindNextVolumeW, FindVolumeClose,
         IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS,
     },
+    System::Diagnostics::Debug::{
+        GetErrorMode, SEM_FAILCRITICALERRORS, SetErrorMode, THREAD_ERROR_MODE,
+    },
     System::IO::DeviceIoControl,
     System::Ioctl::{
-        DISK_EXTENT, FSCTL_ALLOW_EXTENDED_DASD_IO, FSCTL_LOCK_VOLUME, FSCTL_UNLOCK_VOLUME,
-        IOCTL_DISK_UPDATE_PROPERTIES, VOLUME_DISK_EXTENTS,
+        DISK_EXTENT, FSCTL_ALLOW_EXTENDED_DASD_IO, FSCTL_DISMOUNT_VOLUME, FSCTL_LOCK_VOLUME,
+        FSCTL_UNLOCK_VOLUME, IOCTL_STORAGE_EJECT_MEDIA, VOLUME_DISK_EXTENTS,
     },
 };
 
@@ -26,8 +29,6 @@ use crate::{Error, Result};
 #[derive(Debug)]
 pub(crate) struct WinDrive {
     drive: File,
-    disk_number: u32,
-    locked_volumes: Vec<LockedVolume>,
 }
 
 #[derive(Debug)]
@@ -38,15 +39,23 @@ struct LockedVolume {
 
 const FILE_FLAG_WRITE_THROUGH: u32 = 0x80000000;
 const FILE_FLAG_NO_BUFFERING: u32 = 0x20000000;
+const CREATE_NO_WINDOW: u32 = 0x08000000;
 const VOLUME_NAME_BUFFER_LEN: usize = 1024;
 const VOLUME_LOCK_TIMEOUT: Duration = Duration::from_secs(5);
 const VOLUME_LOCK_RETRY_DELAY: Duration = Duration::from_millis(200);
 
 impl WinDrive {
     pub(crate) fn open(path: &Path) -> anyhow::Result<Self> {
+        // Raw removable-media probes must return errors to the application instead of opening a
+        // system modal "format this disk"/"insert a disk" dialog. Preserve every existing mode
+        // bit and add only the Microsoft-recommended critical-error suppression flag.
+        unsafe {
+            SetErrorMode(THREAD_ERROR_MODE(GetErrorMode() | SEM_FAILCRITICALERRORS.0));
+        }
+
         let disk_number = physical_drive_number(path)?;
         tracing::info!("Locking existing volumes on physical disk {disk_number}");
-        let existing_volumes = lock_volumes_with_retry(disk_number, false, None)?;
+        let existing_volumes = lock_volumes_with_retry(disk_number, None)?;
 
         tracing::info!("Trying to clean {:?}", path);
         diskpart_clean(path)?;
@@ -57,16 +66,12 @@ impl WinDrive {
             .write(true)
             .custom_flags(FILE_FLAG_WRITE_THROUGH | FILE_FLAG_NO_BUFFERING)
             .open(path)?;
-        // Keep the pre-clean locks until the physical disk handle is acquired. They refer to the
-        // old layout and cannot protect the image-created volumes, so they are retired here and
-        // replaced by `prepare_customization` after the new partition table becomes visible.
+        // Keep the old-layout locks until the physical disk handle is acquired. The replacement
+        // layout stays hidden in `SdCardWrapper` until all verification and customization work is
+        // complete, so no post-write volume enumeration is needed.
         drop(existing_volumes);
 
-        Ok(Self {
-            drive,
-            disk_number,
-            locked_volumes: Vec::new(),
-        })
+        Ok(Self { drive })
     }
 }
 
@@ -113,6 +118,20 @@ fn open_and_lock_volume(path: &str) -> io::Result<LockedVolume> {
         DeviceIoControl(
             HANDLE(volume.as_raw_handle()),
             FSCTL_LOCK_VOLUME,
+            None,
+            0,
+            None,
+            0,
+            None,
+            None,
+        )
+    };
+    result.map_err(|_| io::Error::last_os_error())?;
+
+    let result = unsafe {
+        DeviceIoControl(
+            HANDLE(volume.as_raw_handle()),
+            FSCTL_DISMOUNT_VOLUME,
             None,
             0,
             None,
@@ -313,7 +332,6 @@ fn lock_volumes_once(disk_number: u32) -> Result<Vec<LockedVolume>> {
 
 fn lock_volumes_with_retry(
     disk_number: u32,
-    require_volume: bool,
     cancel: Option<&CancellationToken>,
 ) -> Result<Vec<LockedVolume>> {
     let deadline = Instant::now() + VOLUME_LOCK_TIMEOUT;
@@ -324,14 +342,13 @@ fn lock_volumes_with_retry(
         attempt += 1;
 
         let error = match lock_volumes_once(disk_number) {
-            Ok(volumes) if !require_volume || !volumes.is_empty() => {
+            Ok(volumes) => {
                 tracing::info!(
                     "Locked {} Windows volume(s) on physical disk {disk_number} after {attempt} attempt(s)",
                     volumes.len()
                 );
                 return Ok(volumes);
             }
-            Ok(_) => Error::WindowsVolumeNotFound { disk_number },
             Err(error) => {
                 tracing::debug!(
                     "Volume lock attempt {attempt} for physical disk {disk_number} failed: {error}"
@@ -357,12 +374,17 @@ fn diskpart_clean(path: &Path) -> Result<()> {
 
     let resp = std::process::Command::new("powershell")
         .args([
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
             "Clear-Disk",
             "-Number",
             disk_num,
             "-RemoveData",
             "-Confirm:$false",
         ])
+        .creation_flags(CREATE_NO_WINDOW)
         .output()?;
     tracing::info!("Disk Clear Response: {:#?}", resp);
 
@@ -370,39 +392,6 @@ fn diskpart_clean(path: &Path) -> Result<()> {
         Ok(())
     } else {
         Err(Error::WindowsCleanError(resp))
-    }
-}
-
-fn diskpart_format(path: &Path) -> io::Result<()> {
-    let disk_num = path
-        .to_str()
-        .unwrap()
-        .strip_prefix("\\\\.\\PhysicalDrive")
-        .ok_or(io::Error::new(io::ErrorKind::NotFound, "Drive not found"))?;
-
-    let mut cmd = std::process::Command::new("diskpart")
-        .stderr(Stdio::null())
-        .stdin(Stdio::piped())
-        .stdout(Stdio::null())
-        .spawn()?;
-
-    let mut stdin = cmd.stdin.take().expect("Failed to get stdin");
-    stdin.write_all(b"select disk ")?;
-    stdin.write_all(disk_num.as_bytes())?;
-    stdin.write_all(b"\n")?;
-    stdin.write_all(b"clean\n")?;
-    stdin.write_all(b"create partition primary\n")?;
-    stdin.write_all(b"format quick fs=fat32\n")?;
-    stdin.write_all(b"assign\n")?;
-    stdin.write_all(b"exit\n")?;
-
-    drop(stdin);
-
-    let status = cmd.wait()?;
-    if status.success() {
-        Ok(())
-    } else {
-        Err(io::Error::other(format!("Status: {status}")))
     }
 }
 
@@ -436,16 +425,13 @@ impl crate::helpers::Commit for WinDrive {
     }
 }
 
-impl crate::helpers::PrepareCustomization for WinDrive {
-    fn prepare_customization(&mut self, cancel: Option<&CancellationToken>) -> Result<()> {
-        if !self.locked_volumes.is_empty() {
-            return Ok(());
-        }
-
-        let refresh = unsafe {
+impl crate::helpers::Eject for WinDrive {
+    fn eject(mut self) -> io::Result<()> {
+        crate::helpers::Commit::commit(&mut self)?;
+        unsafe {
             DeviceIoControl(
                 HANDLE(self.drive.as_raw_handle()),
-                IOCTL_DISK_UPDATE_PROPERTIES,
+                IOCTL_STORAGE_EJECT_MEDIA,
                 None,
                 0,
                 None,
@@ -453,25 +439,15 @@ impl crate::helpers::PrepareCustomization for WinDrive {
                 None,
                 None,
             )
-        };
-        refresh.map_err(|_| Error::WindowsVolumeRefresh {
-            source: io::Error::last_os_error(),
-            disk_number: self.disk_number,
-        })?;
-
-        self.locked_volumes = lock_volumes_with_retry(self.disk_number, true, cancel)?;
-        Ok(())
-    }
-}
-
-impl crate::helpers::Eject for WinDrive {
-    fn eject(mut self) -> io::Result<()> {
-        crate::helpers::Commit::commit(&mut self)
+        }
+        .map_err(|_| io::Error::last_os_error())
     }
 }
 
 pub(crate) fn format(dst: &Path) -> Result<()> {
-    diskpart_format(dst).map_err(|source| Error::FailedToFormat { source })
+    let disk_size = crate::helpers::destination_size(dst)?;
+    let drive = open(dst)?;
+    crate::helpers::format_device(drive, disk_size)
 }
 
 pub(crate) fn open(dst: &Path) -> Result<WinDrive> {

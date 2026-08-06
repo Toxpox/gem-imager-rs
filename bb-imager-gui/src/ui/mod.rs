@@ -4,6 +4,8 @@ mod app_info;
 mod board_selection;
 mod configuration;
 mod destination_selection;
+#[cfg(feature = "dfu-driver-mvp")]
+mod driver_prompt;
 mod flash;
 mod flash_finish;
 mod helpers;
@@ -11,7 +13,7 @@ mod image_selection;
 mod review;
 
 pub(crate) fn view(state: &BBImager) -> iced::Element<'_, BBImagerMessage> {
-    match state {
+    let page = match state {
         BBImager::ChooseBoard(inner) => board_selection::view(inner),
         BBImager::ChooseOs(inner) => image_selection::view(inner),
         BBImager::ChooseDest(inner) => destination_selection::view(inner),
@@ -23,7 +25,13 @@ pub(crate) fn view(state: &BBImager) -> iced::Element<'_, BBImagerMessage> {
         BBImager::FlashingSuccess(inner) => flash_finish::success(inner),
         BBImager::AppInfo(inner) => app_info::view(inner),
         _ => panic!("Unexpected message"),
-    }
+    };
+
+    #[cfg(feature = "dfu-driver-mvp")]
+    return driver_prompt::wrap(page, &state.common().dfu_driver, state.common().lang());
+
+    #[cfg(not(feature = "dfu-driver-mvp"))]
+    page
 }
 
 #[cfg(test)]
@@ -44,6 +52,8 @@ mod tests {
                 "destination_selection",
                 include_str!("destination_selection.rs"),
             ),
+            #[cfg(feature = "dfu-driver-mvp")]
+            ("driver_prompt", include_str!("driver_prompt.rs")),
             ("flash", include_str!("flash.rs")),
             ("flash_finish", include_str!("flash_finish.rs")),
             ("image_selection", include_str!("image_selection.rs")),

@@ -24,6 +24,8 @@ _CLI_OUT_DIR = $(shell ls -td target/$(TARGET)/release/build/bb-imager-cli-*/out
 
 _GUI_BIN = target/${TARGET}/release/bb-imager-gui
 _GUI_PORTABLE_EXE = bb-imager-gui/dist/bb-imager-gui_$(VERSION)_$(word 1,$(subst -, ,$(TARGET))).exe
+_WINUSB_HELPER_BIN = target/${TARGET}/release/bb-winusb-helper.exe
+_WINUSB_RUNTIME = bb-winusb/native/x86_64-pc-windows-msvc/libwdi.dll
 
 ## variable: GUI_NAME: Change name for GUI related files.
 GUI_NAME ?= org.t3gemstone.imager
@@ -71,6 +73,12 @@ NOTIFY_RUST ?= 1
 APPIMAGE_ARCH ?= $(_ARCH)
 ## variable: APPIMAGE_RELEASE_TAG: Release tag for update info
 APPIMAGE_RELEASE_TAG ?=
+
+# The reviewed libwdi runtime and helper are currently gated to Windows x64. ARM64 keeps building
+# without the provisioning feature until its native runtime and hardware matrix are complete.
+ifeq ($(TARGET),x86_64-pc-windows-msvc)
+	_RUST_ARGS_GUI += --features dfu-driver-mvp
+endif
 
 # Allow skipping build step
 ifeq ($(NO_BUILD),1)
@@ -214,7 +222,7 @@ ifneq ($(findstring linux,$(TARGET)),)
 	chmod +x ~/.local/bin/appimagetool
 	appimagetool --version
 endif
-	$(CARGO_PATH) install cargo-packager --locked --git https://github.com/crabnebula-dev/cargo-packager.git
+	$(CARGO_PATH) install cargo-packager --locked --version 0.11.8
 
 ## housekeeping: package-rename: Replace package version with `_alpha_`. Intended for use in CI.
 .PHONY: package-rename-alpha
@@ -248,6 +256,9 @@ endif
 \t\t</release>' bb-imager-gui/assets/packages/linux/flatpak/org.t3gemstone.imager.metainfo.xml
 	sed -i -E "s/^[[:space:]]*Version=\"[^\"]+\"/    Version=\"${VERSION}.0\"/" bb-imager-gui/Package.appxmanifest
 	sed -i -E "s/(<assemblyIdentity[[:space:]]+version=\")[^\"]*(\")/\1${VERSION}.0\2/" bb-imager-gui/assets/packages/windows/gui.exe.manifest
+	sed -i -E "s/(<assemblyIdentity[[:space:]]+version=\")[^\"]*(\")/\1${VERSION}.0\2/" bb-imager-gui/assets/packages/windows/gui-as-invoker.exe.manifest
+	sed -i -E "s/(<assemblyIdentity[[:space:]]+version=\")[^\"]*(\")/\1${VERSION}.0\2/" bb-winusb-helper/assets/helper.exe.manifest
+	sed -i -E "s/^version = \"[^\"]+\"/version = \"${VERSION}\"/" Packager.windows-x64.toml
 	cargo build
 	$(info Showing Diff)
 	git diff
@@ -256,7 +267,9 @@ endif
 	done ; \
 	[ $$CONTINUE = "y" ] || [ $$CONTINUE = "Y" ] || (echo "Aborting."; exit 1;)
 	git add Cargo.toml Cargo.lock bb-imager-gui/assets/packages/linux/flatpak/org.t3gemstone.imager.metainfo.xml docs/antora.yml \
-		snapcraft.*.yaml bb-imager-gui/Package.appxmanifest bb-imager-gui/assets/packages/windows/gui.exe.manifest
+		snapcraft.*.yaml bb-imager-gui/Package.appxmanifest bb-imager-gui/assets/packages/windows/gui.exe.manifest \
+		bb-imager-gui/assets/packages/windows/gui-as-invoker.exe.manifest \
+		bb-winusb-helper/assets/helper.exe.manifest Packager.windows-x64.toml
 	git commit -s -m "Bump version to ${VERSION}"
 	git tag ${VERSION}
 
@@ -292,7 +305,11 @@ package-gui-dmg: build-gui
 	$(CARGO_PATH) packager -p bb-imager-gui --target $(TARGET) ${_PACKAGER_ARGS} -f dmg
 
 package-gui-wix: build-gui
+ifeq ($(TARGET),x86_64-pc-windows-msvc)
+	$(CARGO_PATH) packager --config Packager.windows-x64.toml ${_PACKAGER_ARGS} -f wix
+else
 	$(CARGO_PATH) packager -p bb-imager-gui --target $(TARGET) ${_PACKAGER_ARGS} -f wix
+endif
 
 define package-linux-x86_64_aarch64
 	$(info Building packages for $(1))
@@ -327,7 +344,7 @@ package-aarch64-apple-darwin: package-checks
 ## package: package-x86_64-pc-windows-msvc: Create all packages for x86_64-pc-windows-msvc
 .PHONY: package-x86_64-pc-windows-msvc
 package-x86_64-pc-windows-msvc: package-checks
-	$(MAKE) package-gui-portable-exe package-gui-wix TARGET=x86_64-pc-windows-msvc UPDATER=1
+	$(MAKE) package-gui-portable-zip package-gui-wix TARGET=x86_64-pc-windows-msvc UPDATER=1
 
 ## package: package-aarch64-pc-windows-msvc: Create all packages for aarch64-pc-windows-msvc
 .PHONY: package-aarch64-pc-windows-msvc
@@ -342,6 +359,10 @@ package-bundle-pc-windows-msvc:
 	mkdir -p bb-imager-gui/dist/windows-temp/{x64,aarch64}
 	cp target/aarch64-pc-windows-msvc/release/bb-imager-gui bb-imager-gui/dist/windows-temp/aarch64/
 	cp target/x86_64-pc-windows-msvc/release/bb-imager-gui bb-imager-gui/dist/windows-temp/x64/
+	cp target/x86_64-pc-windows-msvc/release/bb-winusb-helper.exe bb-imager-gui/dist/windows-temp/x64/
+	cp $(_WINUSB_RUNTIME) bb-imager-gui/dist/windows-temp/x64/
+	mkdir -p bb-imager-gui/dist/windows-temp/x64/licenses/libwdi
+	cp bb-winusb/third_party/libwdi/COPYING-LGPL bb-winusb/third_party/libwdi/Microsoft-WDF-License.rtf bb-imager-gui/dist/windows-temp/x64/licenses/libwdi/
 	winapp manifest update-assets bb-imager-gui/assets/icons/icon.png --manifest bb-imager-gui/Package.appxmanifest
 	winapp pack --manifest bb-imager-gui/Package.appxmanifest bb-imager-gui/dist/windows-temp/aarch64/ bb-imager-gui/dist/windows-temp/x64/
 	rm -rf bb-imager-gui/dist/windows-temp
@@ -401,8 +422,15 @@ _build-cli-man: _build-cli-bin
 	gzip -f bb-imager-cli/dist/.target/man/*.1
 
 ## build: build-gui: Build GUI.
+.PHONY: build-winusb-helper
+build-winusb-helper:
+ifeq ($(TARGET),x86_64-pc-windows-msvc)
+	$(info Build consoleless WinUSB helper for $(TARGET))
+	$(RUST_BUILD) -r -p bb-winusb-helper --target $(TARGET) $(_RUST_ARGS)
+endif
+
 .PHONY: build-gui
-build-gui:
+build-gui: build-winusb-helper
 	$(info Build GUI for $(TARGET))
 	$(RUST_BUILD) -r -p bb-imager-gui --target $(TARGET) $(_RUST_ARGS_GUI)
 
@@ -466,6 +494,12 @@ package-gui-portable-exe: build-gui
 	$(info Building portable windows exe for $(TARGET))
 	mkdir -p bb-imager-gui/dist
 	cp $(_GUI_BIN) $(_GUI_PORTABLE_EXE)
+
+## package: package-gui-portable-zip: Build the x64 Windows GUI, helper and libwdi bundle.
+.PHONY: package-gui-portable-zip
+package-gui-portable-zip: build-gui
+	$(info Building portable Windows WinUSB bundle for $(TARGET))
+	powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File scripts/package-windows-portable.ps1 -Version "$(VERSION)" -Target "$(TARGET)"
 
 ## package: package-host: Build all packages for host platform.
 .PHONY: package-host

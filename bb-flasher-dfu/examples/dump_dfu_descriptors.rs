@@ -82,11 +82,12 @@ fn main() -> rusb::Result<()> {
         dumped += 1;
 
         println!(
-            "device {:04x}:{:04x} bus {} port {:?} bMaxPacketSize0 {}",
+            "device {:04x}:{:04x} bus {} port {:?} bcdDevice {} bMaxPacketSize0 {}",
             descriptor.vendor_id(),
             descriptor.product_id(),
             device.bus_number(),
             device.port_numbers()?,
+            descriptor.device_version(),
             descriptor.max_packet_size()
         );
 
@@ -105,6 +106,43 @@ fn main() -> rusb::Result<()> {
                 .ok()
                 .and_then(|languages| languages.first().copied())
         });
+
+        if let Some(handle) = handle.as_ref() {
+            // `rusb::Version` assumes valid BCD digits. Some later T3 boot stages have previously
+            // appeared in Windows as `REV_7>94`, so preserve the raw bcdDevice word as evidence
+            // instead of relying only on the parsed display value.
+            let mut raw_device_descriptor = [0u8; 18];
+            match handle.read_control(
+                0x80, // standard device-to-host request for the device recipient
+                0x06, // GET_DESCRIPTOR
+                0x0100,
+                0,
+                &mut raw_device_descriptor,
+                std::time::Duration::from_secs(5),
+            ) {
+                Ok(length) if length >= 14 => {
+                    let raw_bcd_device =
+                        u16::from_le_bytes([raw_device_descriptor[12], raw_device_descriptor[13]]);
+                    println!(
+                        "  raw device descriptor: {} bytes [{}], bcdDevice = 0x{raw_bcd_device:04x}",
+                        length,
+                        hex(&raw_device_descriptor[..length])
+                    );
+                }
+                Ok(length) => println!(
+                    "  raw device descriptor too short: {length} bytes [{}]",
+                    hex(&raw_device_descriptor[..length])
+                ),
+                Err(error) => println!("  cannot read raw device descriptor: {error}"),
+            }
+
+            println!(
+                "  strings: manufacturer={:?} product={:?} serial={:?}",
+                handle.read_manufacturer_string_ascii(&descriptor).ok(),
+                handle.read_product_string_ascii(&descriptor).ok(),
+                handle.read_serial_number_string_ascii(&descriptor).ok()
+            );
+        }
 
         for index in 0..descriptor.num_configurations() {
             let config = device.config_descriptor(index)?;

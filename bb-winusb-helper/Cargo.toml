@@ -1,0 +1,21 @@
+[package]
+name = "bb-winusb-helper"
+description = "Consoleless elevated WinUSB provisioning helper for T3 Gemstone Imager."
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "bb-winusb-helper"
+path = "src/main.rs"
+test = false
+bench = false
+
+[dependencies]
+bb-winusb = { path = "../bb-winusb" }
+
+[build-dependencies]
+embed-resource = "3.0"
+

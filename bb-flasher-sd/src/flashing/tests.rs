@@ -236,6 +236,13 @@ mod mock_card {
         std::iter::empty()
     }
 
+    fn deferred(card: MockSd) -> crate::helpers::SdCardWrapper<MockSd> {
+        let capacity = card.as_file().metadata().unwrap().len();
+        let mut card = crate::helpers::SdCardWrapper::new(card);
+        card.hide_layout(Some(capacity)).unwrap();
+        card
+    }
+
     fn boot_file(name: &str, data: &[u8]) -> std::iter::Once<Customization<Content>> {
         let entries = vec![(name.into(), data.to_vec().into_boxed_slice())];
         let content: Content = entries
@@ -273,7 +280,7 @@ mod mock_card {
 
         flash_internal(
             move || Ok((Cursor::new(image), img_size)),
-            card,
+            deferred(card),
             None,
             None,
             verified_boot_file("config.ini", expected),
@@ -349,25 +356,18 @@ mod mock_card {
     #[test]
     fn a_full_flash_writes_verifies_and_customizes() {
         let card = MockSd::new();
-        let prepare_count = card.prepare_count();
         let image: Box<[u8]> = std::fs::read(card.path()).unwrap().into_boxed_slice();
         let img_size = image.len() as u64;
 
         flash_internal(
             move || Ok((Cursor::new(image), img_size)),
-            card,
+            deferred(card),
             None,
             None,
             boot_file("customization.txt", b"written by the flasher"),
             None,
         )
         .expect("a healthy card must flash, verify and customize");
-
-        assert_eq!(
-            prepare_count.load(std::sync::atomic::Ordering::SeqCst),
-            1,
-            "a customized flash must prepare the destination exactly once"
-        );
     }
 
     /// A device that accepts every write and then fails to sync must fail the flash. Reporting
@@ -377,8 +377,10 @@ mod mock_card {
         let card = MockSd::new();
         let image: Box<[u8]> = std::fs::read(card.path()).unwrap().into_boxed_slice();
         let img_size = image.len() as u64;
+        let sync_fail = card.sync_fail_token();
+        let card = deferred(card);
 
-        drop(card.sync_fail_token().drop_guard());
+        drop(sync_fail.drop_guard());
 
         let err = flash_internal(
             move || Ok((Cursor::new(image), img_size)),
@@ -408,7 +410,7 @@ mod mock_card {
 
         let err = flash_internal(
             || Ok((test_file(IMG_SIZE as usize), IMG_SIZE)),
-            card,
+            deferred(card),
             Some(CAPACITY),
             None,
             no_customizations(),
@@ -438,25 +440,18 @@ mod mock_card {
     #[test]
     fn an_image_that_exactly_fills_the_card_is_accepted() {
         let card = MockSd::new();
-        let prepare_count = card.prepare_count();
         let image: Box<[u8]> = std::fs::read(card.path()).unwrap().into_boxed_slice();
         let img_size = image.len() as u64;
 
         flash_internal(
             move || Ok((Cursor::new(image), img_size)),
-            card,
+            deferred(card),
             Some(img_size),
             None,
             no_customizations(),
             None,
         )
         .expect("an image that exactly fits must be accepted");
-
-        assert_eq!(
-            prepare_count.load(std::sync::atomic::Ordering::SeqCst),
-            0,
-            "a flash without customization must not enter the platform preparation lifecycle"
-        );
     }
 }
 

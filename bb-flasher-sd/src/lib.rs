@@ -99,6 +99,12 @@ pub enum Error {
         actual: Box<str>,
     },
 
+    /// The partition-table block is written last and receives its own physical read-back.
+    #[error(
+        "Read-back verification failed for the published partition layout. The card may be faulty, counterfeit, or was disconnected during writing."
+    )]
+    LayoutReadBackMismatch,
+
     #[error(
         "Destination is too small: the image needs {required} bytes but the device has only {available}."
     )]
@@ -120,14 +126,6 @@ pub enum Error {
     WindowsCleanError(std::process::Output),
 
     #[cfg(windows)]
-    #[error("Failed to refresh the partition layout for physical disk {disk_number}.")]
-    WindowsVolumeRefresh {
-        #[source]
-        source: io::Error,
-        disk_number: u32,
-    },
-
-    #[cfg(windows)]
     #[error("Failed to enumerate Windows volumes.")]
     WindowsVolumeEnumeration {
         #[source]
@@ -141,10 +139,6 @@ pub enum Error {
         source: io::Error,
         volume: Box<str>,
     },
-
-    #[cfg(windows)]
-    #[error("No mountable volume appeared on physical disk {disk_number} for customization.")]
-    WindowsVolumeNotFound { disk_number: u32 },
 
     #[cfg(windows)]
     #[error(

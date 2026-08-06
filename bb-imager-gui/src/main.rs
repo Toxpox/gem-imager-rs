@@ -11,6 +11,8 @@ use crate::{helpers::blocking_future, state::BBImagerCommon};
 
 mod constants;
 mod db;
+#[cfg(feature = "dfu-driver-mvp")]
+mod driver_ui;
 mod helpers;
 mod keep_awake;
 mod message;
@@ -155,6 +157,8 @@ impl BBImager {
             scroll_id: widget::Id::unique(),
             db: db.clone(),
             lang,
+            #[cfg(feature = "dfu-driver-mvp")]
+            dfu_driver: driver_ui::DfuDriverUiState::default(),
         };
 
         let db_task = Task::future(blocking_future(move || {
@@ -244,7 +248,7 @@ impl BBImager {
     fn subscription(&self) -> Subscription<BBImagerMessage> {
         const INTERVAL: std::time::Duration = std::time::Duration::from_secs(1);
 
-        match self {
+        let destinations = match self {
             // Nothing is enumerated for a pair with no write method: polling for SD cards on a
             // board that cannot take one only produces destinations the write path would refuse.
             Self::ChooseDest(x) if !x.write_methods.is_empty() => Subscription::run_with(
@@ -278,7 +282,13 @@ impl BBImager {
                 },
             ),
             _ => Subscription::none(),
-        }
+        };
+
+        #[cfg(feature = "dfu-driver-mvp")]
+        return Subscription::batch([destinations, driver_ui::subscription()]);
+
+        #[cfg(not(feature = "dfu-driver-mvp"))]
+        destinations
     }
 
     fn start_flashing(&mut self) -> Task<BBImagerMessage> {

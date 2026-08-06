@@ -315,9 +315,37 @@ catalog! {
     },
     WinusbDriverMissingTitle { en: "The USB driver is missing", tr: "USB sürücüsü eksik" },
     WinusbDriverMissingBody {
-        en: "Windows has no WinUSB driver bound to the board, so it cannot be opened. Assign WinUSB to the device with Zadig, then connect it again.",
-        tr: "Windows'ta karta bağlı bir WinUSB sürücüsü yok, bu yüzden aygıt açılamıyor. Zadig ile aygıta WinUSB atayın, ardından yeniden bağlayın."
+        en: "A T3 board in ROM DFU mode was found, but Windows has no driver bound to it. Gem Imager can install WinUSB with one click; Windows will ask for administrator approval.",
+        tr: "ROM DFU modunda bir T3 kart bulundu ancak Windows karta bir sürücü bağlamamış. Gem Imager WinUSB'yi tek tıklamayla kurabilir; Windows yönetici onayı isteyecektir."
     },
+    WinusbDriverInstallAction { en: "INSTALL WINUSB", tr: "WINUSB'Yİ KUR" },
+    WinusbDriverLater { en: "LATER", tr: "DAHA SONRA" },
+    WinusbDriverTechnicalDetails { en: "TECHNICAL DETAILS", tr: "TEKNİK AYRINTILAR" },
+    WinusbDriverDetailsTitle { en: "What will be installed?", tr: "Ne kurulacak?" },
+    WinusbDriverDetailsBody {
+        en: "The offer is triggered only by the present ROM device USB\\VID_0451&PID_6165&REV_0200 with DFU FE/01/02 and Windows Code 28. The generated package matches USB\\VID_0451&PID_6165 so later DFU stages and every USB port use the same WinUSB package. This can also affect another TI device that deliberately uses the same VID/PID.",
+        tr: "Teklif yalnız Windows Code 28 durumundaki, DFU FE/01/02 kimlikli USB\\VID_0451&PID_6165&REV_0200 ROM aygıtı için gösterilir. Üretilen paket USB\\VID_0451&PID_6165 ile eşleşir; böylece sonraki DFU aşamaları ve tüm USB portları aynı WinUSB paketini kullanır. Bu işlem aynı VID/PID'yi bilerek kullanan başka bir TI aygıtını da etkileyebilir."
+    },
+    WinusbDriverCertificateNotice {
+        en: "Beta notice: libwdi creates a self-signed certificate in the Local Machine Root and Trusted Publishers stores. Removing Gem Imager does not remove that certificate automatically in this MVP.",
+        tr: "Beta bildirimi: libwdi Yerel Makine Kök ve Güvenilen Yayımcılar depolarında kendinden imzalı bir sertifika oluşturur. Bu MVP'de Gem Imager'ı kaldırmak sertifikayı otomatik olarak kaldırmaz."
+    },
+    WinusbDriverInstallingTitle { en: "Installing WinUSB", tr: "WinUSB kuruluyor" },
+    WinusbDriverInstallingBody {
+        en: "Approve the Windows administrator request. Gem Imager will install the DFU driver automatically. Keep the board connected until installation is complete.",
+        tr: "Windows yönetici izni isteğini onaylayın. Gem Imager DFU sürücüsünü otomatik olarak kuracaktır. Kurulum tamamlanana kadar kartı bağlı tutun."
+    },
+    WinusbDriverReadyTitle { en: "DFU is ready", tr: "DFU hazır" },
+    WinusbDriverReadyBody {
+        en: "WinUSB is active and the board can be opened by Gem Imager. You do not need to reconnect it or change USB ports.",
+        tr: "WinUSB etkin ve kart Gem Imager tarafından açılabilir. Kartı yeniden bağlamanız veya USB portunu değiştirmeniz gerekmez."
+    },
+    WinusbDriverFailedTitle { en: "WinUSB could not be installed", tr: "WinUSB kurulamadı" },
+    WinusbDriverFailedBody {
+        en: "Nothing else will be attempted automatically. Keep the board connected, review the technical result below, then retry once.",
+        tr: "Otomatik olarak başka bir işlem denenmeyecek. Kartı bağlı tutun, aşağıdaki teknik sonucu inceleyin ve ardından bir kez yeniden deneyin."
+    },
+    WinusbDriverClose { en: "CLOSE", tr: "KAPAT" },
 
     // ---- Customization ------------------------------------------------------------------
     SetHostname { en: "Set Hostname", tr: "Makine adı belirle" },

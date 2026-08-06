@@ -37,6 +37,7 @@ chrono = "0.4"
 chrono-tz = { version = "0.10", features = ["serde"] }
 bb-iced-widgets = { path = "../bb-iced-widgets" }
 bb-i18n = { path = "../bb-i18n" }
+bb-winusb = { path = "../bb-winusb", optional = true }
 thiserror = "2.0"
 
 # Free-space pre-check for the DFU staging image, and (on Windows) sleep inhibition while a write
@@ -50,6 +51,7 @@ windows-sys = { version = "0.61", features = ["Win32_Storage_FileSystem", "Win32
 
 [build-dependencies]
 embed-resource = "3.0"
+sha2 = "0.10"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 bb-flasher = { path = "../bb-flasher", features = ["sd_linux_udev"] }
@@ -64,6 +66,9 @@ sd = ["bb-flasher/sd"]
 # USB DFU writes to onboard eMMC. Implies `sd`: the DFU path stages the image through the SD
 # writer so the first-boot file lands in the same FAT partition it would on a card.
 dfu = ["bb-flasher/dfu", "sd"]
+# Windows 11 x64 beta: detect the exact T3 ROM DFU devnode and provision WinUSB through the
+# separately elevated, consoleless helper. Kept explicit until the clean-VM release gates pass.
+dfu-driver-mvp = ["dfu", "dep:bb-winusb"]
 # Handle application updates
 updater = []
 static = ["rusqlite/bundled", "bb-flasher/static", "bb-downloader/rustls"]

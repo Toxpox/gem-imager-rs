@@ -9,7 +9,7 @@ use crate::Result;
 use crate::customization::Customization;
 // `Commit` is reachable through the `Eject: Commit` supertrait bound, so it needs no import here.
 use crate::helpers::{
-    DirectIoBuffer, Eject, PrepareCustomization, chan_send, check_cancel, progress, read_at_least,
+    DirectIoBuffer, Eject, PublishLayout, chan_send, check_cancel, progress, read_at_least,
 };
 
 #[cfg(test)]
@@ -311,7 +311,9 @@ where
         crate::Destination::SdCard(path) => {
             let capacity = guard_target(&path)?;
             let sd = crate::pal::open(&path)?;
-            let sd = crate::helpers::SdCardWrapper::new(sd);
+            let mut sd = crate::helpers::SdCardWrapper::new(sd);
+            sd.hide_layout(capacity)
+                .map_err(|source| crate::Error::SyncFailed { source })?;
             flash_internal(img, sd, capacity, chan, customizations, cancel)
         }
     }
@@ -327,12 +329,9 @@ fn flash_internal<'a, R, Sd, C>(
 ) -> Result<()>
 where
     R: Read + Send,
-    Sd: Read + Write + Seek + Eject + PrepareCustomization + std::fmt::Debug,
+    Sd: Read + Write + Seek + Eject + PublishLayout + std::fmt::Debug,
     C: Iterator<Item = (Box<str>, crate::ContentType<'a>)> + Send,
 {
-    let mut customizations = customizations.peekable();
-    let has_customizations = customizations.peek().is_some();
-
     tracing::info!("Resolving Image");
     let (img, img_size) = img()?;
 
@@ -358,12 +357,6 @@ where
     sd.commit()
         .map_err(|source| crate::Error::SyncFailed { source })?;
 
-    if has_customizations {
-        check_cancel(cancel.as_ref())?;
-        tracing::info!("Preparing destination for customization");
-        sd.prepare_customization(cancel.as_ref())?;
-    }
-
     tracing::info!("Verifying written data");
     verify_written(&mut sd, outcome, chan, cancel.as_ref())?;
 
@@ -378,6 +371,9 @@ where
     let mut sd = dev.into_inner();
     sd.commit()
         .map_err(|source| crate::Error::SyncFailed { source })?;
+
+    tracing::info!("Publishing and verifying the partition layout");
+    sd.publish_layout()?;
 
     // Everything is durable by this point, so a device that refuses to eject (still mounted, busy)
     // is a convenience problem rather than a data problem.
