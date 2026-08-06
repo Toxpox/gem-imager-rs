@@ -2,19 +2,19 @@
 resolver = "2"
 
 members = [
-	"bb-flasher",
-	"bb-imager-cli",
-	"bb-imager-gui",
-	"bb-flasher-sd",
-	"bb-downloader",
-	"bb-config",
-	"bb-helper",
-	"bb-flasher-dfu",
-	"bb-drivelist",
-	"bb-iced-widgets",
-	"bb-i18n",
-	"bb-winusb",
-	"bb-winusb-helper"
+	"gem-flasher",
+	"gem-imager-cli",
+	"gem-imager-gui",
+	"gem-flasher-sd",
+	"gem-downloader",
+	"gem-config",
+	"gem-helper",
+	"gem-flasher-dfu",
+	"gem-drivelist",
+	"gem-iced-widgets",
+	"gem-i18n",
+	"gem-winusb",
+	"gem-winusb-helper"
 ]
 
 [profile.release]
@@ -25,5 +25,5 @@ codegen-units = 1
 version = "1.0.13"
 edition = "2024"
 authors = ["T3 Gemstone Devteam <dev@t3gemstone.org>"]
-repository = "https://github.com/t3gemstone/imager"
+repository = "https://github.com/Toxpox/gem-imager-rs"
 license = "MIT"

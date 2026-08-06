@@ -14,18 +14,18 @@ _APPIMAGETOOL_ARGS =
 _DEST_VERSION = $(VERSION)
 _DIOXUS_CLI = $(shell which dx)
 
-_CLI_BIN = target/${TARGET}/release/bb-imager-cli
-_CLI_COMP_BASH = bb-imager-cli/dist/.target/shell-comp/bb-imager-cli.bash
-_CLI_COMP_ZSH = bb-imager-cli/dist/.target/shell-comp/_bb-imager-cli
-_CLI_MAN = bb-imager-cli/dist/.target/man/bb-imager-cli.1.gz
-# Man pages and shell completions are emitted by bb-imager-cli's build script into its OUT_DIR.
+_CLI_BIN = target/${TARGET}/release/gem-imager-cli
+_CLI_COMP_BASH = gem-imager-cli/dist/.target/shell-comp/gem-imager-cli.bash
+_CLI_COMP_ZSH = gem-imager-cli/dist/.target/shell-comp/_gem-imager-cli
+_CLI_MAN = gem-imager-cli/dist/.target/man/gem-imager-cli.1.gz
+# Man pages and shell completions are emitted by gem-imager-cli's build script into its OUT_DIR.
 # Locate that directory (feature-hash is not known ahead of time; scoped to TARGET + release).
-_CLI_OUT_DIR = $(shell ls -td target/$(TARGET)/release/build/bb-imager-cli-*/out 2>/dev/null | head -1)
+_CLI_OUT_DIR = $(shell ls -td target/$(TARGET)/release/build/gem-imager-cli-*/out 2>/dev/null | head -1)
 
-_GUI_BIN = target/${TARGET}/release/bb-imager-gui
-_GUI_PORTABLE_EXE = bb-imager-gui/dist/bb-imager-gui_$(VERSION)_$(word 1,$(subst -, ,$(TARGET))).exe
-_WINUSB_HELPER_BIN = target/${TARGET}/release/bb-winusb-helper.exe
-_WINUSB_RUNTIME = bb-winusb/native/x86_64-pc-windows-msvc/libwdi.dll
+_GUI_BIN = target/${TARGET}/release/gem-imager-gui
+_GUI_PORTABLE_EXE = gem-imager-gui/dist/gem-imager-gui_$(VERSION)_$(word 1,$(subst -, ,$(TARGET))).exe
+_WINUSB_HELPER_BIN = target/${TARGET}/release/gem-winusb-helper.exe
+_WINUSB_RUNTIME = gem-winusb/native/x86_64-pc-windows-msvc/libwdi.dll
 
 ## variable: GUI_NAME: Change name for GUI related files.
 GUI_NAME ?= org.t3gemstone.imager
@@ -33,7 +33,7 @@ GUI_NAME ?= org.t3gemstone.imager
 CARGO_PATH ?= $(shell which cargo)
 ## variable: RUST_BUILDER: The Rust builder to use. Possble choices - cargo (default), cross.
 RUST_BUILDER ?= $(CARGO_PATH)
-## variable: VERSION: Release versions for bb-imager-cli and bb-imager-gui
+## variable: VERSION: Release versions for gem-imager-cli and gem-imager-gui
 VERSION := $(if $(strip $(VERSION)),$(VERSION),$(_CARGO_TOML_VERSION))
 ## variable: PRE_RELEASE: Flag to denote if this is not a stable version.
 PRE_RELEASE ?= 1
@@ -146,9 +146,8 @@ clean:
 	$(info "Cleaning the project...")
 	$(CARGO_PATH) clean
 	rm -rf target
-	rm -rf bb-imager-gui/dist
-	rm -rf bb-imager-cli/dist
-	rm -rf bb-imager-service/dist
+	rm -rf gem-imager-gui/dist
+	rm -rf gem-imager-cli/dist
 	rm -rf cargo-vendor.tar.zst
 	rm -rf vendor .cargo
 	rm -f *.snap
@@ -163,14 +162,14 @@ endif
 
 _check_common:
 	$(_CARGO_CHECK) --all-targets --all-features --workspace \
-		--exclude bb-flasher --exclude bb-imager-gui --exclude bb-imager-cli
-	$(_CARGO_CHECK) --all-targets -p bb-flasher -F dfu,static,piped_image,sd
+		--exclude gem-flasher --exclude gem-imager-gui --exclude gem-imager-cli
+	$(_CARGO_CHECK) --all-targets -p gem-flasher -F dfu,static,piped_image,sd
 
 _check_cli:
-	$(_CARGO_CHECK) --all-targets -p bb-imager-cli ${_RUST_ARGS_CLI}
+	$(_CARGO_CHECK) --all-targets -p gem-imager-cli ${_RUST_ARGS_CLI}
 
 _check_gui:
-	$(_CARGO_CHECK) --all-targets -p bb-imager-gui ${_RUST_ARGS_GUI} -F updater,pre-release
+	$(_CARGO_CHECK) --all-targets -p gem-imager-gui ${_RUST_ARGS_GUI} -F updater,pre-release
 	
 ## housekeeping: check: Run code quality checks.
 .PHONY: check
@@ -228,8 +227,8 @@ endif
 .PHONY: package-rename-alpha
 package-rename:
 	for pkg in gui cli service; do \
-		if [ -d bb-imager-$$pkg/dist ]; then \
-			for file in bb-imager-$$pkg/dist/*; do \
+		if [ -d gem-imager-$$pkg/dist ]; then \
+			for file in gem-imager-$$pkg/dist/*; do \
 				if [ "$${file##*.}" = "msixbundle" ]; then \
 					mv "$$file" "$$(echo "$$file" | sed -E 's/_[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+_/_alpha_/')"; \
 				else \
@@ -252,12 +251,12 @@ endif
 	sed -i "s/^version: .*/version: ${VERSION}/" docs/antora.yml
 	sed -i '/<releases>/a \
 \t\t<release version="$(VERSION)" date="$(_DATE)">\
-\t\t\t<url>https://github.com/t3gemstone/imager/releases/tag/$(VERSION)</url>\
-\t\t</release>' bb-imager-gui/assets/packages/linux/flatpak/org.t3gemstone.imager.metainfo.xml
-	sed -i -E "s/^[[:space:]]*Version=\"[^\"]+\"/    Version=\"${VERSION}.0\"/" bb-imager-gui/Package.appxmanifest
-	sed -i -E "s/(<assemblyIdentity[[:space:]]+version=\")[^\"]*(\")/\1${VERSION}.0\2/" bb-imager-gui/assets/packages/windows/gui.exe.manifest
-	sed -i -E "s/(<assemblyIdentity[[:space:]]+version=\")[^\"]*(\")/\1${VERSION}.0\2/" bb-imager-gui/assets/packages/windows/gui-as-invoker.exe.manifest
-	sed -i -E "s/(<assemblyIdentity[[:space:]]+version=\")[^\"]*(\")/\1${VERSION}.0\2/" bb-winusb-helper/assets/helper.exe.manifest
+\t\t\t<url>https://github.com/Toxpox/gem-imager-rs/releases/tag/$(VERSION)</url>\
+\t\t</release>' gem-imager-gui/assets/packages/linux/flatpak/org.t3gemstone.imager.metainfo.xml
+	sed -i -E "s/^[[:space:]]*Version=\"[^\"]+\"/    Version=\"${VERSION}.0\"/" gem-imager-gui/Package.appxmanifest
+	sed -i -E "s/(<assemblyIdentity[[:space:]]+version=\")[^\"]*(\")/\1${VERSION}.0\2/" gem-imager-gui/assets/packages/windows/gui.exe.manifest
+	sed -i -E "s/(<assemblyIdentity[[:space:]]+version=\")[^\"]*(\")/\1${VERSION}.0\2/" gem-imager-gui/assets/packages/windows/gui-as-invoker.exe.manifest
+	sed -i -E "s/(<assemblyIdentity[[:space:]]+version=\")[^\"]*(\")/\1${VERSION}.0\2/" gem-winusb-helper/assets/helper.exe.manifest
 	sed -i -E "s/^version = \"[^\"]+\"/version = \"${VERSION}\"/" Packager.windows-x64.toml
 	cargo build
 	$(info Showing Diff)
@@ -266,49 +265,49 @@ endif
         	read -r -p "Create git commit and tag [y/N]: " CONTINUE; \
 	done ; \
 	[ $$CONTINUE = "y" ] || [ $$CONTINUE = "Y" ] || (echo "Aborting."; exit 1;)
-	git add Cargo.toml Cargo.lock bb-imager-gui/assets/packages/linux/flatpak/org.t3gemstone.imager.metainfo.xml docs/antora.yml \
-		snapcraft.*.yaml bb-imager-gui/Package.appxmanifest bb-imager-gui/assets/packages/windows/gui.exe.manifest \
-		bb-imager-gui/assets/packages/windows/gui-as-invoker.exe.manifest \
-		bb-winusb-helper/assets/helper.exe.manifest Packager.windows-x64.toml
+	git add Cargo.toml Cargo.lock gem-imager-gui/assets/packages/linux/flatpak/org.t3gemstone.imager.metainfo.xml docs/antora.yml \
+		snapcraft.*.yaml gem-imager-gui/Package.appxmanifest gem-imager-gui/assets/packages/windows/gui.exe.manifest \
+		gem-imager-gui/assets/packages/windows/gui-as-invoker.exe.manifest \
+		gem-winusb-helper/assets/helper.exe.manifest Packager.windows-x64.toml
 	git commit -s -m "Bump version to ${VERSION}"
 	git tag ${VERSION}
 
 package-cli-deb: build-cli
-	$(CARGO_PATH) packager -p bb-imager-cli --target $(TARGET) $(_PACKAGER_ARGS) -f deb
+	$(CARGO_PATH) packager -p gem-imager-cli --target $(TARGET) $(_PACKAGER_ARGS) -f deb
 
 package-cli-pacman: build-cli
-	mkdir -p bb-imager-cli/dist/bb-imager-cli
-	$(MAKE) install-cli DESTDIR=bb-imager-cli/dist/bb-imager-cli  PREFIX=/usr
-	cd bb-imager-cli/dist && tar --zstd -cvf bb-imager-cli_${VERSION}_${_ARCH}.tar.zst bb-imager-cli
-	rm -rf bb-imager-cli/dist/bb-imager-cli
+	mkdir -p gem-imager-cli/dist/gem-imager-cli
+	$(MAKE) install-cli DESTDIR=gem-imager-cli/dist/gem-imager-cli  PREFIX=/usr
+	cd gem-imager-cli/dist && tar --zstd -cvf gem-imager-cli_${VERSION}_${_ARCH}.tar.zst gem-imager-cli
+	rm -rf gem-imager-cli/dist/gem-imager-cli
 
 package-gui-deb: build-gui
-	$(CARGO_PATH) packager -p bb-imager-gui --target $(TARGET) ${_PACKAGER_ARGS} -f deb
+	$(CARGO_PATH) packager -p gem-imager-gui --target $(TARGET) ${_PACKAGER_ARGS} -f deb
 
 package-gui-pacman: build-gui
-	mkdir -p bb-imager-gui/dist/bb-imager-gui
-	$(MAKE) install-gui DESTDIR=bb-imager-gui/dist/bb-imager-gui  PREFIX=/usr
-	cd bb-imager-gui/dist && tar --zstd -cvf bb-imager-gui_${VERSION}_${_ARCH}.tar.zst bb-imager-gui
-	rm -rf bb-imager-gui/dist/bb-imager-gui
+	mkdir -p gem-imager-gui/dist/gem-imager-gui
+	$(MAKE) install-gui DESTDIR=gem-imager-gui/dist/gem-imager-gui  PREFIX=/usr
+	cd gem-imager-gui/dist && tar --zstd -cvf gem-imager-gui_${VERSION}_${_ARCH}.tar.zst gem-imager-gui
+	rm -rf gem-imager-gui/dist/gem-imager-gui
 
 package-gui-appimage: build-gui
-	mkdir -p bb-imager-gui/dist
-	$(MAKE) _install_gui PREFIX=/usr DESTDIR=bb-imager-gui/dist/org.t3gemstone.imager.AppDir GUI_NAME=org.t3gemstone.imager
-	ln -srf bb-imager-gui/dist/org.t3gemstone.imager.AppDir/usr/bin/bb-imager-gui bb-imager-gui/dist/org.t3gemstone.imager.AppDir/AppRun
-	ln -srf bb-imager-gui/dist/org.t3gemstone.imager.AppDir/usr/share/applications/org.t3gemstone.imager.desktop bb-imager-gui/dist/org.t3gemstone.imager.AppDir/org.t3gemstone.imager.desktop
-	ln -srf bb-imager-gui/dist/org.t3gemstone.imager.AppDir/usr/share/icons/hicolor/128x128/apps/org.t3gemstone.imager.png bb-imager-gui/dist/org.t3gemstone.imager.AppDir/org.t3gemstone.imager.png
-	ln -srf bb-imager-gui/dist/org.t3gemstone.imager.AppDir/usr/share/metainfo/org.t3gemstone.imager.metainfo.xml bb-imager-gui/dist/org.t3gemstone.imager.AppDir/usr/share/metainfo/org.t3gemstone.imager.appdata.xml
-	cd bb-imager-gui/dist && appimagetool $(_APPIMAGETOOL_ARGS) org.t3gemstone.imager.AppDir T3Gemstone_Imager-$(_DEST_VERSION)-$(APPIMAGE_ARCH).AppImage
-	rm -rf bb-imager-gui/dist/org.t3gemstone.imager.AppDir
+	mkdir -p gem-imager-gui/dist
+	$(MAKE) _install_gui PREFIX=/usr DESTDIR=gem-imager-gui/dist/org.t3gemstone.imager.AppDir GUI_NAME=org.t3gemstone.imager
+	ln -srf gem-imager-gui/dist/org.t3gemstone.imager.AppDir/usr/bin/gem-imager-gui gem-imager-gui/dist/org.t3gemstone.imager.AppDir/AppRun
+	ln -srf gem-imager-gui/dist/org.t3gemstone.imager.AppDir/usr/share/applications/org.t3gemstone.imager.desktop gem-imager-gui/dist/org.t3gemstone.imager.AppDir/org.t3gemstone.imager.desktop
+	ln -srf gem-imager-gui/dist/org.t3gemstone.imager.AppDir/usr/share/icons/hicolor/128x128/apps/org.t3gemstone.imager.png gem-imager-gui/dist/org.t3gemstone.imager.AppDir/org.t3gemstone.imager.png
+	ln -srf gem-imager-gui/dist/org.t3gemstone.imager.AppDir/usr/share/metainfo/org.t3gemstone.imager.metainfo.xml gem-imager-gui/dist/org.t3gemstone.imager.AppDir/usr/share/metainfo/org.t3gemstone.imager.appdata.xml
+	cd gem-imager-gui/dist && appimagetool $(_APPIMAGETOOL_ARGS) org.t3gemstone.imager.AppDir T3Gemstone_Imager-$(_DEST_VERSION)-$(APPIMAGE_ARCH).AppImage
+	rm -rf gem-imager-gui/dist/org.t3gemstone.imager.AppDir
 
 package-gui-dmg: build-gui
-	$(CARGO_PATH) packager -p bb-imager-gui --target $(TARGET) ${_PACKAGER_ARGS} -f dmg
+	$(CARGO_PATH) packager -p gem-imager-gui --target $(TARGET) ${_PACKAGER_ARGS} -f dmg
 
 package-gui-wix: build-gui
 ifeq ($(TARGET),x86_64-pc-windows-msvc)
 	$(CARGO_PATH) packager --config Packager.windows-x64.toml ${_PACKAGER_ARGS} -f wix
 else
-	$(CARGO_PATH) packager -p bb-imager-gui --target $(TARGET) ${_PACKAGER_ARGS} -f wix
+	$(CARGO_PATH) packager -p gem-imager-gui --target $(TARGET) ${_PACKAGER_ARGS} -f wix
 endif
 
 define package-linux-x86_64_aarch64
@@ -356,17 +355,17 @@ package-aarch64-pc-windows-msvc: package-checks
 package-bundle-pc-windows-msvc:
 	$(MAKE) build-gui TARGET=aarch64-pc-windows-msvc UPDATER=1
 	$(MAKE) build-gui TARGET=x86_64-pc-windows-msvc UPDATER=1
-	mkdir -p bb-imager-gui/dist/windows-temp/{x64,aarch64}
-	cp target/aarch64-pc-windows-msvc/release/bb-imager-gui bb-imager-gui/dist/windows-temp/aarch64/
-	cp target/x86_64-pc-windows-msvc/release/bb-imager-gui bb-imager-gui/dist/windows-temp/x64/
-	cp target/x86_64-pc-windows-msvc/release/bb-winusb-helper.exe bb-imager-gui/dist/windows-temp/x64/
-	cp $(_WINUSB_RUNTIME) bb-imager-gui/dist/windows-temp/x64/
-	mkdir -p bb-imager-gui/dist/windows-temp/x64/licenses/libwdi
-	cp bb-winusb/third_party/libwdi/COPYING-LGPL bb-winusb/third_party/libwdi/Microsoft-WDF-License.rtf bb-imager-gui/dist/windows-temp/x64/licenses/libwdi/
-	winapp manifest update-assets bb-imager-gui/assets/icons/icon.png --manifest bb-imager-gui/Package.appxmanifest
-	winapp pack --manifest bb-imager-gui/Package.appxmanifest bb-imager-gui/dist/windows-temp/aarch64/ bb-imager-gui/dist/windows-temp/x64/
-	rm -rf bb-imager-gui/dist/windows-temp
-	mv *.msixbundle bb-imager-gui/dist/
+	mkdir -p gem-imager-gui/dist/windows-temp/{x64,aarch64}
+	cp target/aarch64-pc-windows-msvc/release/gem-imager-gui gem-imager-gui/dist/windows-temp/aarch64/
+	cp target/x86_64-pc-windows-msvc/release/gem-imager-gui gem-imager-gui/dist/windows-temp/x64/
+	cp target/x86_64-pc-windows-msvc/release/gem-winusb-helper.exe gem-imager-gui/dist/windows-temp/x64/
+	cp $(_WINUSB_RUNTIME) gem-imager-gui/dist/windows-temp/x64/
+	mkdir -p gem-imager-gui/dist/windows-temp/x64/licenses/libwdi
+	cp gem-winusb/third_party/libwdi/COPYING-LGPL gem-winusb/third_party/libwdi/Microsoft-WDF-License.rtf gem-imager-gui/dist/windows-temp/x64/licenses/libwdi/
+	winapp manifest update-assets gem-imager-gui/assets/icons/icon.png --manifest gem-imager-gui/Package.appxmanifest
+	winapp pack --manifest gem-imager-gui/Package.appxmanifest gem-imager-gui/dist/windows-temp/aarch64/ gem-imager-gui/dist/windows-temp/x64/
+	rm -rf gem-imager-gui/dist/windows-temp
+	mv *.msixbundle gem-imager-gui/dist/
 
 ## package: package-armv7-unknown-linux-gnueabihf: Create all packages for armv7-unknown-linux-gnueabihf
 .PHONY: package-armv7-unknown-linux-gnueabihf
@@ -396,43 +395,43 @@ coverage:
 .PHONY: bloat
 bloat:
 	$(info Check dependency bloat)
-	$(CARGO_PATH) bloat -p bb-imager-cli --crates --all-features --release --locked > bloat-cli.txt
-	$(CARGO_PATH) bloat -p bb-imager-gui --crates --all-features --release --locked > bloat-gui.txt
+	$(CARGO_PATH) bloat -p gem-imager-cli --crates --all-features --release --locked > bloat-cli.txt
+	$(CARGO_PATH) bloat -p gem-imager-gui --crates --all-features --release --locked > bloat-gui.txt
 
 .PHONY: _build-cli-bin
 _build-cli-bin:
 	$(info Build CLI for $(TARGET))
-	$(RUST_BUILD) -r -p bb-imager-cli --target $(TARGET) $(_RUST_ARGS_CLI) $(_RUST_ARGS-linux)
+	$(RUST_BUILD) -r -p gem-imager-cli --target $(TARGET) $(_RUST_ARGS_CLI) $(_RUST_ARGS-linux)
 
 .PHONY: _build-cli-comp
 _build-cli-comp: _build-cli-bin
 	$(info Copy CLI shell completion)
-	@test -n "$(_CLI_OUT_DIR)" || { echo "bb-imager-cli build output not found; build the CLI first" >&2; exit 1; }
-	rm -rf bb-imager-cli/dist/.target/shell-comp
-	mkdir -p bb-imager-cli/dist/.target/shell-comp
-	cp $(_CLI_OUT_DIR)/shell-comp/* bb-imager-cli/dist/.target/shell-comp/
+	@test -n "$(_CLI_OUT_DIR)" || { echo "gem-imager-cli build output not found; build the CLI first" >&2; exit 1; }
+	rm -rf gem-imager-cli/dist/.target/shell-comp
+	mkdir -p gem-imager-cli/dist/.target/shell-comp
+	cp $(_CLI_OUT_DIR)/shell-comp/* gem-imager-cli/dist/.target/shell-comp/
 
 .PHONY: _build-cli-man
 _build-cli-man: _build-cli-bin
 	$(info Copy CLI manpages)
-	@test -n "$(_CLI_OUT_DIR)" || { echo "bb-imager-cli build output not found; build the CLI first" >&2; exit 1; }
-	rm -rf bb-imager-cli/dist/.target/man
-	mkdir -p bb-imager-cli/dist/.target/man
-	cp $(_CLI_OUT_DIR)/man/*.1 bb-imager-cli/dist/.target/man/
-	gzip -f bb-imager-cli/dist/.target/man/*.1
+	@test -n "$(_CLI_OUT_DIR)" || { echo "gem-imager-cli build output not found; build the CLI first" >&2; exit 1; }
+	rm -rf gem-imager-cli/dist/.target/man
+	mkdir -p gem-imager-cli/dist/.target/man
+	cp $(_CLI_OUT_DIR)/man/*.1 gem-imager-cli/dist/.target/man/
+	gzip -f gem-imager-cli/dist/.target/man/*.1
 
 ## build: build-gui: Build GUI.
 .PHONY: build-winusb-helper
 build-winusb-helper:
 ifeq ($(TARGET),x86_64-pc-windows-msvc)
 	$(info Build consoleless WinUSB helper for $(TARGET))
-	$(RUST_BUILD) -r -p bb-winusb-helper --target $(TARGET) $(_RUST_ARGS)
+	$(RUST_BUILD) -r -p gem-winusb-helper --target $(TARGET) $(_RUST_ARGS)
 endif
 
 .PHONY: build-gui
 build-gui: build-winusb-helper
 	$(info Build GUI for $(TARGET))
-	$(RUST_BUILD) -r -p bb-imager-gui --target $(TARGET) $(_RUST_ARGS_GUI)
+	$(RUST_BUILD) -r -p gem-imager-gui --target $(TARGET) $(_RUST_ARGS_GUI)
 
 ## build: build-cli: Build CLI and complementary stuff.
 .PHONY: build-cli
@@ -442,36 +441,36 @@ build-cli: _build-cli-bin _build-cli-man _build-cli-comp
 .PHONY: install-cli
 install-cli:
 	$(info Install CLI)
-	install -Dm755 $(_CLI_BIN) $(DESTDIR)$(BINDIR)/bb-imager-cli
+	install -Dm755 $(_CLI_BIN) $(DESTDIR)$(BINDIR)/gem-imager-cli
 	mkdir -p $(DESTDIR)$(MANDIR)/man1
-	install -m644 bb-imager-cli/dist/.target/man/*.gz $(DESTDIR)$(MANDIR)/man1/
-	install -Dm644 $(_CLI_COMP_BASH) $(DESTDIR)$(BASH_COMPLETIONDIR)/bb-imager-cli
-	install -Dm644 $(_CLI_COMP_ZSH) $(DESTDIR)$(ZSH_COMPLETIONDIR)/_bb-imager-cli
+	install -m644 gem-imager-cli/dist/.target/man/*.gz $(DESTDIR)$(MANDIR)/man1/
+	install -Dm644 $(_CLI_COMP_BASH) $(DESTDIR)$(BASH_COMPLETIONDIR)/gem-imager-cli
+	install -Dm644 $(_CLI_COMP_ZSH) $(DESTDIR)$(ZSH_COMPLETIONDIR)/_gem-imager-cli
 
 ## install: uninstall-cli: Uninstall CLI. Intended for use in Linux
 .PHONY: uninstall-cli
 uninstall-cli:
 	$(info Uninstall CLI)
-	rm -f $(DESTDIR)$(BINDIR)/bb-imager-cli
-	rm -f $(DESTDIR)$(MANDIR)/man1/bb-imager-cli*.gz
-	rm -f $(DESTDIR)$(BASH_COMPLETIONDIR)/bb-imager-cli
-	rm -f $(DESTDIR)$(ZSH_COMPLETIONDIR)/_bb-imager-cli
+	rm -f $(DESTDIR)$(BINDIR)/gem-imager-cli
+	rm -f $(DESTDIR)$(MANDIR)/man1/gem-imager-cli*.gz
+	rm -f $(DESTDIR)$(BASH_COMPLETIONDIR)/gem-imager-cli
+	rm -f $(DESTDIR)$(ZSH_COMPLETIONDIR)/_gem-imager-cli
 
 _install_gui:
 	$(info Install GUI)
-	install -Dm755 $(_GUI_BIN) $(DESTDIR)$(BINDIR)/bb-imager-gui
-	install -Dm644 bb-imager-gui/assets/packages/linux/T3GemstoneImager.desktop $(DESTDIR)$(DESKTOP_DIR)/$(GUI_NAME).desktop
+	install -Dm755 $(_GUI_BIN) $(DESTDIR)$(BINDIR)/gem-imager-gui
+	install -Dm644 gem-imager-gui/assets/packages/linux/T3GemstoneImager.desktop $(DESTDIR)$(DESKTOP_DIR)/$(GUI_NAME).desktop
 	desktop-file-edit --set-icon=$(GUI_NAME) $(DESTDIR)$(DESKTOP_DIR)/$(GUI_NAME).desktop
-	install -Dm644 bb-imager-gui/assets/icons/icon.png $(DESTDIR)$(ICONS_DIR)/hicolor/128x128/apps/$(GUI_NAME).png
-	install -Dm644 bb-imager-gui/assets/packages/linux/flatpak/org.t3gemstone.imager.metainfo.xml $(DESTDIR)$(METAINFO_DIR)/$(GUI_NAME).metainfo.xml
+	install -Dm644 gem-imager-gui/assets/icons/icon.png $(DESTDIR)$(ICONS_DIR)/hicolor/128x128/apps/$(GUI_NAME).png
+	install -Dm644 gem-imager-gui/assets/packages/linux/flatpak/org.t3gemstone.imager.metainfo.xml $(DESTDIR)$(METAINFO_DIR)/$(GUI_NAME).metainfo.xml
 
 ## install: install-gui: Install GUI. Intended for use in Linux.
 .PHONY: install-gui
 install-gui: _install_gui
-	install -Dm644 bb-imager-gui/assets/packages/linux/udev/10-t3gemstone.rules $(DESTDIR)$(UDEV_RULESDIR)/10-t3gemstone.rules
+	install -Dm644 gem-imager-gui/assets/packages/linux/udev/10-t3gemstone.rules $(DESTDIR)$(UDEV_RULESDIR)/10-t3gemstone.rules
 
 _fetch-gui-deps:
-	$(CARGO_PATH) fetch ${_RUST_ARGS_BASE} --manifest-path bb-imager-gui/Cargo.toml
+	$(CARGO_PATH) fetch ${_RUST_ARGS_BASE} --manifest-path gem-imager-gui/Cargo.toml
 
 ## package: package-gui-flatpak: Build and install package in flatpak. Intended for use in flatpak manifest.
 .PHONY: package-gui-flatpak
@@ -482,7 +481,7 @@ package-gui-flatpak:
 .PHONY: uninstall-gui
 uninstall-gui:
 	$(info Uninstall GUI)
-	rm -f $(DESTDIR)$(BINDIR)/bb-imager-gui
+	rm -f $(DESTDIR)$(BINDIR)/gem-imager-gui
 	rm -f $(DESTDIR)$(UDEV_RULESDIR)/10-t3gemstone.rules
 	rm -f $(DESTDIR)$(DESKTOP_DIR)/$(GUI_NAME).desktop
 	rm -f $(DESTDIR)$(ICONS_DIR)/hicolor/128x128/apps/$(GUI_NAME).png
@@ -492,7 +491,7 @@ uninstall-gui:
 .PHONY: package-gui-portable-exe
 package-gui-portable-exe: build-gui
 	$(info Building portable windows exe for $(TARGET))
-	mkdir -p bb-imager-gui/dist
+	mkdir -p gem-imager-gui/dist
 	cp $(_GUI_BIN) $(_GUI_PORTABLE_EXE)
 
 ## package: package-gui-portable-zip: Build the x64 Windows GUI, helper and libwdi bundle.
@@ -524,4 +523,4 @@ package-gui-snap:
 ## housekeeping: debug-gui: Run GUI in debug mode. Provides access to comet with F12.
 .PHONY: debug-gui
 debug-gui:
-	$(_DIOXUS_CLI) serve -p bb-imager-gui ${_RUST_ARGS_GUI} --features debug
+	$(_DIOXUS_CLI) serve -p gem-imager-gui ${_RUST_ARGS_GUI} --features debug

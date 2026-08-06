@@ -12,7 +12,7 @@ if (-not $BuildRoot) {
     $BuildRoot = Join-Path $repoRoot 'target\libwdi-build'
 }
 $BuildRoot = [System.IO.Path]::GetFullPath($BuildRoot)
-$sourceArchive = Join-Path $repoRoot 'bb-winusb\third_party\libwdi\libwdi-v1.5.1.zip'
+$sourceArchive = Join-Path $repoRoot 'gem-winusb\third_party\libwdi\libwdi-v1.5.1.zip'
 $expectedSourceHash = 'D74D27FDDBF5546C6A22A00FB67F9FC61A60B4AD9A7E974E9875E9CEE39BFAC7'
 $expectedWdfHash = '29314207814CE9D5D73695F7E9239539CF37C79E750B9D5EA5A5EF5487A583D6'
 $pinnedDllHash = 'C9F0AAA5A1B0A71B1740256168E3F0A870E979149765F0E2778B160377B69F27'
@@ -116,7 +116,7 @@ if ($builtHash -ne $pinnedDllHash) {
 }
 
 if ($ReplacePinnedBinary) {
-    $destination = Join-Path $repoRoot 'bb-winusb\native\x86_64-pc-windows-msvc\libwdi.dll'
+    $destination = Join-Path $repoRoot 'gem-winusb\native\x86_64-pc-windows-msvc\libwdi.dll'
     Copy-Item -LiteralPath $builtDll -Destination $destination -Force
     Write-Output "Replaced pinned runtime: $destination"
 }

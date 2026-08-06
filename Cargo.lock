@@ -472,226 +472,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2af50177e190e07a26ab74f8b1efbfe2ef87da2116221318cb1c2e82baf7de06"
 
 [[package]]
-name = "bb-config"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "const-hex",
- "rusqlite",
- "serde",
- "serde_json",
- "serde_with",
- "tempfile",
- "tracing",
- "url",
-]
-
-[[package]]
-name = "bb-downloader"
-version = "0.2.0"
-dependencies = [
- "bb-helper",
- "const-hex",
- "futures-util",
- "httpmock",
- "reqwest",
- "serde",
- "serde_json",
- "sha2",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "tracing",
-]
-
-[[package]]
-name = "bb-drivelist"
-version = "1.0.0"
-dependencies = [
- "objc2 0.6.4",
- "objc2-core-foundation",
- "objc2-disk-arbitration",
- "objc2-foundation 0.3.2",
- "serde",
- "serde_json",
- "thiserror 2.0.18",
- "windows 0.62.2",
-]
-
-[[package]]
-name = "bb-flasher"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bb-flasher-dfu",
- "bb-flasher-sd",
- "bb-helper",
- "chrono-tz",
- "cipher",
- "const-hex",
- "des",
- "getrandom 0.3.4",
- "hmac",
- "liblzma",
- "pbkdf2",
- "qcow2-core",
- "rc-zip-sync",
- "serde",
- "sha-crypt",
- "sha1",
- "sha2",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "tokio-util",
- "tracing",
- "yaml_serde",
- "zeroize",
- "zip",
-]
-
-[[package]]
-name = "bb-flasher-dfu"
-version = "1.0.13"
-dependencies = [
- "bb-config",
- "bb-downloader",
- "bb-helper",
- "const-hex",
- "directories",
- "httpmock",
- "rusb",
- "serde_json",
- "sha2",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "tracing",
- "url",
-]
-
-[[package]]
-name = "bb-flasher-sd"
-version = "3.0.0"
-dependencies = [
- "anyhow",
- "bb-drivelist",
- "bb-helper",
- "const-hex",
- "fatfs",
- "fscommon",
- "gpt",
- "libc",
- "mbrman",
- "nix",
- "security-framework",
- "sha2",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "tracing",
- "udisks2",
- "windows 0.62.2",
-]
-
-[[package]]
-name = "bb-helper"
-version = "1.0.13"
-dependencies = [
- "tempfile",
- "tokio",
-]
-
-[[package]]
-name = "bb-i18n"
-version = "1.0.13"
-
-[[package]]
-name = "bb-iced-widgets"
-version = "1.0.13"
-dependencies = [
- "iced",
- "iced_aw",
- "image",
-]
-
-[[package]]
-name = "bb-imager-cli"
-version = "1.0.13"
-dependencies = [
- "anyhow",
- "bb-flasher",
- "bb-flasher-sd",
- "clap",
- "clap_complete",
- "clap_mangen",
- "console",
- "indicatif",
- "tempfile",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "bb-imager-gui"
-version = "1.0.13"
-dependencies = [
- "anyhow",
- "ashpd",
- "bb-config",
- "bb-downloader",
- "bb-flasher",
- "bb-helper",
- "bb-i18n",
- "bb-iced-widgets",
- "bb-winusb",
- "chrono",
- "chrono-tz",
- "const-hex",
- "directories",
- "embed-resource",
- "iana-time-zone",
- "iced",
- "iced_aw",
- "image",
- "libc",
- "notify-rust",
- "rfd",
- "rusqlite",
- "semver",
- "serde",
- "serde_json",
- "sha2",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "tokio-util",
- "tracing",
- "tracing-subscriber",
- "url",
- "webbrowser",
- "whoami",
- "windows-sys 0.61.2",
-]
-
-[[package]]
-name = "bb-winusb"
-version = "1.0.13"
-dependencies = [
- "rusb",
- "sha2",
- "windows-sys 0.61.2",
-]
-
-[[package]]
-name = "bb-winusb-helper"
-version = "1.0.13"
-dependencies = [
- "bb-winusb",
- "embed-resource",
-]
-
-[[package]]
 name = "bincode"
 version = "1.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2074,6 +1854,226 @@ dependencies = [
  "memchr",
  "pin-project-lite",
  "slab",
+]
+
+[[package]]
+name = "gem-config"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "const-hex",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "serde_with",
+ "tempfile",
+ "tracing",
+ "url",
+]
+
+[[package]]
+name = "gem-downloader"
+version = "0.2.0"
+dependencies = [
+ "const-hex",
+ "futures-util",
+ "gem-helper",
+ "httpmock",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "gem-drivelist"
+version = "1.0.0"
+dependencies = [
+ "objc2 0.6.4",
+ "objc2-core-foundation",
+ "objc2-disk-arbitration",
+ "objc2-foundation 0.3.2",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "windows 0.62.2",
+]
+
+[[package]]
+name = "gem-flasher"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono-tz",
+ "cipher",
+ "const-hex",
+ "des",
+ "gem-flasher-dfu",
+ "gem-flasher-sd",
+ "gem-helper",
+ "getrandom 0.3.4",
+ "hmac",
+ "liblzma",
+ "pbkdf2",
+ "qcow2-core",
+ "rc-zip-sync",
+ "serde",
+ "sha-crypt",
+ "sha1",
+ "sha2",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "yaml_serde",
+ "zeroize",
+ "zip",
+]
+
+[[package]]
+name = "gem-flasher-dfu"
+version = "1.0.13"
+dependencies = [
+ "const-hex",
+ "directories",
+ "gem-config",
+ "gem-downloader",
+ "gem-helper",
+ "httpmock",
+ "rusb",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "url",
+]
+
+[[package]]
+name = "gem-flasher-sd"
+version = "3.0.0"
+dependencies = [
+ "anyhow",
+ "const-hex",
+ "fatfs",
+ "fscommon",
+ "gem-drivelist",
+ "gem-helper",
+ "gpt",
+ "libc",
+ "mbrman",
+ "nix",
+ "security-framework",
+ "sha2",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "udisks2",
+ "windows 0.62.2",
+]
+
+[[package]]
+name = "gem-helper"
+version = "1.0.13"
+dependencies = [
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
+name = "gem-i18n"
+version = "1.0.13"
+
+[[package]]
+name = "gem-iced-widgets"
+version = "1.0.13"
+dependencies = [
+ "iced",
+ "iced_aw",
+ "image",
+]
+
+[[package]]
+name = "gem-imager-cli"
+version = "1.0.13"
+dependencies = [
+ "anyhow",
+ "clap",
+ "clap_complete",
+ "clap_mangen",
+ "console",
+ "gem-flasher",
+ "gem-flasher-sd",
+ "indicatif",
+ "tempfile",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "gem-imager-gui"
+version = "1.0.13"
+dependencies = [
+ "anyhow",
+ "ashpd",
+ "chrono",
+ "chrono-tz",
+ "const-hex",
+ "directories",
+ "embed-resource",
+ "gem-config",
+ "gem-downloader",
+ "gem-flasher",
+ "gem-helper",
+ "gem-i18n",
+ "gem-iced-widgets",
+ "gem-winusb",
+ "iana-time-zone",
+ "iced",
+ "iced_aw",
+ "image",
+ "libc",
+ "notify-rust",
+ "rfd",
+ "rusqlite",
+ "semver",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "tracing-subscriber",
+ "url",
+ "webbrowser",
+ "whoami",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "gem-winusb"
+version = "1.0.13"
+dependencies = [
+ "rusb",
+ "sha2",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "gem-winusb-helper"
+version = "1.0.13"
+dependencies = [
+ "embed-resource",
+ "gem-winusb",
 ]
 
 [[package]]

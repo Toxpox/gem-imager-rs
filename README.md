@@ -19,13 +19,13 @@ Install a current stable Rust toolchain and Git LFS, then clone and run the appl
 git lfs install
 git clone https://github.com/Toxpox/gem-imager-rs.git
 cd gem-imager-rs
-cargo run -p bb-imager-gui
+cargo run -p gem-imager-gui
 ```
 
 The command-line interface is also available:
 
 ```sh
-cargo run -p bb-imager-cli -- --help
+cargo run -p gem-imager-cli -- --help
 ```
 
 ## Development

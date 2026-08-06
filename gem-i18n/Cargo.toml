@@ -1,0 +1,12 @@
+[package]
+name = "gem-i18n"
+description = "Turkish and English user-facing strings for the T3 Gemstone Imager."
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+repository.workspace = true
+license.workspace = true
+
+# Intentionally dependency-free. The catalog is a compile-time table, so a missing translation is
+# a build error rather than a runtime fallback, and `cargo deny check` gains no new surface.
+[dependencies]

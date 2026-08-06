@@ -2,7 +2,7 @@
 # Going to just a component in mult-repo docsite in the future.
 
 site:
-  title: BeagleBoard Imaging Utility
+  title: T3 Gemstone Imager
   start_page: t3gemstone-imager::index.adoc
 
 content:

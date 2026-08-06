@@ -6,11 +6,11 @@ license: MIT
 contact:
   - https://docs.t3gemstone.org/en
 issues:
-  - https://github.com/t3gemstone/imager/issues
+  - https://github.com/Toxpox/gem-imager-rs/issues
 website:
   - https://docs.t3gemstone.org
 source-code:
-  - https://github.com/t3gemstone/imager
+  - https://github.com/Toxpox/gem-imager-rs
 summary: Tool for creating, flashing, and managing OS images for T3 Gemstone boards.
 description: |
   A streamlined command line tool to write T3 Gemstone OS images to SD cards.
@@ -19,7 +19,7 @@ grade: stable
 confinement: classic
 
 parts:
-  bb-imager-cli:
+  gem-imager-cli:
     # See 'snapcraft plugins'
     plugin: rust
     rust-channel: stable

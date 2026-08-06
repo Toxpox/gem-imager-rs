@@ -43,7 +43,7 @@ parts:
 
 apps:
   t3gemstone-imager:
-    command: usr/bin/bb-imager-gui
+    command: usr/bin/gem-imager-gui
     common-id: org.t3gemstone.imager
     plugs:
       # Downloading firmware/iso from network.

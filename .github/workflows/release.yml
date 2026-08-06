@@ -50,8 +50,8 @@ jobs:
       with:
         name: artifacts-${{ matrix.platform }}
         path: |
-          bb-imager-gui/dist/*
-          bb-imager-cli/dist/*
+          gem-imager-gui/dist/*
+          gem-imager-cli/dist/*
 
   linux-snap-job:
     strategy:
@@ -79,10 +79,10 @@ jobs:
 
     - name: Move to dist folders
       run: |
-        mkdir -p bb-imager-cli/dist/
-        mkdir -p bb-imager-gui/dist/
-        mv bb-imager-cli_*.snap bb-imager-cli/dist/ 2>/dev/null || true
-        mv bb-imager_*.snap bb-imager-gui/dist/ 2>/dev/null || true
+        mkdir -p gem-imager-cli/dist/
+        mkdir -p gem-imager-gui/dist/
+        mv gem-imager-cli_*.snap gem-imager-cli/dist/ 2>/dev/null || true
+        mv gem-imager_*.snap gem-imager-gui/dist/ 2>/dev/null || true
 
     # Do not do versioning for Pre-Release packages
     - name: Rename Pre-Release Packages
@@ -94,8 +94,8 @@ jobs:
       with:
         name: artifacts-snap-${{ matrix.platform }}
         path: |
-          bb-imager-gui/dist/*
-          bb-imager-cli/dist/*
+          gem-imager-gui/dist/*
+          gem-imager-cli/dist/*
 
   linux-snap-cross-job:
     strategy:
@@ -123,8 +123,8 @@ jobs:
 
     - name: Move to dist folders
       run: |
-        mkdir -p bb-imager-cli/dist/
-        mv bb-imager-cli_*.snap bb-imager-cli/dist/
+        mkdir -p gem-imager-cli/dist/
+        mv gem-imager-cli_*.snap gem-imager-cli/dist/
 
     # Do not do versioning for Pre-Release packages
     - name: Rename Pre-Release Packages
@@ -136,7 +136,7 @@ jobs:
       with:
         name: artifacts-snap-cli-${{ matrix.platform }}
         path: |
-          bb-imager-cli/dist/*
+          gem-imager-cli/dist/*
 
   linux-cross-job:
     strategy:
@@ -157,7 +157,7 @@ jobs:
       with:
         command: build
         target: ${{matrix.platform}}
-        args: "--locked --release -F dfu -p bb-imager-cli"
+        args: "--locked --release -F dfu -p gem-imager-cli"
 
     - name: Build packages
       run: make setup-packaging-deps package-${{matrix.platform}}
@@ -172,7 +172,7 @@ jobs:
       with:
         name: artifacts-${{matrix.platform}}
         path: |
-          bb-imager-cli/dist/*
+          gem-imager-cli/dist/*
 
   vendor-deps:
     name: Vendor dependencies
@@ -207,7 +207,7 @@ jobs:
         
     # The ENV variable names are what cargo-packager requires
     - name: Setup macos signing
-      working-directory: bb-imager-gui
+      working-directory: gem-imager-gui
       if: github.event_name != 'pull_request'
       run: |
         echo "" >> Cargo.toml
@@ -233,7 +233,7 @@ jobs:
       with:
         name: artifacts-macos
         path: |
-          bb-imager-gui/dist/*
+          gem-imager-gui/dist/*
 
   windows-job:
     name: Build Windows Artifacts
@@ -268,7 +268,7 @@ jobs:
       with:
         name: artifacts-windows
         path: |
-          bb-imager-gui/dist/*
+          gem-imager-gui/dist/*
 
   release:
     name: Upload Release artifacts
@@ -316,7 +316,7 @@ jobs:
       - name: Publish Snaps
         run: |
           for pkg in gui; do
-            for file in artifacts/bb-imager-$pkg/dist/*.snap; do
+            for file in artifacts/gem-imager-$pkg/dist/*.snap; do
               snapcraft upload "$file" --release=$SNAP_CHANNEL;
             done
           done
@@ -344,7 +344,7 @@ jobs:
           git config --global user.name "T3 Gemstone Devteam"
 
       - name: Clone AUR repo
-        run: git clone ssh://aur@aur.archlinux.org/bb-imager-cli.git $GITHUB_WORKSPACE
+        run: git clone ssh://aur@aur.archlinux.org/gem-imager-cli.git $GITHUB_WORKSPACE
 
       - name: Validate package
         uses: heyhusen/archlinux-package-action@v2

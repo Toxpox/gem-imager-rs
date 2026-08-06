@@ -1,7 +1,7 @@
 = Install BeagleBoard Imaging Utility (GUI)
 
-:base-download-url: https://github.com/beagleboard/bb-imager-rs/releases/download/{page-component-version}
-:gui-url-prefix: {base-download-url}/bb-imager-gui_{page-component-version}
+:base-download-url: https://github.com/Toxpox/gem-imager-rs/releases/download/{page-component-version}
+:gui-url-prefix: {base-download-url}/gem-imager-gui_{page-component-version}
 :macos-url-prefix: {base-download-url}/BeagleBoard.Imaging.Utility_{page-component-version}
 
 This page explains how to install the graphical version of the BeagleBoard Imaging Utility.  
@@ -32,7 +32,7 @@ Choose the option that best matches your operating system.
 
 | Snap
 | Recommended for distros that do not support Flatpak. Sandboxed, automatic updates.
-| https://snapcraft.io/bb-imager[Snap]
+| https://snapcraft.io/t3gemstone-imager[Snap]
 
 | AppImage
 | Portable single-file download. No installation required.
@@ -95,7 +95,7 @@ The Snap package is ideal for the Ubuntu family of Linux distributions.
 
 [source,shell]
 ----
-snap install bb-imager
+snap install gem-imager
 ----
 
 [NOTE]
@@ -121,7 +121,7 @@ snap set system experimental.hotplug=true
 systemctl restart snapd
 
 # Connect the serial port interface
-snap connect bb-imager:serial-port
+snap connect gem-imager:serial-port
 ----
 
 ==== AppImage
@@ -130,8 +130,8 @@ AppImage is useful if you prefer a portable, self-contained executable.
 
 [source,shell]
 ----
-chmod +x bb-imager-*.AppImage
-./bb-imager-*.AppImage
+chmod +x gem-imager-*.AppImage
+./gem-imager-*.AppImage
 ----
 
 ==== Enable Serial Flashing Support (Optional)
@@ -153,7 +153,7 @@ sudo nano /etc/udev/rules.d/99-beagleboard-imager.rules
 +
 [source,text]
 ----
-include::example$10-beagle.rules[]
+include::example$10-t3gemstone.rules[]
 ----
 
 . Reload the rules to apply the changes immediately:

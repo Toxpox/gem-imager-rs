@@ -1,0 +1,28 @@
+[package]
+name = "gem-flasher-dfu"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[dependencies]
+rusb = "0.9"
+# Enumeration reports why a present-but-unopenable board was listed as unusable; the exact libusb
+# error belongs in the log rather than in the user-facing message.
+tracing = "0.1"
+sha2 = "0.10"
+thiserror = "2.0"
+gem-helper = { path = "../gem-helper", features = ["cancel", "reader_progress"] }
+gem-config = { path = "../gem-config", default-features = false }
+gem-downloader = { path = "../gem-downloader", features = ["json"] }
+directories = "6.0"
+serde_json = "1.0"
+tempfile = "3.27"
+tokio = { version = "1.52", default-features = false, features = ["rt"] }
+url = "2.5"
+
+[dev-dependencies]
+const-hex = "1.19"
+httpmock = "0.8"
+tokio = { version = "1.52", features = ["macros", "rt-multi-thread"] }

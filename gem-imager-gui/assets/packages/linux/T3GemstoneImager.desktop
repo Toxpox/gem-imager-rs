@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=T3 Gemstone Imager
+Name[tr]=T3 Gemstone Imager
+Comment=Write T3 Gemstone OS images to SD cards
+Comment[tr]=T3 Gemstone işletim sistemi imajlarını SD kartlara yazın
+# Overwritten at install time by `desktop-file-edit --set-icon=$(GUI_NAME)`; this value is the
+# default GUI_NAME so a hand-installed copy still resolves its icon.
+Icon=org.t3gemstone.imager
+Exec=gem-imager-gui
+Categories=Utility;
+StartupNotify=false
+X-AppImage-Version=0.0.0

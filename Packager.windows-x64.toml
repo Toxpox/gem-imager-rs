@@ -1,4 +1,4 @@
-name = "bb-imager-gui"
+name = "gem-imager-gui"
 product-name = "T3 Gemstone Imager"
 identifier = "org.t3gemstone.imager"
 version = "1.0.13"
@@ -7,30 +7,30 @@ publisher = "T3 Gemstone"
 description = "Install operating system images for T3 Gemstone boards."
 category = "DeveloperTool"
 target-triple = "x86_64-pc-windows-msvc"
-out-dir = "bb-imager-gui/dist"
+out-dir = "gem-imager-gui/dist"
 binaries-dir = "target/x86_64-pc-windows-msvc/release"
-icons = ["bb-imager-gui/assets/icons/icon.*"]
+icons = ["gem-imager-gui/assets/icons/icon.*"]
 
 [[binaries]]
-path = "bb-imager-gui"
+path = "gem-imager-gui"
 main = true
 
 [[resources]]
-src = "target/x86_64-pc-windows-msvc/release/bb-winusb-helper.exe"
-target = "bb-winusb-helper.exe"
+src = "target/x86_64-pc-windows-msvc/release/gem-winusb-helper.exe"
+target = "gem-winusb-helper.exe"
 
 [[resources]]
-src = "bb-winusb/native/x86_64-pc-windows-msvc/libwdi.dll"
+src = "gem-winusb/native/x86_64-pc-windows-msvc/libwdi.dll"
 target = "libwdi.dll"
 
 [[resources]]
-src = "bb-winusb/third_party/libwdi/COPYING-LGPL"
+src = "gem-winusb/third_party/libwdi/COPYING-LGPL"
 target = "licenses/libwdi/COPYING-LGPL"
 
 [[resources]]
-src = "bb-winusb/third_party/libwdi/Microsoft-WDF-License.rtf"
+src = "gem-winusb/third_party/libwdi/Microsoft-WDF-License.rtf"
 target = "licenses/libwdi/Microsoft-WDF-License.rtf"
 
 [wix]
-banner-path = "bb-imager-gui/assets/icons/installer_banner.png"
-dialog-image-path = "bb-imager-gui/assets/icons/dialog_image.png"
+banner-path = "gem-imager-gui/assets/icons/installer_banner.png"
+dialog-image-path = "gem-imager-gui/assets/icons/dialog_image.png"
