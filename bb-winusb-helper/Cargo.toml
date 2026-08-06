@@ -18,4 +18,3 @@ bb-winusb = { path = "../bb-winusb" }
 
 [build-dependencies]
 embed-resource = "3.0"
-
