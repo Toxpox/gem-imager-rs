@@ -1,7 +1,7 @@
 name = "gem-imager-gui"
 product-name = "T3 Gemstone Imager"
 identifier = "org.t3gemstone.imager"
-version = "1.0.13"
+version = "0.9.0"
 authors = ["T3 Gemstone Devteam <dev@t3gemstone.org>"]
 publisher = "T3 Gemstone"
 description = "Install operating system images for T3 Gemstone boards."
