@@ -40,6 +40,10 @@ pub(crate) enum GemImagerMessage {
     SelectDest(helpers::Destination),
     SelectFileDest(String),
     DestinationFilter(bool),
+    /// Sent by the placeholder row that stands in for an absent DFU target.
+    ShowDfuNotReadyNotice,
+    /// Closes whichever illustrated notice the current screen is showing.
+    DismissNotice,
 
     // Customization Page
     UpdateFlashConfig(crate::helpers::FlashingCustomization),
@@ -346,6 +350,9 @@ pub(crate) fn update(state: &mut GemImager, message: GemImagerMessage) -> Task<G
                 // behind an enabled NEXT button.
                 inner.selected_dest =
                     helpers::keep_selected_destination(inner.selected_dest.take(), &x);
+                // Once a real DFU target shows up the notice is not just stale, it is in the way:
+                // its scrim covers the row that has become clickable. Must run before `x` moves.
+                inner.dfu_notice &= !x.iter().any(|d| d.is_dfu());
                 inner.destinations = x;
             }
         }
@@ -380,6 +387,18 @@ pub(crate) fn update(state: &mut GemImager, message: GemImagerMessage) -> Task<G
                 inner.selected_dest = Some(x);
             }
             _ => panic!("Unexpected message"),
+        },
+        GemImagerMessage::ShowDfuNotReadyNotice => {
+            if let GemImager::ChooseDest(inner) = state {
+                inner.dfu_notice = true;
+            }
+        }
+        // Unlike its neighbours this does not panic on an unexpected screen: a dismissal can race
+        // a screen transition, and losing that race is not a bug worth aborting over.
+        GemImagerMessage::DismissNotice => match state {
+            GemImager::ChooseDest(inner) => inner.dfu_notice = false,
+            GemImager::FlashingSuccess(inner) => inner.notice_dismissed = true,
+            _ => {}
         },
         GemImagerMessage::SelectFileDest(x) => {
             return Task::perform(

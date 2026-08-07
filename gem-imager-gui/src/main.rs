@@ -465,6 +465,7 @@ impl GemImager {
                     filter_destination: true,
                     search_text: String::new(),
                     write_methods,
+                    dfu_notice: false,
                 })
             }
             Self::ChooseDest(inner) => {

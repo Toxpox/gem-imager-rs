@@ -32,6 +32,11 @@ pub(crate) static COPY_ICON: LazyLock<svg::Handle> =
 pub(crate) static SEARCH_ICON: LazyLock<svg::Handle> =
     LazyLock::new(|| svg::Handle::from_memory(constants::SEARCH_ICON_BYTES));
 
+pub(crate) static USB_DFU_BOOTMODE: LazyLock<svg::Handle> =
+    LazyLock::new(|| svg::Handle::from_memory(constants::USB_DFU_BOOTMODE_BYTES));
+pub(crate) static EMMC_BOOTMODE: LazyLock<svg::Handle> =
+    LazyLock::new(|| svg::Handle::from_memory(constants::EMMC_BOOTMODE_BYTES));
+
 pub(crate) const VIEW_COL_PADDING: u16 = 16;
 pub(crate) const LIST_COL_PADDING: iced::Padding = iced::Padding {
     right: 16.0,

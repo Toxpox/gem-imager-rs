@@ -308,6 +308,17 @@ catalog! {
         tr: "Tüm veri gönderildi ancak kart eMMC'ye yazmayı bitirdiğini hiç bildirmedi. eMMC'yi eksik kabul edin: kartın gücünü kesin, boot modunda yeniden bağlayın ve yazmayı tekrarlayın."
     },
     DfuDestinationSubtitle { en: "Onboard eMMC (DFU)", tr: "Karta gömülü eMMC (DFU)" },
+    DfuNotConnectedTitle { en: "Board is not in DFU mode", tr: "Cihaz DFU modunda görünmüyor" },
+    DfuNotConnectedBody {
+        en: "No board in DFU mode is connected. Move the switches on the board to the DFU position.",
+        tr: "DFU ile cihazınız bağlı görünmüyor. Lütfen kart üzerindeki switchleri DFU'ya alınız."
+    },
+    /// Title of the stand-in row shown where a DFU board would be listed when none is connected.
+    ///
+    /// A real DFU row titles itself with the board's USB product string and puts
+    /// [`Msg::DfuDestinationSubtitle`] underneath, so the placeholder keeps that shape: the title
+    /// slot says which board, the subtitle slot says what storage.
+    DfuPlaceholderRowTitle { en: "No board connected", tr: "Bağlı kart yok" },
     StagingSpaceTitle { en: "Not enough disk space", tr: "Yeterli disk alanı yok" },
     StagingSpaceBody {
         en: "Writing to eMMC first prepares a full copy of the image on this computer, and there is not enough free space for it. Free up space and try again; the board was not touched.",

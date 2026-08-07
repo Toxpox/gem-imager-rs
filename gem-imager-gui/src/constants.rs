@@ -55,6 +55,15 @@ pub(crate) const INFO_ICON_BYTES: &[u8] = include_bytes!("../assets/icons/info.s
 pub(crate) const COPY_ICON_BYTES: &[u8] = include_bytes!("../assets/icons/content-copy.svg");
 pub(crate) const SEARCH_ICON_BYTES: &[u8] = include_bytes!("../assets/icons/search.svg");
 
+// Boot mode illustrations
+pub(crate) const USB_DFU_BOOTMODE_BYTES: &[u8] =
+    include_bytes!("../assets/icons/usb-dfu-bootmode.svg");
+pub(crate) const EMMC_BOOTMODE_BYTES: &[u8] = include_bytes!("../assets/icons/emmc-bootmode.svg");
+
+/// Width for modals that carry an illustration. The plain text dialog reads fine at 680, but the
+/// DIP switch labels in these diagrams do not.
+pub(crate) const ILLUSTRATED_DIALOG_WIDTH: f32 = 960.0;
+
 // Font
 pub(crate) const FONT_REGULAR: iced::Font = iced::Font::with_name("Nunito");
 pub(crate) const FONT_BOLD: iced::Font = {

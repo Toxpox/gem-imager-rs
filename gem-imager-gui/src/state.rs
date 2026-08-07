@@ -252,9 +252,31 @@ pub(crate) struct ChooseDestState {
     /// enumeration subscription and the instructions can never disagree about whether DFU is on
     /// offer.
     pub(crate) write_methods: helpers::WriteMethods,
+    /// Whether the "board is not in DFU mode" notice is open.
+    ///
+    /// Kept per screen rather than on [`GemImagerCommon`], which is carried verbatim through every
+    /// `From` conversion as well as `restart()` and `back()` — a modal parked there would follow
+    /// the user all the way through Customize, Review and Flashing.
+    pub(crate) dfu_notice: bool,
 }
 
 impl ChooseDestState {
+    /// Whether to show the placeholder row standing in for an absent DFU target.
+    ///
+    /// All three conditions are load-bearing:
+    /// - `write_methods.dfu`: on a board/image pair that cannot use DFU the row must never appear.
+    /// - `search_text.is_empty()`: the search filter is applied inside the enumeration
+    ///   subscription, so while a search is active an empty `destinations` says nothing about
+    ///   whether a board is attached.
+    /// - no real DFU target listed: one or more real rows suppress the placeholder.
+    pub(crate) fn show_dfu_placeholder(&self) -> bool {
+        show_dfu_placeholder(
+            self.write_methods.dfu,
+            &self.search_text,
+            self.destinations.iter().any(|d| d.is_dfu()),
+        )
+    }
+
     pub(crate) fn destinations<'a>(&'a self) -> impl Iterator<Item = DestinationItem<'a>> + 'a {
         let iter = self.destinations.iter().map(DestinationItem::Destination);
 
@@ -278,6 +300,16 @@ impl ChooseDestState {
     }
 }
 
+/// The placeholder-row predicate, split out from [`ChooseDestState`] so it can be exercised
+/// without standing up a board, an image and a full common state around it.
+fn show_dfu_placeholder(
+    board_supports_dfu: bool,
+    search_text: &str,
+    a_real_dfu_target_is_listed: bool,
+) -> bool {
+    board_supports_dfu && search_text.is_empty() && !a_real_dfu_target_is_listed
+}
+
 impl From<CustomizeState> for ChooseDestState {
     fn from(value: CustomizeState) -> Self {
         // Recomputed rather than carried along: going BACK is also how a user reaches this screen
@@ -294,6 +326,8 @@ impl From<CustomizeState> for ChooseDestState {
             filter_destination: true,
             search_text: String::new(),
             write_methods,
+            // Arriving here via BACK must not resurrect a notice the user already dismissed.
+            dfu_notice: false,
         }
     }
 }
@@ -537,6 +571,16 @@ pub(crate) struct FlashingFinishState {
     pub(crate) common: GemImagerCommon,
     pub(crate) selected_board: Board,
     pub(crate) is_download: bool,
+    /// Whether the write that just ended went over DFU.
+    ///
+    /// Recorded here because `selected_dest` does not survive the conversion, and because
+    /// `!is_download` is not a stand-in: an SD card write is not a download either.
+    pub(crate) is_dfu: bool,
+    /// Whether the user has closed the "switch back to eMMC" notice.
+    ///
+    /// The notice is open on entry, so there is no separate "show" flag; visibility is
+    /// `is_dfu && !notice_dismissed`.
+    pub(crate) notice_dismissed: bool,
 }
 
 impl From<FlashingState> for FlashingFinishState {
@@ -545,6 +589,8 @@ impl From<FlashingState> for FlashingFinishState {
             common: value.common,
             selected_board: value.selected_board,
             is_download: value.is_download,
+            is_dfu: value.selected_dest.is_dfu(),
+            notice_dismissed: false,
         }
     }
 }
@@ -687,9 +733,33 @@ impl OverlayState {
 
 #[cfg(test)]
 mod tests {
-    use super::{flash_phase, time_remaining_from};
+    use super::{flash_phase, show_dfu_placeholder, time_remaining_from};
     use gem_flasher::DownloadFlashingStatus;
     use std::time::Duration;
+
+    #[test]
+    fn placeholder_hidden_when_board_lacks_dfu_support() {
+        assert!(!show_dfu_placeholder(false, "", false));
+    }
+
+    /// Regression lock. The search filter is applied inside the enumeration subscription, so while
+    /// a search is active `destinations` is empty for reasons that have nothing to do with whether
+    /// a board is attached. Without this condition the notice would claim "not connected" about a
+    /// board that is physically plugged in.
+    #[test]
+    fn placeholder_hidden_while_searching() {
+        assert!(!show_dfu_placeholder(true, "sd", false));
+    }
+
+    #[test]
+    fn placeholder_hidden_when_a_real_dfu_target_is_listed() {
+        assert!(!show_dfu_placeholder(true, "", true));
+    }
+
+    #[test]
+    fn placeholder_shown_when_dfu_supported_and_nothing_enumerated() {
+        assert!(show_dfu_placeholder(true, "", false));
+    }
 
     /// The whole point of the shared axis: every phase of a DFU write, in the order the backend
     /// emits them, must produce a non-decreasing fraction. Before this, staging ended near the top

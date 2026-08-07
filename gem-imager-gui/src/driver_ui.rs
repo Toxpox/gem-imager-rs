@@ -34,6 +34,16 @@ impl DfuDriverUiState {
         &self.panel
     }
 
+    /// Whether any DFU device is on the bus at all, driver or no driver.
+    ///
+    /// `NeedsInstall` means the board *is* in DFU mode but Windows has no driver bound, so
+    /// enumeration returns nothing. Telling that user to flip the switches would be telling them
+    /// to redo what they already did — and `driver_prompt` is at the same moment offering the
+    /// actual fix.
+    pub(crate) fn device_present(&self) -> bool {
+        !matches!(self.last_probe, DriverState::NoDevice)
+    }
+
     pub(crate) fn on_probe(&mut self, state: DriverState) {
         if state == self.last_probe {
             return;
@@ -161,6 +171,37 @@ mod tests {
         let mut state = DfuDriverUiState::default();
         state.on_probe(DriverState::ReadyWinUsb);
         assert_eq!(state.panel(), &DriverPanel::Hidden);
+    }
+
+    /// `NoDevice` is the only probe result that means "nothing is plugged in". Every other one —
+    /// `NeedsInstall` most of all — describes a board that *is* on the bus, which is why the
+    /// "move the switches to DFU" notice must stay shut for all of them.
+    #[test]
+    fn device_present_is_false_only_for_no_device() {
+        let present = [
+            DriverState::ReadyWinUsb,
+            DriverState::ReadyExternal {
+                service: "libusbK".into(),
+            },
+            DriverState::NeedsInstall,
+            DriverState::DriverConflict {
+                service: Some("usbccgp".into()),
+                problem_code: 10,
+            },
+        ];
+
+        let mut state = DfuDriverUiState::default();
+        assert!(!state.device_present(), "default probe is NoDevice");
+
+        for probe in present {
+            state.on_probe(probe.clone());
+            assert!(
+                state.device_present(),
+                "{probe:?} means a board is attached"
+            );
+            state.on_probe(DriverState::NoDevice);
+            assert!(!state.device_present());
+        }
     }
 
     #[test]

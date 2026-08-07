@@ -58,18 +58,50 @@ fn dest_list_pane<'a>(state: &'a ChooseDestState) -> Element<'a, GemImagerMessag
         })
         .map(Into::into);
 
+    let lang = state.common.lang();
+
     let filter_toggle = widget::container(
         widget::toggler(!state.filter_destination)
-            .label(state.common.lang().text(Msg::ShowAllDestinations))
+            .label(lang.text(Msg::ShowAllDestinations))
             .on_toggle(|x| GemImagerMessage::DestinationFilter(!x)),
     )
     .padding(16);
 
+    let mut header: Vec<Element<'a, GemImagerMessage>> =
+        vec![filter_toggle.into(), helpers::list_separator()];
+
+    // A stand-in for the DFU target the board would expose if it were in DFU mode. It lives in the
+    // header slot rather than as a `DestinationItem` variant so that it stays out of the selection
+    // machinery entirely: `selected_dest` is never touched, so NEXT stays disabled on its own.
+    if state.show_dfu_placeholder() {
+        let icon: Element<GemImagerMessage> = widget::svg(helpers::USB_ICON.clone())
+            .height(ICON_WIDTH)
+            .width(ICON_WIDTH)
+            .style(svg_icon_style)
+            .into();
+
+        let label: Element<GemImagerMessage> = widget::column![
+            text(lang.text(Msg::DfuPlaceholderRowTitle)).size(18),
+            text(lang.text(Msg::DfuDestinationSubtitle)),
+        ]
+        .width(iced::Length::Fill)
+        .into();
+
+        header.push(
+            helpers::list_item(
+                [icon, label],
+                false,
+                GemImagerMessage::ShowDfuNotReadyNotice,
+            )
+            .into(),
+        );
+    }
+
     helpers::list_pane(
         &state.search_text,
         &state.common.scroll_id,
-        state.common.lang(),
-        [filter_toggle.into(), helpers::list_separator()],
+        lang,
+        header,
         items,
     )
 }
