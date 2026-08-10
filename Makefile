@@ -169,6 +169,7 @@ _check_cli:
 	$(_CARGO_CHECK) --all-targets -p gem-imager-cli ${_RUST_ARGS_CLI}
 
 _check_gui:
+	$(_CARGO_CHECK) --all-targets -p gem-imager-gui ${_RUST_ARGS_BASE}
 	$(_CARGO_CHECK) --all-targets -p gem-imager-gui ${_RUST_ARGS_GUI} -F updater,pre-release
 	
 ## housekeeping: check: Run code quality checks.

@@ -5,6 +5,15 @@ use crate::constants::DEFAULT_CONFIG;
 use super::*;
 use gem_config::Config;
 
+// Every fixture board below declares `Flasher::SdCard`, and `Db::add_config_internal` drops
+// devices that `crate::helpers::flasher_supported` rejects. That function only accepts `SdCard`
+// when the `sd` feature is on, and `sd` is not in this crate's default set, so a bare
+// `cargo test --workspace` builds a binary in which no board can ever be inserted.
+//
+// Board-dependent tests therefore carry `#[cfg_attr(not(feature = "sd"), ignore = ...)]`: they
+// stay listed and compiled in every configuration, and run in the one the shipped binary is
+// actually built with (`make` passes `--features sd,dfu`; see the `test-gui` target).
+
 /// This test verifies that database initialization correctly loads
 /// remote configuration URLs from DEFAULT_CONFIG.
 ///
@@ -180,6 +189,10 @@ fn add_config_does_not_duplicate_remote_configs() {
 /// - Ensures board_list() retrieves devices from DB
 /// - Verifies basic device storage pipeline
 #[test]
+#[cfg_attr(
+    not(feature = "sd"),
+    ignore = "needs `sd`: fixture boards use Flasher::SdCard"
+)]
 fn add_config_inserts_device_into_board_list() {
     let db = Db::new().expect("Failed to create DB");
 
@@ -248,6 +261,10 @@ fn add_config_inserts_device_into_board_list() {
 /// - Ensures add_config() performs an upsert
 /// - Ensures board_by_id() returns updated fields
 #[test]
+#[cfg_attr(
+    not(feature = "sd"),
+    ignore = "needs `sd`: fixture boards use Flasher::SdCard"
+)]
 fn add_config_updates_existing_device_with_same_name() {
     let db = Db::new().expect("Failed to create DB");
 
@@ -362,6 +379,10 @@ fn add_config_updates_existing_device_with_same_name() {
 /// - Tag-based linking could silently break.
 /// - UI would show empty OS list even with valid config.
 #[test]
+#[cfg_attr(
+    not(feature = "sd"),
+    ignore = "needs `sd`: fixture boards use Flasher::SdCard"
+)]
 fn add_config_inserts_os_image_for_board() {
     let db = Db::new().expect("Failed to create DB");
     db.init().expect("DB init should succeed");
@@ -445,6 +466,10 @@ fn add_config_inserts_os_image_for_board() {
 /// - release_date or init_format could break silently.
 /// - UI would receive incorrect OS metadata.
 #[test]
+#[cfg_attr(
+    not(feature = "sd"),
+    ignore = "needs `sd`: fixture boards use Flasher::SdCard"
+)]
 fn os_image_by_id_returns_correct_data() {
     let db = Db::new().expect("Failed to create DB");
     db.init().expect("DB init should succeed");
@@ -546,6 +571,10 @@ fn os_image_by_id_returns_correct_data() {
 /// - Board linkage could silently break.
 /// - OS hierarchy navigation would fail.
 #[test]
+#[cfg_attr(
+    not(feature = "sd"),
+    ignore = "needs `sd`: fixture boards use Flasher::SdCard"
+)]
 fn add_config_inserts_os_sublist_for_board() {
     let db = Db::new().expect("Failed to create DB");
     db.init().expect("DB init should succeed");
@@ -636,6 +665,10 @@ fn add_config_inserts_os_sublist_for_board() {
 /// - Recursive propagation could silently fail.
 /// - Deep OS hierarchy navigation would break.
 #[test]
+#[cfg_attr(
+    not(feature = "sd"),
+    ignore = "needs `sd`: fixture boards use Flasher::SdCard"
+)]
 fn nested_os_sublists_propagate_board_support() {
     let db = Db::new().expect("Failed to create DB");
     db.init().expect("DB init should succeed");
@@ -739,6 +772,10 @@ fn nested_os_sublists_propagate_board_support() {
 /// - subitems_url could be stored incorrectly.
 /// - Remote config fetching would break silently.
 #[test]
+#[cfg_attr(
+    not(feature = "sd"),
+    ignore = "needs `sd`: fixture boards use Flasher::SdCard"
+)]
 fn remote_os_sublist_is_returned_for_board() {
     let db = Db::new().expect("Failed to create DB");
     db.init().expect("DB init should succeed");
@@ -827,6 +864,10 @@ fn remote_os_sublist_is_returned_for_board() {
 /// - OS images might not appear.
 /// - UI would never show fetched OS lists.
 #[test]
+#[cfg_attr(
+    not(feature = "sd"),
+    ignore = "needs `sd`: fixture boards use Flasher::SdCard"
+)]
 fn remote_os_sublist_resolve_inserts_child_items_and_clears_url() {
     let db = Db::new().expect("Failed to create DB");
     db.init().expect("DB init should succeed");
@@ -940,6 +981,10 @@ fn remote_os_sublist_resolve_inserts_child_items_and_clears_url() {
 /// - UI could show duplicate OS options
 /// - DB integrity could break over time
 #[test]
+#[cfg_attr(
+    not(feature = "sd"),
+    ignore = "needs `sd`: fixture boards use Flasher::SdCard"
+)]
 fn duplicate_remote_sublist_resolve_does_not_duplicate_os_items() {
     let db = Db::new().expect("Failed to create DB");
     db.init().expect("DB init should succeed");
@@ -1061,6 +1106,10 @@ fn duplicate_remote_sublist_resolve_does_not_duplicate_os_items() {
 /// - Case-insensitive matching might stop working.
 /// - UI board search would behave incorrectly.
 #[test]
+#[cfg_attr(
+    not(feature = "sd"),
+    ignore = "needs `sd`: fixture boards use Flasher::SdCard"
+)]
 fn board_list_search_filters_boards_case_insensitive() {
     let db = Db::new().expect("Failed to create DB");
     db.init().expect("DB init should succeed");
