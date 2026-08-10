@@ -191,6 +191,10 @@ jobs:
   macos-job:
     name: Build MacOS Artifacts
     runs-on: macos-latest
+    # Surfaced as job-level env so the signing step can test whether it is set: the `secrets`
+    # context is not available in a step-level `if:`, but `env` is.
+    env:
+      TEAM_ID: ${{ secrets.TEAM_ID }}
     steps:
     - name: Checkout
       uses: actions/checkout@v7
@@ -205,10 +209,12 @@ jobs:
     - name: Use caching
       uses: Swatinem/rust-cache@v2
         
-    # The ENV variable names are what cargo-packager requires
+    # The ENV variable names are what cargo-packager requires.
+    # Skipped when TEAM_ID is unset, as it is on forks without the signing secrets: writing an
+    # empty `signing_identity` makes cargo-packager fail rather than fall back to unsigned.
     - name: Setup macos signing
       working-directory: gem-imager-gui
-      if: github.event_name != 'pull_request'
+      if: github.event_name != 'pull_request' && env.TEAM_ID != ''
       run: |
         echo "" >> Cargo.toml
         echo "[package.metadata.packager.macos]" >> Cargo.toml
@@ -281,6 +287,10 @@ jobs:
       - windows-job
       - vendor-deps
     runs-on: ubuntu-latest
+    # Creating a release writes to the repository, which the default GITHUB_TOKEN cannot do when
+    # the repo's workflow permissions are set to read-only.
+    permissions:
+      contents: write
     env:
       SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAP_STORE_LOGIN }}
       SNAP_CHANNEL: ${{ github.ref_type == 'tag' && 'stable' || 'edge' }}
@@ -309,11 +319,16 @@ jobs:
           generate_release_notes: true
           files: artifacts/**
 
+      # The three snap-store steps only run where store credentials exist. On a fork without
+      # SNAP_STORE_LOGIN, `snapcraft upload` would abort the whole release job even though the
+      # GitHub release itself was published successfully.
       - name: Install Snapcraft
+        if: env.SNAPCRAFT_STORE_CREDENTIALS != ''
         uses: samuelmeuli/action-snapcraft@v3
 
       # TODO: Publish CLI
       - name: Publish Snaps
+        if: env.SNAPCRAFT_STORE_CREDENTIALS != ''
         run: |
           for pkg in gui; do
             for file in artifacts/gem-imager-$pkg/dist/*.snap; do
@@ -322,6 +337,7 @@ jobs:
           done
 
       - name: Logout from snapcraft
+        if: env.SNAPCRAFT_STORE_CREDENTIALS != ''
         run: snapcraft logout
 
   publish-aur:
@@ -329,7 +345,9 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - release
-    if: github.ref_type == 'tag'
+    # Skipped without an AUR deploy key, which forks do not have: shimataro/ssh-key-action fails
+    # outright on an empty key rather than no-opping.
+    if: github.ref_type == 'tag' && vars.PUBLISH_AUR == 'true'
     steps:
       - name: Install SSH key
         uses: shimataro/ssh-key-action@v2
