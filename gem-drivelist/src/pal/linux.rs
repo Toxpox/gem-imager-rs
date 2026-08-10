@@ -24,7 +24,7 @@ struct Device {
     #[serde(rename = "log-sec")]
     log_sec: u32,
     rm: bool,
-    ptype: Option<String>,
+    pttype: Option<String>,
     #[serde(default)]
     children: Vec<Child>,
     label: Option<String>,
@@ -100,7 +100,7 @@ impl From<Device> for DeviceDescriptor {
             logical_block_size: value.log_sec,
             is_removable,
             is_system,
-            partition_table_type: value.ptype,
+            partition_table_type: value.pttype,
             mountpoints: value.children.into_iter().map(Into::into).collect(),
             ..Default::default()
         }
@@ -148,9 +148,23 @@ impl From<Child> for MountPoint {
     }
 }
 
+/// Exactly the columns [`Device`] and [`Child`] deserialize.
+///
+/// `--output-all` asks for every column lsblk knows (~70 per device and per
+/// partition), and serde then walks and discards the ones with no matching
+/// field. Naming the columns cuts the JSON to roughly a quarter, which is worth
+/// it because the GUI re-runs this once a second while the destination page is
+/// open.
+///
+/// Keep in sync with the two structs: an absent column leaves an `Option` field
+/// as `None`, but the non-optional ones (`ro`, `rm`, `hotplug`, `phy-sec`,
+/// `log-sec`) would fail to deserialize.
+const COLUMNS: &str = "NAME,KNAME,SIZE,TRAN,SUBSYSTEMS,RO,RM,HOTPLUG,PHY-SEC,LOG-SEC,\
+                       PTTYPE,LABEL,VENDOR,MODEL,MOUNTPOINT,FSSIZE,FSAVAIL,PARTLABEL";
+
 pub(crate) fn lsblk() -> crate::Result<Vec<DeviceDescriptor>> {
     let output = Command::new("lsblk")
-        .args(["--bytes", "--all", "--json", "--paths", "--output-all"])
+        .args(["--bytes", "--all", "--json", "--paths", "--output", COLUMNS])
         .output()
         .map_err(|e| crate::Error::LsblkExecuteError { source: Some(e) })?;
 
@@ -260,7 +274,7 @@ mod tests {
                 "size":32000000000,"tran":"usb",
                 "subsystems":"block:scsi:usb:pci","ro":false,
                 "phy-sec":512,"log-sec":512,"rm":true,"hotplug":false,
-                "ptype":"gpt","label":"BOOT","vendor":"Kingston","model":"DataTraveler"
+                "pttype":"gpt","label":"BOOT","vendor":"Kingston","model":"DataTraveler"
             }]"#,
         )[0];
 
@@ -292,7 +306,7 @@ mod tests {
                 "size":512000000000,"tran":"nvme",
                 "subsystems":"block:nvme:pci","ro":false,
                 "phy-sec":512,"log-sec":4096,"rm":false,"hotplug":false,
-                "ptype":null,"label":null,"vendor":null,"model":"Samsung SSD"
+                "pttype":null,"label":null,"vendor":null,"model":"Samsung SSD"
             }]"#,
         )[0];
 
@@ -319,7 +333,7 @@ mod tests {
                 "subsystems":"nvme:pci",
                 "ro":true,
                 "phy-sec":512,"log-sec":512,"rm":false,"hotplug":false,
-                "ptype":null,"label":null,"vendor":null,"model":null
+                "pttype":null,"label":null,"vendor":null,"model":null
             }]"#,
         )[0];
 
@@ -341,7 +355,7 @@ mod tests {
                 "size":8000000000,"tran":"usb",
                 "subsystems":"block:usb","ro":false,
                 "phy-sec":512,"log-sec":512,"rm":false,"hotplug":true,
-                "ptype":null,"label":null,"vendor":null,"model":null
+                "pttype":null,"label":null,"vendor":null,"model":null
             }]"#,
         )[0];
 
@@ -362,7 +376,7 @@ mod tests {
                 "size":16000000000,"tran":"usb",
                 "subsystems":"block:usb","ro":false,
                 "phy-sec":512,"log-sec":512,"rm":true,"hotplug":false,
-                "ptype":null,"label":null,"vendor":null,"model":null,
+                "pttype":null,"label":null,"vendor":null,"model":null,
                 "children":[
                     {"mountpoint":"/boot","fssize":"1048576","fsavail":524288,"label":null,"partlabel":"BOOTFS"},
                     {"mountpoint":null,"fssize":null,"fsavail":null,"label":"ROOT","partlabel":"rootfs"}
@@ -393,7 +407,7 @@ mod tests {
                 "size":null,"tran":null,
                 "subsystems":"block","ro":false,
                 "phy-sec":512,"log-sec":512,"rm":false,"hotplug":false,
-                "ptype":null,"label":null,"vendor":null,"model":null
+                "pttype":null,"label":null,"vendor":null,"model":null
             }]"#,
         )[0];
 
@@ -416,7 +430,7 @@ mod tests {
                 "size":64000000000,"tran":"usb",
                 "subsystems":null,"ro":false,
                 "phy-sec":512,"log-sec":512,"rm":false,"hotplug":false,
-                "ptype":null,"label":null,"vendor":null,"model":"Generic"
+                "pttype":null,"label":null,"vendor":null,"model":"Generic"
             }]"#,
         )[0];
 
@@ -439,7 +453,7 @@ mod tests {
                 "name":"/dev/sde","kname":"/dev/sde",
                 "size":null,"tran":null,"ro":false,
                 "phy-sec":512,"log-sec":512,"rm":false,"hotplug":false,
-                "ptype":null,"label":null,"vendor":null,"model":null
+                "pttype":null,"label":null,"vendor":null,"model":null
             }]"#,
         )[0];
 
@@ -461,7 +475,7 @@ mod tests {
                 "name":"/dev/dm-1","kname":"/dev/dm-1",
                 "size":null,"tran":null,"subsystems":null,"ro":false,
                 "phy-sec":512,"log-sec":512,"rm":false,"hotplug":false,
-                "ptype":null,"label":null,"vendor":null,"model":null
+                "pttype":null,"label":null,"vendor":null,"model":null
             }]"#,
         )[0];
 
@@ -480,7 +494,7 @@ mod tests {
                 "name":"/dev/dm-2","kname":"/dev/dm-2",
                 "size":null,"tran":null,"subsystems":"","ro":false,
                 "phy-sec":512,"log-sec":512,"rm":false,"hotplug":false,
-                "ptype":null,"label":null,"vendor":null,"model":null
+                "pttype":null,"label":null,"vendor":null,"model":null
             }]"#,
         )[0];
 
