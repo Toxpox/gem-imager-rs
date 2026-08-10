@@ -233,8 +233,9 @@ impl Db {
 
     pub(crate) fn remote_configs(&self) -> rusqlite::Result<Vec<(i64, Url)>> {
         let db = self.db.lock().unwrap();
-        let mut stmt =
-            db.prepare_cached("SELECT id, url FROM remote_configs WHERE fetched = FALSE")?;
+        // Runs once per process, so there is nothing to gain from occupying a
+        // slot in rusqlite's prepared-statement cache.
+        let mut stmt = db.prepare("SELECT id, url FROM remote_configs WHERE fetched = FALSE")?;
         let res = stmt
             .query_map([], |r| {
                 let id: i64 = r.get("id")?;
