@@ -1,13 +1,10 @@
-//! The three key derivations `gem-first-boot` expects, and nothing else.
+//! Secret transformations used by `gem-first-boot`.
 //!
-//! Each one has a published test vector, and each vector is checked in this module's tests. None of
-//! these functions accepts or returns a plain `String` for a secret — inputs are [`Secret`] and
-//! outputs are [`DerivedSecret`], which zeroes itself on drop.
+//! Inputs use [`Secret`] and outputs use [`DerivedSecret`] so plaintext is not logged and temporary
+//! values are wiped on drop.
 
 use cipher::{BlockEncrypt, KeyInit, generic_array::GenericArray};
-use hmac::Hmac;
 use sha_crypt::Sha512Params;
-use sha1::Sha1;
 
 use super::secret::{DerivedSecret, Secret};
 use super::{T3GemInitError, WPA_PSK_HEX_LEN};
@@ -21,9 +18,6 @@ const CRYPT_SALT_LEN: usize = 16;
 /// modulo bias** — the salt is a uniform draw straight from the OS CSPRNG.
 const CRYPT_SALT_ALPHABET: &[u8; 64] =
     b"./0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
-
-/// WPA-PSK is defined as PBKDF2-HMAC-SHA1 with exactly this iteration count (IEEE 802.11i).
-const WPA_PBKDF2_ITERATIONS: u32 = 4096;
 
 /// Hash an account password as SHA-512 crypt (`$6$`), the form `gem-first-boot` feeds to `chpasswd`.
 ///
@@ -57,28 +51,9 @@ fn random_crypt_salt() -> Result<String, T3GemInitError> {
         .collect())
 }
 
-/// Derive the 256-bit WPA PSK from an SSID and passphrase, rendered as 64 lowercase hex digits.
-///
-/// The passphrase never reaches the card: `gem-first-boot` writes `wifipasswd` straight into a
-/// NetworkManager profile, and a PSK there is as usable as the passphrase while not being the
-/// string the user may have reused elsewhere.
-pub(super) fn wpa_psk(ssid: &str, passphrase: &Secret) -> Result<DerivedSecret, T3GemInitError> {
-    let mut psk = [0u8; 32];
-    pbkdf2::pbkdf2::<Hmac<Sha1>>(
-        passphrase.expose().as_bytes(),
-        ssid.as_bytes(),
-        WPA_PBKDF2_ITERATIONS,
-        &mut psk,
-    )
-    .map_err(|_| T3GemInitError::PasswordHash)?;
-
-    Ok(DerivedSecret::new(const_hex::encode(psk)))
-}
-
 /// Validate a passphrase the user supplied as a ready-made 64-hex-digit PSK.
 ///
-/// Accepting it verbatim is required (`instruction.md` §10.3) — re-running PBKDF2 over a PSK would
-/// silently produce a key that does not match the network.
+/// It is already the key the network expects, so hashing it again would change it.
 pub(super) fn normalize_psk_hex(value: &Secret) -> Result<DerivedSecret, T3GemInitError> {
     let raw = value.expose();
     if raw.len() != WPA_PSK_HEX_LEN || !raw.bytes().all(|b| b.is_ascii_hexdigit()) {
@@ -147,40 +122,6 @@ mod tests {
         let salt = &a["$6$".len()..a.len() - 86 - 1];
         assert_eq!(salt.len(), CRYPT_SALT_LEN);
         assert!(salt.bytes().all(|b| CRYPT_SALT_ALPHABET.contains(&b)));
-    }
-
-    /// The official WPA test vectors from IEEE 802.11i Annex H.4.
-    #[test]
-    fn wpa_psk_matches_the_official_vectors() {
-        for (passphrase, ssid, expected) in [
-            (
-                "password",
-                "IEEE",
-                "f42c6fc52df0ebef9ebb4b90b38a5f902e83fe1b135a70e23aed762e9710a12e",
-            ),
-            (
-                "ThisIsAPassword",
-                "ThisIsASSID",
-                "0dc0d6eb90555ed6419756b9a15ec3e3209b63df707dd508d14581f8982721af",
-            ),
-            (
-                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                "ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZ",
-                "4fd16ee24bd1d8f9e7ebd86cbd802d0b3acfd23cb08de414da4e1690e474b857",
-            ),
-        ] {
-            let psk = wpa_psk(ssid, &Secret::new(passphrase)).unwrap();
-            assert_eq!(*psk, expected);
-        }
-    }
-
-    /// A Turkish SSID is a normal input; PBKDF2 salts with the raw UTF-8 bytes, so this must not
-    /// panic or mangle the SSID.
-    #[test]
-    fn wpa_psk_handles_a_unicode_ssid() {
-        let psk = wpa_psk("Ağ-Çekirdek", &Secret::new("parola1234")).unwrap();
-        assert_eq!(psk.len(), WPA_PSK_HEX_LEN);
-        assert!(psk.bytes().all(|b| b.is_ascii_hexdigit()));
     }
 
     #[test]

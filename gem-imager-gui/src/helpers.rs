@@ -841,6 +841,9 @@ impl FlashingCustomization {
                             gem_i18n::Msg::InvalidWifiCountryError
                         }
                         T3GemInitError::InvalidSsid => gem_i18n::Msg::InvalidSsidError,
+                        T3GemInitError::SsidUnsupportedByCurrentSdk => {
+                            gem_i18n::Msg::SsidUnsupportedError
+                        }
                         T3GemInitError::UnknownTimezone(_) => gem_i18n::Msg::UnknownTimezoneError,
                         T3GemInitError::UnknownKeyboardLayout(_) => {
                             gem_i18n::Msg::UnknownKeymapError

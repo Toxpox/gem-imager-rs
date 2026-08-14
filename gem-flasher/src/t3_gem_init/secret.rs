@@ -22,8 +22,7 @@ impl Secret {
 
     /// Borrow the plaintext.
     ///
-    /// Every caller is inside this module tree and feeds it straight into a KDF. Nothing outside
-    /// the crate can reach the plaintext.
+    /// Kept private to this module tree so callers cannot expose secrets accidentally.
     pub(super) fn expose(&self) -> &str {
         &self.0
     }
