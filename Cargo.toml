@@ -10,6 +10,7 @@ members = [
 	"gem-config",
 	"gem-helper",
 	"gem-flasher-dfu",
+	"gem-host-wifi",
 	"gem-drivelist",
 	"gem-iced-widgets",
 	"gem-i18n",
