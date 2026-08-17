@@ -40,12 +40,47 @@ fn detects_the_current_network_on_this_host() {
                 SecurityKind::Open
                     | SecurityKind::Personal
                     | SecurityKind::Enterprise
+                    | SecurityKind::UnsupportedSecurity
                     | SecurityKind::Unknown
             ));
 
-            // Faz 1: password retrieval is intentionally not implemented yet.
+            // Password retrieval against the live secret agent. The *outcome* is printed, never the
+            // password: on a Personal network this really does read the host's passphrase, so the
+            // assertions below only ever look at its length and shape.
             let outcome = gem_host_wifi::read_saved_password(&wifi.network).unwrap();
-            assert_eq!(outcome, PasswordOutcome::Unavailable);
+            println!("password outcome: {outcome:?}");
+
+            match (&wifi.security, &outcome) {
+                (SecurityKind::Open, got) => assert_eq!(
+                    *got,
+                    PasswordOutcome::NotRequired,
+                    "an open network needs no password"
+                ),
+                (SecurityKind::Enterprise | SecurityKind::UnsupportedSecurity, got) => {
+                    assert_eq!(
+                        *got,
+                        PasswordOutcome::UnsupportedSecurity,
+                        "no single portable passphrase exists for this security type"
+                    );
+                }
+                (SecurityKind::Personal, PasswordOutcome::Found(secret)) => {
+                    // Only the shape is asserted, so a failure message cannot carry the value.
+                    let len = secret.len();
+                    assert!(
+                        (8..=63).contains(&len) || len == 64,
+                        "retrieved credential has an unusable length"
+                    );
+                    assert!(!format!("{secret:?}").contains(secret.expose()));
+                    println!("retrieved a {len}-byte credential (value not shown)");
+                }
+                (SecurityKind::Personal, other) => {
+                    // Legitimate on a confined install, a not-saved profile or a headless session.
+                    println!("no password available for this Personal network: {other:?}");
+                }
+                (SecurityKind::Unknown, other) => {
+                    println!("unclassified security, outcome: {other:?}");
+                }
+            }
         }
         Err(HostWifiError::NotConnected) => {
             println!("no Wi-Fi association right now; connect to a network and re-run");

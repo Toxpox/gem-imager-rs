@@ -104,8 +104,47 @@ pub enum SecurityKind {
     Personal,
     /// 802.1X / EAP / certificate: no single portable secret exists, so import is not attempted.
     Enterprise,
+    /// A secured network whose credential the imager cannot carry over: static WEP, and any other
+    /// scheme that is neither open nor a WPA-family passphrase (§8.4). Kept distinct from
+    /// [`SecurityKind::Open`] so the UI never says "no password needed" about a secured network.
+    UnsupportedSecurity,
     /// Could not be classified. Discovery still succeeds; password retrieval will report why.
     Unknown,
+}
+
+impl SecurityKind {
+    /// Whether a single portable passphrase can exist for this network at all.
+    ///
+    /// Backends check this *before* asking the OS for a secret: there is no point prompting the
+    /// user, or the platform, for a credential that could never be applied to the board.
+    pub fn can_carry_passphrase(self) -> bool {
+        matches!(self, Self::Personal)
+    }
+}
+
+/// Shortest WPA passphrase, per IEEE 802.11i.
+const WPA_PASSPHRASE_MIN_LEN: usize = 8;
+/// Longest WPA passphrase, per IEEE 802.11i.
+const WPA_PASSPHRASE_MAX_LEN: usize = 63;
+/// Length of a WPA PSK written as hex.
+const WPA_PSK_HEX_LEN: usize = 64;
+
+/// Whether a retrieved credential is shaped like something the T3 image can actually use.
+///
+/// The plan (§3.1) is explicit that a value coming from the platform is not automatically valid:
+/// it still has to satisfy the same contract the T3 serializer enforces — an 8..=63 byte passphrase
+/// (kept as text so WPA3/SAE works) or exactly 64 hexadecimal digits for a ready-made WPA2 PSK.
+///
+/// Each backend applies this at the point of retrieval so a malformed credential is reported as
+/// [`PasswordOutcome::Unavailable`] instead of being pushed into the form to fail later. It is
+/// public so the UI can apply the identical rule to a manually typed value, and it takes the
+/// plaintext by reference and returns only a bool, so no secret escapes.
+pub fn is_usable_wifi_credential(value: &str) -> bool {
+    match value.len() {
+        WPA_PSK_HEX_LEN => value.bytes().all(|b| b.is_ascii_hexdigit()),
+        WPA_PASSPHRASE_MIN_LEN..=WPA_PASSPHRASE_MAX_LEN => true,
+        _ => false,
+    }
 }
 
 /// The outcome of trying to read the saved password. Every non-`Found` variant is a normal result
@@ -270,5 +309,44 @@ mod tests {
         );
         assert_ne!(PasswordOutcome::Found(Secret::new("a")), PasswordOutcome::NotStored);
         assert_eq!(PasswordOutcome::NotRequired, PasswordOutcome::NotRequired);
+    }
+
+    #[test]
+    fn only_personal_networks_can_carry_a_passphrase() {
+        assert!(SecurityKind::Personal.can_carry_passphrase());
+        assert!(!SecurityKind::Open.can_carry_passphrase());
+        assert!(!SecurityKind::Enterprise.can_carry_passphrase());
+        assert!(!SecurityKind::UnsupportedSecurity.can_carry_passphrase());
+        assert!(!SecurityKind::Unknown.can_carry_passphrase());
+    }
+
+    #[test]
+    fn credential_validation_matches_the_t3_serializer_contract() {
+        // 8..=63 bytes is a passphrase; exactly 64 hex digits is a ready-made PSK.
+        assert!(is_usable_wifi_credential("12345678"));
+        assert!(is_usable_wifi_credential(&"x".repeat(63)));
+        let psk = "0DC0D6EB90555ED6419756B9A15EC3E3209B63DF707DD508D14581F8982721AF";
+        assert_eq!(psk.len(), 64);
+        assert!(is_usable_wifi_credential(psk));
+        assert!(is_usable_wifi_credential(&psk.to_lowercase()));
+
+        // Too short, and the 64-byte length only passes when it is really hex.
+        assert!(!is_usable_wifi_credential(""));
+        assert!(!is_usable_wifi_credential("1234567"));
+        assert!(!is_usable_wifi_credential(&"z".repeat(64)));
+        // 64 < len is out of range even for a hex-looking value.
+        assert!(!is_usable_wifi_credential(&"a".repeat(65)));
+
+        // A multi-byte passphrase is measured in bytes, matching the serializer: this is 8
+        // characters but 12 bytes, so it sits inside the range by bytes, not by character count.
+        let turkish = "şifreçğü";
+        assert_eq!(turkish.chars().count(), 8);
+        assert_eq!(turkish.len(), 12);
+        assert!(is_usable_wifi_credential(turkish));
+
+        // The boundary is in bytes, not characters, in both directions: a 7-character multi-byte
+        // value is long enough because it is 12 bytes, while 7 ASCII characters is not.
+        assert!(is_usable_wifi_credential("çğüöşia"));
+        assert!(!is_usable_wifi_credential("abcdefg"));
     }
 }

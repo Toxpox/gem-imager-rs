@@ -37,7 +37,7 @@ mod pal;
 pub use error::{HostWifiError, Operation};
 pub use model::{
     CountryCode, CountryHint, CountrySource, DetectedSsid, DetectedWifi, NetworkRef,
-    PasswordOutcome, SecurityKind,
+    PasswordOutcome, SecurityKind, is_usable_wifi_credential,
 };
 
 /// Detect the network the host is connected to right now.
