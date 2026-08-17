@@ -27,8 +27,15 @@ windows = { version = "0.62", features = [
 	"Win32_Foundation",
 	"Win32_NetworkManagement_WiFi",
 ] }
+# Namespace-aware parsing of the Native Wi-Fi profile XML. The plan forbids extracting the key with
+# a regex (§7.5), and this is the parser already present in the workspace dependency graph.
+roxmltree = "0.20"
 
 # macOS: CoreLocation gates the SSID, CoreWLAN reads it and the country code.
+# The profile-XML parser is platform-neutral, so its fixture tests build on every host.
+[dev-dependencies]
+roxmltree = "0.20"
+
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6.3"
 objc2-foundation = { version = "0.3.2", default-features = false, features = ["std", "NSString", "NSArray", "NSData"] }

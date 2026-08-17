@@ -9,6 +9,12 @@ mod macos;
 #[cfg(target_os = "windows")]
 mod windows;
 
+// The Windows profile XML parser holds no Windows types, so it is also compiled under `test` on
+// every platform: that way its fixture matrix (§7.5) runs in the ordinary test suite instead of
+// only on a Windows host.
+#[cfg(any(target_os = "windows", test))]
+pub(crate) mod wlan_profile;
+
 use crate::{DetectedWifi, HostWifiError, NetworkRef, PasswordOutcome};
 
 #[cfg(target_os = "linux")]
