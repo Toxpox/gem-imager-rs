@@ -59,6 +59,7 @@ t3_gem_init = [
 	"dep:zeroize",
 	"dep:getrandom",
 	"dep:chrono-tz",
+	"gem-helper/secret",
 ]
 sd_linux_udev = ["gem-flasher-sd?/udev"]
 sd_macos_authopen = ["gem-flasher-sd?/macos_authopen"]
