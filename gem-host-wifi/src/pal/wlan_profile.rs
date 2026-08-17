@@ -65,7 +65,9 @@ fn classify_authentication(auth: &str) -> SecurityKind {
     let auth = auth.trim().to_ascii_uppercase();
     match auth.as_str() {
         "WPAPSK" | "WPA2PSK" | "WPA3SAE" | "WPA3PSK" => SecurityKind::Personal,
-        "WPA" | "WPA2" | "WPA3" | "WPA3ENTERPRISE" | "WPA3ENTERPRISE192" => SecurityKind::Enterprise,
+        "WPA" | "WPA2" | "WPA3" | "WPA3ENTERPRISE" | "WPA3ENTERPRISE192" => {
+            SecurityKind::Enterprise
+        }
         // OWE gives encryption without any passphrase to carry.
         "OWE" => SecurityKind::Open,
         "OPEN" => SecurityKind::Open,
@@ -268,7 +270,10 @@ mod tests {
                           <protected>false</protected>
                           <keyMaterial>not-a-psk-value</keyMaterial></sharedKey>"#,
         );
-        assert_eq!(parse(&xml).expect("parses").credential, ProfileCredential::Unusable);
+        assert_eq!(
+            parse(&xml).expect("parses").credential,
+            ProfileCredential::Unusable
+        );
     }
 
     #[test]

@@ -103,17 +103,29 @@ fn active_wifi_device(conn: &Connection) -> Result<OwnedObjectPath, HostWifiErro
     let mut saw_wifi = false;
     for dev in devices {
         let dev_str = dev.as_str();
-        let dtype = get_property(conn, dev_str, DEVICE_IFACE, "DeviceType", Operation::ListDevices)
-            .ok()
-            .and_then(|v| u32::try_from(v).ok());
+        let dtype = get_property(
+            conn,
+            dev_str,
+            DEVICE_IFACE,
+            "DeviceType",
+            Operation::ListDevices,
+        )
+        .ok()
+        .and_then(|v| u32::try_from(v).ok());
         if dtype != Some(DEVICE_TYPE_WIFI) {
             continue;
         }
         saw_wifi = true;
 
-        let active_ap = get_property(conn, dev_str, WIRELESS_IFACE, "ActiveAccessPoint", Operation::ReadSsid)
-            .ok()
-            .and_then(|v| as_object_path(&v));
+        let active_ap = get_property(
+            conn,
+            dev_str,
+            WIRELESS_IFACE,
+            "ActiveAccessPoint",
+            Operation::ReadSsid,
+        )
+        .ok()
+        .and_then(|v| as_object_path(&v));
         // A path of "/" is NetworkManager's null object: a Wi-Fi radio that is not associated.
         if let Some(ap) = active_ap
             && ap.as_str() != "/"
@@ -131,14 +143,21 @@ fn active_wifi_device(conn: &Connection) -> Result<OwnedObjectPath, HostWifiErro
 
 /// Read the SSID bytes off the device's active access point.
 fn read_ssid(conn: &Connection, device: &OwnedObjectPath) -> Result<DetectedSsid, HostWifiError> {
-    let ap = get_property(conn, device.as_str(), WIRELESS_IFACE, "ActiveAccessPoint", Operation::ReadSsid)?;
+    let ap = get_property(
+        conn,
+        device.as_str(),
+        WIRELESS_IFACE,
+        "ActiveAccessPoint",
+        Operation::ReadSsid,
+    )?;
     let ap = as_object_path(&ap).ok_or(HostWifiError::NotConnected)?;
     if ap.as_str() == "/" {
         return Err(HostWifiError::NotConnected);
     }
 
     let ssid_value = get_property(conn, ap.as_str(), AP_IFACE, "Ssid", Operation::ReadSsid)?;
-    let bytes: Vec<u8> = Vec::<u8>::try_from(ssid_value).map_err(|_| HostWifiError::InvalidSsidEncoding)?;
+    let bytes: Vec<u8> =
+        Vec::<u8>::try_from(ssid_value).map_err(|_| HostWifiError::InvalidSsidEncoding)?;
     Ok(DetectedSsid::from_bytes(&bytes))
 }
 
@@ -147,13 +166,25 @@ fn active_connection_path(
     conn: &Connection,
     device: &OwnedObjectPath,
 ) -> Result<Option<OwnedObjectPath>, HostWifiError> {
-    let active = get_property(conn, device.as_str(), DEVICE_IFACE, "ActiveConnection", Operation::ReadSecret)?;
+    let active = get_property(
+        conn,
+        device.as_str(),
+        DEVICE_IFACE,
+        "ActiveConnection",
+        Operation::ReadSecret,
+    )?;
     let active = match as_object_path(&active) {
         Some(p) if p.as_str() != "/" => p,
         _ => return Ok(None),
     };
 
-    let settings = get_property(conn, active.as_str(), ACTIVE_CONN_IFACE, "Connection", Operation::ReadSecret)?;
+    let settings = get_property(
+        conn,
+        active.as_str(),
+        ACTIVE_CONN_IFACE,
+        "Connection",
+        Operation::ReadSecret,
+    )?;
     Ok(as_object_path(&settings).filter(|p| p.as_str() != "/"))
 }
 
@@ -171,8 +202,13 @@ fn get_settings(
     conn: &Connection,
     settings_path: &OwnedObjectPath,
 ) -> Result<HashMap<String, HashMap<String, OwnedValue>>, HostWifiError> {
-    let proxy = Proxy::new(conn, NM_SERVICE, settings_path.as_str(), SETTINGS_CONN_IFACE)
-        .map_err(platform_err(Operation::ReadSecret))?;
+    let proxy = Proxy::new(
+        conn,
+        NM_SERVICE,
+        settings_path.as_str(),
+        SETTINGS_CONN_IFACE,
+    )
+    .map_err(platform_err(Operation::ReadSecret))?;
     proxy
         .call("GetSettings", &())
         .map_err(platform_err(Operation::ReadSecret))
@@ -219,7 +255,10 @@ fn classify_key_mgmt(key_mgmt: &str, has_security_block: bool) -> SecurityKind {
 /// The regulatory country from `iw reg get`, the authoritative source (§9). `iw` is a standard,
 /// unprivileged read; parsing its `country XX:` line avoids a raw nl80211 netlink dependency.
 fn country_from_iw() -> Option<CountryHint> {
-    let output = std::process::Command::new("iw").args(["reg", "get"]).output().ok()?;
+    let output = std::process::Command::new("iw")
+        .args(["reg", "get"])
+        .output()
+        .ok()?;
     if !output.status.success() {
         return None;
     }
@@ -313,7 +352,9 @@ fn classify_secrets_error(error: &zbus::Error) -> Result<PasswordOutcome, HostWi
         // No secret agent answered: common under confinement, on a headless session, or when the
         // agent that owns the secret belongs to a different user session (§8.7).
         "org.freedesktop.NetworkManager.AgentManager.NoSecrets" => PasswordOutcome::NotStored,
-        "org.freedesktop.NetworkManager.AgentManager.UserCanceled" => PasswordOutcome::UserCancelled,
+        "org.freedesktop.NetworkManager.AgentManager.UserCanceled" => {
+            PasswordOutcome::UserCancelled
+        }
         "org.freedesktop.NetworkManager.AgentManager.PermissionDenied"
         | "org.freedesktop.NetworkManager.PermissionDenied"
         | "org.freedesktop.DBus.Error.AccessDenied" => PasswordOutcome::PermissionDenied,
@@ -390,8 +431,13 @@ pub(crate) fn read_saved_password(network: &NetworkRef) -> Result<PasswordOutcom
         return Ok(outcome);
     }
 
-    let proxy = Proxy::new(&conn, NM_SERVICE, settings_path.as_str(), SETTINGS_CONN_IFACE)
-        .map_err(platform_err(Operation::ReadSecret))?;
+    let proxy = Proxy::new(
+        &conn,
+        NM_SERVICE,
+        settings_path.as_str(),
+        SETTINGS_CONN_IFACE,
+    )
+    .map_err(platform_err(Operation::ReadSecret))?;
     // `GetSecrets` does not open a user prompt (§8.2); it asks the registered secret agents.
     let secrets: HashMap<String, HashMap<String, OwnedValue>> =
         match proxy.call("GetSecrets", &(SECURITY_SETTING,)) {
@@ -424,11 +470,15 @@ mod tests {
     }
 
     fn str_value(s: &str) -> OwnedValue {
-        zbus::zvariant::Value::from(s).try_into().expect("string value")
+        zbus::zvariant::Value::from(s)
+            .try_into()
+            .expect("string value")
     }
 
     fn u32_value(n: u32) -> OwnedValue {
-        zbus::zvariant::Value::from(n).try_into().expect("u32 value")
+        zbus::zvariant::Value::from(n)
+            .try_into()
+            .expect("u32 value")
     }
 
     #[test]
@@ -436,9 +486,15 @@ mod tests {
         assert_eq!(classify_key_mgmt("wpa-psk", true), SecurityKind::Personal);
         assert_eq!(classify_key_mgmt("sae", true), SecurityKind::Personal);
         assert_eq!(classify_key_mgmt("wpa-eap", true), SecurityKind::Enterprise);
-        assert_eq!(classify_key_mgmt("ieee8021x", true), SecurityKind::Enterprise);
+        assert_eq!(
+            classify_key_mgmt("ieee8021x", true),
+            SecurityKind::Enterprise
+        );
         assert_eq!(classify_key_mgmt("owe", true), SecurityKind::Open);
-        assert_eq!(classify_key_mgmt("some-future-scheme", true), SecurityKind::Unknown);
+        assert_eq!(
+            classify_key_mgmt("some-future-scheme", true),
+            SecurityKind::Unknown
+        );
     }
 
     #[test]
@@ -623,6 +679,9 @@ mod tests {
         let unsaved = NetworkRef(NetworkRefInner::NetworkManager {
             connection_path: "/".to_owned(),
         });
-        assert_eq!(read_saved_password(&unsaved), Ok(PasswordOutcome::NotStored));
+        assert_eq!(
+            read_saved_password(&unsaved),
+            Ok(PasswordOutcome::NotStored)
+        );
     }
 }

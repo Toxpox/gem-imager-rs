@@ -301,7 +301,10 @@ mod tests {
             PasswordOutcome::Found(Secret::new("a")),
             PasswordOutcome::Found(Secret::new("b"))
         );
-        assert_ne!(PasswordOutcome::Found(Secret::new("a")), PasswordOutcome::NotStored);
+        assert_ne!(
+            PasswordOutcome::Found(Secret::new("a")),
+            PasswordOutcome::NotStored
+        );
         assert_eq!(PasswordOutcome::NotRequired, PasswordOutcome::NotRequired);
     }
 

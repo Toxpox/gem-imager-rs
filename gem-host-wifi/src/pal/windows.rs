@@ -96,7 +96,8 @@ pub(crate) fn detect_current_wifi() -> Result<DetectedWifi, HostWifiError> {
         // The security type lives in the native profile, so classify it from there — reading each
         // candidate *without* the plaintext flag, so discovery never touches a key. A failure here
         // is not fatal: the SSID and country are still worth filling in.
-        let security = detect_security(&interface_guid, &ssid_text).unwrap_or(SecurityKind::Unknown);
+        let security =
+            detect_security(&interface_guid, &ssid_text).unwrap_or(SecurityKind::Unknown);
 
         return Ok(DetectedWifi {
             network: NetworkRef(NetworkRefInner::Windows {
@@ -480,7 +481,10 @@ mod tests {
             PasswordOutcome::Found(Secret::new("hunter2-pass"))
         );
         assert_eq!(
-            outcome_from_profile(&profile(SecurityKind::Personal, ProfileCredential::Encrypted)),
+            outcome_from_profile(&profile(
+                SecurityKind::Personal,
+                ProfileCredential::Encrypted
+            )),
             PasswordOutcome::PermissionDenied
         );
         assert_eq!(
@@ -488,7 +492,10 @@ mod tests {
             PasswordOutcome::NotStored
         );
         assert_eq!(
-            outcome_from_profile(&profile(SecurityKind::Personal, ProfileCredential::Unusable)),
+            outcome_from_profile(&profile(
+                SecurityKind::Personal,
+                ProfileCredential::Unusable
+            )),
             PasswordOutcome::Unavailable
         );
     }

@@ -182,8 +182,7 @@ enum QueryStage {
 fn true_value() -> *const c_void {
     // SAFETY: reading a CoreFoundation constant that the framework always defines. The binding is
     // an `Option` only because it cannot prove non-nullness at the type level.
-    let boolean: &CFBoolean =
-        unsafe { kCFBooleanTrue }.expect("kCFBooleanTrue is always defined");
+    let boolean: &CFBoolean = unsafe { kCFBooleanTrue }.expect("kCFBooleanTrue is always defined");
     boolean as *const CFBoolean as *const c_void
 }
 
@@ -358,9 +357,18 @@ mod tests {
 
     #[test]
     fn security_classification_maps_personal_enterprise_and_open() {
-        assert_eq!(classify_security(CWSecurity::WPA2Personal), SecurityKind::Personal);
-        assert_eq!(classify_security(CWSecurity::WPA3Personal), SecurityKind::Personal);
-        assert_eq!(classify_security(CWSecurity::WPA2Enterprise), SecurityKind::Enterprise);
+        assert_eq!(
+            classify_security(CWSecurity::WPA2Personal),
+            SecurityKind::Personal
+        );
+        assert_eq!(
+            classify_security(CWSecurity::WPA3Personal),
+            SecurityKind::Personal
+        );
+        assert_eq!(
+            classify_security(CWSecurity::WPA2Enterprise),
+            SecurityKind::Enterprise
+        );
         assert_eq!(classify_security(CWSecurity::None), SecurityKind::Open);
         assert_eq!(classify_security(CWSecurity::OWE), SecurityKind::Open);
     }
@@ -382,12 +390,18 @@ mod tests {
     #[test]
     fn keychain_statuses_map_to_the_documented_outcomes() {
         // Values from the Security framework's SecBase.h.
-        assert_eq!(outcome_for_status(errSecItemNotFound), PasswordOutcome::NotStored);
+        assert_eq!(
+            outcome_for_status(errSecItemNotFound),
+            PasswordOutcome::NotStored
+        );
         assert_eq!(
             outcome_for_status(errSecUserCanceled),
             PasswordOutcome::UserCancelled
         );
-        assert_eq!(outcome_for_status(errSecAuthFailed), PasswordOutcome::UserDenied);
+        assert_eq!(
+            outcome_for_status(errSecAuthFailed),
+            PasswordOutcome::UserDenied
+        );
         assert_eq!(
             outcome_for_status(errSecInteractionNotAllowed),
             PasswordOutcome::PermissionDenied
@@ -404,7 +418,10 @@ mod tests {
         // Success is never routed through here, and an unmapped status is reported as unavailable
         // rather than being mistaken for a result.
         assert_eq!(outcome_for_status(-1), PasswordOutcome::Unavailable);
-        assert_eq!(outcome_for_status(errSecSuccess), PasswordOutcome::Unavailable);
+        assert_eq!(
+            outcome_for_status(errSecSuccess),
+            PasswordOutcome::Unavailable
+        );
     }
 
     #[test]
