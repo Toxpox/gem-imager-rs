@@ -7,8 +7,9 @@
 //!
 //! Password retrieval is a direct `SecItemCopyMatching` Keychain query (§6.4) — never the `security`
 //! CLI, never the Keychain database on disk, and never an attempt to modify an item's ACL (§6.6).
-//! It runs in two passes: a metadata-only query establishes that exactly one item matches the SSID,
-//! and only then does a second query ask for the bytes. That second call is the one that can prompt.
+//! The saved Wi-Fi password is the AirPort generic-password item whose account is the SSID. The
+//! query runs in two passes: a metadata-only query establishes that exactly one item matches, and
+//! only then does a second query ask for the bytes. That second call is the one that can prompt.
 //!
 //! Every CoreWLAN/CoreLocation call is `unsafe` because it is an Objective-C message send; in each
 //! case we only pass the receiver the framework gave us and immediately convert the result to an
@@ -26,9 +27,9 @@ use objc2_core_location::{CLAuthorizationStatus, CLLocationManager};
 use objc2_core_wlan::{CWSecurity, CWWiFiClient};
 use objc2_security::{
     SecItemCopyMatching, errSecAuthFailed, errSecInteractionNotAllowed, errSecItemNotFound,
-    errSecMissingEntitlement, errSecSuccess, errSecUserCanceled, kSecAttrService, kSecClass,
-    kSecClassGenericPassword, kSecMatchLimit, kSecMatchLimitAll, kSecMatchLimitOne,
-    kSecReturnAttributes, kSecReturnData,
+    errSecMissingEntitlement, errSecSuccess, errSecUserCanceled, kSecAttrAccount,
+    kSecAttrDescription, kSecClass, kSecClassGenericPassword, kSecMatchLimit, kSecMatchLimitAll,
+    kSecMatchLimitOne, kSecReturnAttributes, kSecReturnData,
 };
 use zeroize::Zeroize;
 
@@ -188,9 +189,11 @@ fn true_value() -> *const c_void {
 
 /// Build the Keychain query for the AirPort password of exactly one SSID.
 ///
-/// The shape is the one Apple's own network stack writes: a generic password whose *service* is the
-/// SSID. Apple does not document this as a stable retrieval contract (§6.4), which is why a miss is
-/// [`PasswordOutcome::NotStored`] rather than a defect.
+/// Apple's own network stack stores a saved Wi-Fi password as a generic-password item whose
+/// `kSecAttrAccount` is the SSID and whose `kSecAttrDescription` is `"AirPort network password"`
+/// (this is what CoreWLAN's `CWKeychainFindWiFiPassword` and `security -D "AirPort network
+/// password" -a <ssid>` read). Apple does not document this as a stable retrieval contract (§6.4),
+/// which is why a miss is [`PasswordOutcome::NotStored`] rather than a defect.
 fn keychain_query(ssid: &str, stage: QueryStage) -> CFRetained<CFMutableDictionary> {
     // SAFETY: the dictionary is created empty and then filled with framework constants and
     // CoreFoundation objects created here; kCFTypeDictionary*CallBacks make it retain each one, so
@@ -198,7 +201,7 @@ fn keychain_query(ssid: &str, stage: QueryStage) -> CFRetained<CFMutableDictiona
     unsafe {
         let query = CFMutableDictionary::new(
             None,
-            4,
+            5,
             &kCFTypeDictionaryKeyCallBacks,
             &kCFTypeDictionaryValueCallBacks,
         )
@@ -217,12 +220,20 @@ fn keychain_query(ssid: &str, stage: QueryStage) -> CFRetained<CFMutableDictiona
             kSecClassGenericPassword as *const CFString as *const c_void,
         );
 
-        // The SSID is matched exactly. A prefix or case-insensitive match could hand over the
-        // credential of a different network (§6.4).
-        let service = CFString::from_str(ssid);
+        // Narrow to AirPort items so an unrelated generic password that merely shares the SSID as
+        // its account name cannot be returned in its place.
+        let description = CFString::from_str("AirPort network password");
         set(
-            kSecAttrService,
-            CFRetained::as_ptr(&service).as_ptr() as *const c_void,
+            kSecAttrDescription,
+            CFRetained::as_ptr(&description).as_ptr() as *const c_void,
+        );
+
+        // The SSID is the item's account, matched exactly: a prefix or case-insensitive match could
+        // hand over the credential of a different network (§6.4).
+        let account = CFString::from_str(ssid);
+        set(
+            kSecAttrAccount,
+            CFRetained::as_ptr(&account).as_ptr() as *const c_void,
         );
 
         match stage {
