@@ -11,8 +11,9 @@
 //! ```
 //!
 //! `GetSettings` is used for the security *type* only; it never returns the passphrase. Reading the
-//! actual secret needs `GetSecrets`, which is Faz 2. The country comes from `iw reg get` when it is
-//! available (the regulatory domain, the authoritative source), otherwise from the locale.
+//! actual secret needs `GetSecrets`, which is the separate, explicit second step. The country comes
+//! from `iw reg get` when it is available (the regulatory domain, the authoritative source), and
+//! otherwise from the locale.
 //!
 //! Everything here uses the generic untyped `blocking::Proxy` rather than a generated typed proxy:
 //! the calls are few, and staying untyped keeps the backend working across NetworkManager versions

@@ -82,8 +82,8 @@ pub(crate) fn detect_current_wifi() -> Result<DetectedWifi, HostWifiError> {
             continue;
         }
 
-        // The interface GUID is not needed for discovery, but Faz 2's WlanGetProfile lookup keys off
-        // it. Capture it now so the returned NetworkRef is self-contained.
+        // The interface GUID is not needed for the SSID itself, but the WlanGetProfile lookup keys
+        // off it. Capture it now so the returned NetworkRef is self-contained.
         let interface_guid = profile
             .NetworkAdapter()
             .and_then(|na| na.NetworkAdapterId())

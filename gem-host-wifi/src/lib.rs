@@ -22,13 +22,14 @@
 //!
 //! | Platform | SSID + country | Saved password |
 //! |---|---|---|
-//! | Linux + NetworkManager | yes | yes (Faz 2) |
-//! | Windows | yes | yes (Faz 2) |
-//! | macOS | yes | best effort (Faz 2) |
+//! | Linux + NetworkManager | yes | yes, via `GetSecrets` |
+//! | Windows | yes | yes, via `WlanGetProfile` (needs the plaintext-key right) |
+//! | macOS | yes | best effort, via a Keychain query that can prompt |
 //! | Linux + standalone iwd / wpa_supplicant | SSID only | manual |
 //!
-//! This module is Faz 1: discovery. Password retrieval lands in Faz 2; until then
-//! [`read_saved_password`] reports [`PasswordOutcome::Unavailable`] rather than pretending.
+//! Where a password cannot be produced the answer is a specific [`PasswordOutcome`] — "not stored",
+//! "the network is open", "the user declined" — so the UI can say what happened instead of showing
+//! a generic failure, and the manual field stays the first-class fallback in every case.
 
 mod error;
 mod model;

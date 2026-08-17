@@ -41,3 +41,6 @@ objc2 = "0.6.3"
 objc2-foundation = { version = "0.3.2", default-features = false, features = ["std", "NSString", "NSArray", "NSData"] }
 objc2-core-location = { version = "0.3.2", default-features = false, features = ["std", "CLLocationManager", "CLLocation"] }
 objc2-core-wlan = { version = "0.3.2", default-features = false, features = ["std", "CWWiFiClient", "CWInterface", "CoreWLANTypes"] }
+objc2-security = { version = "0.3.2", default-features = false, features = ["std", "SecItem", "SecBase"] }
+objc2-core-foundation = { version = "0.3.2", default-features = false, features = ["std", "CFDictionary", "CFArray", "CFData", "CFString", "CFNumber"] }
+zeroize = "1.9.0"
