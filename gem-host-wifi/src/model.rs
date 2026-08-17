@@ -1,19 +1,17 @@
 //! Platform-neutral description of the host's current Wi-Fi network.
 //!
-//! These types are the contract between the OS-specific backends in [`crate::pal`] and every
-//! caller. They deliberately model *partial* knowledge: the research plan (§5.3) requires that a
-//! missing password never discards a perfectly good SSID or country, so discovery and password
-//! retrieval are separate results rather than one `Result<AllFields, _>`.
+//! These types deliberately model *partial* knowledge: a missing password must never discard a
+//! perfectly good SSID or country (§5.3), so discovery and password retrieval are separate results
+//! rather than one `Result<AllFields, _>`.
 
 use gem_helper::secret::Secret;
 
 /// An opaque handle to the network that [`crate::detect_current_wifi`] found, used to ask for its
 /// saved password in a second step.
 ///
-/// It is opaque on purpose (§10.2): the caller must not parse it, show it, or log it. Each platform
-/// puts the identity its password lookup needs inside — a NetworkManager connection path, a Windows
-/// interface GUID plus resolved profile name, or a macOS SSID plus Keychain query identity — and
-/// none of that is meaningful or safe outside the backend that produced it.
+/// Opaque on purpose (§10.2): the caller must not parse it, show it, or log it. Each platform puts
+/// the identity its password lookup needs inside, and none of that is meaningful or safe outside
+/// the backend that produced it.
 #[derive(Clone, PartialEq, Eq)]
 pub struct NetworkRef(pub(crate) NetworkRefInner);
 
@@ -30,8 +28,8 @@ pub(crate) enum NetworkRefInner {
     },
     #[cfg(target_os = "macos")]
     MacOs { ssid: String },
-    /// Keeps the enum inhabited and `match`-able on platforms with no backend compiled in, and lets
-    /// the shared tests build a value without a live OS.
+    /// Keeps the enum inhabited on platforms with no backend compiled in, and lets the shared tests
+    /// build a value without a live OS.
     #[cfg_attr(
         any(target_os = "linux", target_os = "windows", target_os = "macos"),
         allow(dead_code)
@@ -40,8 +38,8 @@ pub(crate) enum NetworkRefInner {
 }
 
 impl std::fmt::Debug for NetworkRef {
-    /// Redacted: a `NetworkRef` can embed a network name, and the plan forbids it reaching a log or
-    /// a panic dump (§10.2). The variant is useful for debugging; its contents are not.
+    /// Redacted: a `NetworkRef` can embed a network name, and that must not reach a log or a panic
+    /// dump (§10.2). The variant is useful for debugging; its contents are not.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let kind = match self.0 {
             #[cfg(target_os = "linux")]
@@ -67,7 +65,7 @@ pub struct DetectedWifi {
 }
 
 /// A Wi-Fi SSID is a byte string, not text. Most are UTF-8, but the standard permits arbitrary
-/// bytes, and the plan (§8.1) forbids a lossy conversion that would silently corrupt a name.
+/// bytes, and a lossy conversion would silently corrupt a name (§8.1).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum DetectedSsid {
     Utf8(String),
@@ -131,14 +129,11 @@ const WPA_PSK_HEX_LEN: usize = 64;
 
 /// Whether a retrieved credential is shaped like something the T3 image can actually use.
 ///
-/// The plan (§3.1) is explicit that a value coming from the platform is not automatically valid:
-/// it still has to satisfy the same contract the T3 serializer enforces — an 8..=63 byte passphrase
-/// (kept as text so WPA3/SAE works) or exactly 64 hexadecimal digits for a ready-made WPA2 PSK.
+/// A value coming from the platform is not automatically valid (§3.1): it still has to satisfy the
+/// contract the T3 serializer enforces — an 8..=63 byte passphrase (kept as text so WPA3/SAE works)
+/// or exactly 64 hexadecimal digits for a ready-made WPA2 PSK.
 ///
-/// Each backend applies this at the point of retrieval so a malformed credential is reported as
-/// [`PasswordOutcome::Unavailable`] instead of being pushed into the form to fail later. It is
-/// public so the UI can apply the identical rule to a manually typed value, and it takes the
-/// plaintext by reference and returns only a bool, so no secret escapes.
+/// Takes the plaintext by reference and returns only a bool, so no secret escapes.
 pub fn is_usable_wifi_credential(value: &str) -> bool {
     match value.len() {
         WPA_PSK_HEX_LEN => value.bytes().all(|b| b.is_ascii_hexdigit()),
@@ -179,8 +174,7 @@ impl PartialEq for PasswordOutcome {
 }
 
 /// A best-effort two-letter country code plus where it came from (§9). The source drives the UI
-/// hint: anything other than [`CountrySource::Regulatory`] is a guess the user should confirm, and
-/// the field always stays editable.
+/// hint: anything other than [`CountrySource::Regulatory`] is a guess the user should confirm.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CountryHint {
     pub code: CountryCode,
@@ -217,8 +211,8 @@ pub struct CountryCode([u8; 2]);
 impl CountryCode {
     /// Parse and normalise a country code, rejecting anything that is not two ASCII letters.
     ///
-    /// `"00"` — NetworkManager/`iw`'s "no specific country / world regulatory domain" — is rejected
-    /// so it is treated as "unknown" rather than applied as if it were a real country (§9).
+    /// `"00"` — the "world regulatory domain" placeholder — is rejected so it is treated as
+    /// unknown rather than applied as if it were a real country (§9).
     pub fn parse(raw: &str) -> Option<Self> {
         let raw = raw.trim();
         let bytes = raw.as_bytes();

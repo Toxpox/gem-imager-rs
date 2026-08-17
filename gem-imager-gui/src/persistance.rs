@@ -360,8 +360,7 @@ impl SdSysconfCustomization {
 pub(crate) struct SdCustomizationUser {
     pub(crate) username: String,
     /// Never serialized: a plaintext account password must not land in `config.json`
-    /// (`instruction.md` §10.3). Reloading restores the username but not the password, matching the
-    /// T3 form's deliberate trade-off.
+    /// (`instruction.md` §10.3). Reloading restores the username but not the password.
     #[serde(skip)]
     pub(crate) password: Secret,
 }
@@ -398,8 +397,8 @@ impl Default for SdCustomizationUser {
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct SdCustomizationWifi {
     pub(crate) ssid: String,
-    /// Never serialized: same rule as the account password above. The SSID is kept so a reload
-    /// restores the network name, but the passphrase has to be re-entered.
+    /// Never serialized: same rule as the account password. The SSID is kept so a reload restores
+    /// the network name, but the passphrase has to be re-entered.
     #[serde(skip)]
     pub(crate) password: Secret,
 }

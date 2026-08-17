@@ -1,15 +1,14 @@
 //! Real-host integration checks for the Linux NetworkManager backend.
 //!
-//! These need a live system D-Bus, NetworkManager and (for the connected case) an actual Wi-Fi
-//! association, none of which a cloud CI runner has (research plan §14.6). They are therefore
-//! `#[ignore]` by default and meant to be run by hand on a real machine:
+//! These need a live system D-Bus, NetworkManager and an actual Wi-Fi association, none of which a
+//! cloud CI runner has (§14.6), so they are `#[ignore]` by default and run by hand:
 //!
 //! ```sh
 //! cargo test -p gem-host-wifi --test linux_live -- --ignored --nocapture
 //! ```
 //!
-//! They assert only structural facts and never print a password (there is none to print in Faz 1),
-//! so they are safe to run and log.
+//! On a Personal network this really does read the host's passphrase, so the assertions only ever
+//! look at its length and shape: no test output can carry the value.
 
 #![cfg(target_os = "linux")]
 
@@ -44,9 +43,8 @@ fn detects_the_current_network_on_this_host() {
                     | SecurityKind::Unknown
             ));
 
-            // Password retrieval against the live secret agent. The *outcome* is printed, never the
-            // password: on a Personal network this really does read the host's passphrase, so the
-            // assertions below only ever look at its length and shape.
+            // Password retrieval against the live secret agent. The outcome is printed, never the
+            // password itself.
             let outcome = gem_host_wifi::read_saved_password(&wifi.network).unwrap();
             println!("password outcome: {outcome:?}");
 

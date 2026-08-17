@@ -1,51 +1,26 @@
 //! Parsing of the Windows Native Wi-Fi profile XML.
 //!
 //! `WlanGetProfile` returns a `WLANProfile` document describing one saved network. Two things are
-//! read out of it: the SSID (to match the profile against the network we are actually connected to,
-//! §7.2) and, when the plaintext flag was granted, the credential itself (§7.3).
+//! read out of it: the SSID (to match the profile against the connected network, §7.2) and, when
+//! the plaintext flag was granted, the credential itself (§7.3).
 //!
-//! The parsing lives in its own module, free of any Windows types, for two reasons: the plan
-//! forbids regex-based extraction and demands a namespace-aware parser (§7.5), and keeping it
-//! platform-neutral means the whole fixture matrix runs in the normal test suite on any host rather
-//! than only on Windows.
-//!
-//! # What the document looks like
-//!
-//! ```xml
-//! <?xml version="1.0"?>
-//! <WLANProfile xmlns="http://www.microsoft.com/networking/WLAN/profile/v1">
-//!   <name>HomeNet</name>
-//!   <SSIDConfig><SSID><name>HomeNet</name></SSID></SSIDConfig>
-//!   <MSM><security>
-//!     <authEncryption><authentication>WPA2PSK</authentication>
-//!                     <encryption>AES</encryption></authEncryption>
-//!     <sharedKey><keyType>passPhrase</keyType>
-//!                <protected>false</protected>
-//!                <keyMaterial>hunter2</keyMaterial></sharedKey>
-//!   </security></MSM>
-//! </WLANProfile>
-//! ```
-//!
-//! Real documents vary: the SSID may be given as `<hex>` instead of `<name>`, the namespace may be
-//! a later revision or absent, and Group Policy profiles carry extra elements. Element names are
-//! therefore matched by local name and the namespace is not pinned to one exact URI.
+//! This module holds no Windows types, so the whole fixture matrix runs in the normal test suite on
+//! any host. Element names are matched by *local* name and the namespace URI is not pinned, because
+//! Microsoft revises the schema (v1, v2, v3) and some tools emit no namespace at all; the parser is
+//! still namespace-aware, so prefixed documents resolve correctly rather than being string-matched
+//! (§7.5, which also forbids regex extraction).
 
 use crate::model::SecurityKind;
 
 /// What a saved Windows profile says about one network.
-///
-/// The key material is deliberately *not* stored here as a plain field the caller can stumble
-/// across: [`ProfileCredential`] states whether a usable secret exists, and the secret itself is
-/// only produced by [`Self::into_credential`].
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) struct WlanProfile {
-    /// The SSID the profile is for, as text when it can be represented that way.
     pub ssid: ProfileSsid,
     pub security: SecurityKind,
     pub credential: ProfileCredential,
 }
 
-/// How a profile identifies its network. Windows writes either a literal name or a hex encoding of
+/// How a profile identifies its network: Windows writes either a literal name or a hex encoding of
 /// the SSID bytes, and both have to be matchable against a detected SSID (§7.2).
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum ProfileSsid {
@@ -57,8 +32,7 @@ pub(crate) enum ProfileSsid {
 
 impl ProfileSsid {
     /// Whether this profile is for `ssid`, comparing bytes so the hex and name forms agree.
-    ///
-    /// Matching is exact: the plan forbids guessing (§7.2), so a near match is not a match.
+    /// Matching is exact: a near match is not a match (§7.2).
     pub fn matches(&self, ssid: &str) -> bool {
         match self {
             Self::Name(name) => name == ssid,
@@ -85,14 +59,12 @@ pub(crate) enum ProfileCredential {
 
 /// The `<security>` fields that decide whether one portable passphrase can exist (§7.3).
 ///
-/// Matched case-insensitively: Windows writes `WPA2PSK`, but profiles authored by other tools and
-/// older Windows versions differ in case.
+/// Matched case-insensitively: Windows writes `WPA2PSK`, but other tools and older Windows versions
+/// differ in case.
 fn classify_authentication(auth: &str) -> SecurityKind {
     let auth = auth.trim().to_ascii_uppercase();
     match auth.as_str() {
-        // The WPA-Personal family, including the WPA3 variants: one passphrase.
         "WPAPSK" | "WPA2PSK" | "WPA3SAE" | "WPA3PSK" => SecurityKind::Personal,
-        // Enterprise: the credential is a user identity, not a portable passphrase.
         "WPA" | "WPA2" | "WPA3" | "WPA3ENTERPRISE" | "WPA3ENTERPRISE192" => SecurityKind::Enterprise,
         // OWE gives encryption without any passphrase to carry.
         "OWE" => SecurityKind::Open,
@@ -104,11 +76,6 @@ fn classify_authentication(auth: &str) -> SecurityKind {
 }
 
 /// Find the first descendant with this local name, ignoring the namespace URI.
-///
-/// The namespace is not pinned because Microsoft revises the profile schema URI (v1, v2, v3) and
-/// some tools emit no namespace at all; the document shape is what identifies the fields. The
-/// parser is still namespace-*aware* — `roxmltree` resolves prefixes properly, so a prefixed
-/// document is handled correctly rather than being string-matched (§7.5).
 fn find_text<'a>(node: roxmltree::Node<'a, '_>, local_name: &str) -> Option<&'a str> {
     node.descendants()
         .find(|n| n.is_element() && n.tag_name().name() == local_name)
@@ -141,10 +108,9 @@ fn decode_hex_ssid(hex: &str) -> Option<Vec<u8>> {
 
 /// Parse a `WLANProfile` document.
 ///
-/// Returns `None` when the document is not well-formed XML or is not a WLAN profile at all. A
-/// document that parses but is missing pieces is described through the returned value (a `Missing`
-/// SSID, an `Unknown` security kind) rather than being rejected outright, because a profile can
-/// legitimately lack a `sharedKey` while still being the right profile.
+/// `None` means the document is not well-formed XML or is not a WLAN profile at all. A document
+/// that parses but is missing pieces is described through the returned value instead, because a
+/// profile can legitimately lack a `sharedKey` while still being the right profile.
 pub(crate) fn parse(xml: &str) -> Option<WlanProfile> {
     let doc = roxmltree::Document::parse(xml).ok()?;
     let root = doc.root_element();
@@ -193,7 +159,7 @@ fn parse_credential(root: roxmltree::Node<'_, '_>) -> ProfileCredential {
     };
 
     // `protected` true means the material is DPAPI-encrypted: the plaintext flag was not granted,
-    // or the caller lacked the rights for it. The plan forbids trying to decrypt it (§7.7).
+    // or the caller lacked the rights for it. Trying to decrypt it is forbidden (§7.7).
     let protected = find_text(shared_key, "protected")
         .map(|v| v.eq_ignore_ascii_case("true"))
         .unwrap_or(false);
@@ -209,8 +175,8 @@ fn parse_credential(root: roxmltree::Node<'_, '_>) -> ProfileCredential {
     }
 
     // `networkKey` is a 64-hex-digit PSK; `passPhrase` is the 8..=63 byte form. Both are checked
-    // against the same contract the T3 serializer applies, so an unusable value is reported rather
-    // than pushed into the form (§3.1).
+    // against the T3 serializer's contract, so an unusable value is reported rather than pushed
+    // into the form (§3.1).
     let key_type = find_text(shared_key, "keyType").unwrap_or_default();
     if key_type.eq_ignore_ascii_case("networkKey")
         && !(material.len() == 64 && material.bytes().all(|b| b.is_ascii_hexdigit()))

@@ -1,26 +1,24 @@
 //! A string that never reaches a log, a `Debug` dump, a snapshot or a crash report.
 //!
-//! `instruction.md` §10.3 requires secret types to be redacted in `Debug` output. That is not a
-//! style preference: the GUI derives `Debug` on its state, `tracing` renders `Debug` for structured
+//! `instruction.md` §10.3 requires secret types to be redacted in `Debug`. That is not a style
+//! preference: the GUI derives `Debug` on its state, `tracing` renders `Debug` for structured
 //! fields, and panics print `Debug` for every value in scope. A plain `String` password would leak
 //! through all three.
 //!
-//! This type lives in `gem-helper` so every crate that handles a user secret — the T3 `config.ini`
-//! serializer, the generic SD customization, the GUI state and the host Wi-Fi importer — shares one
-//! redacting, zeroizing implementation instead of each keeping its own plain `String`.
+//! This lives in `gem-helper` so every crate handling a user secret shares one redacting, zeroizing
+//! implementation instead of keeping its own plain `String`.
 
 use zeroize::{Zeroize, Zeroizing};
 
 /// A user-supplied secret (account password, Wi-Fi passphrase, VNC password).
 ///
-/// `Debug` prints a fixed placeholder, and the buffer is wiped on drop. Equality is provided
-/// because the GUI diffs its customization state between frames; it is a plain byte comparison and
-/// is **not** suitable for authentication decisions.
+/// `Debug` prints a fixed placeholder and the buffer is wiped on drop. Equality exists because the
+/// GUI diffs its customization state between frames; it is a plain byte comparison and is **not**
+/// suitable for authentication decisions.
 ///
-/// The type deliberately implements neither `Serialize` nor `Display`: a secret must never reach a
+/// The type deliberately implements neither `Serialize` nor `Display`, so a secret cannot reach a
 /// config file or a rendered string by accident. The only ways to read the plaintext are
-/// [`Secret::expose`] (named so any call site is auditable) and [`Secret::as_input`] (for a masked
-/// text field, and nowhere else).
+/// [`Secret::expose`] and [`Secret::as_input`].
 #[derive(Clone, Default, PartialEq, Eq)]
 pub struct Secret(String);
 
@@ -31,10 +29,9 @@ impl Secret {
 
     /// Borrow the plaintext.
     ///
-    /// Named `expose` rather than `as_str` so that every call site reads as a deliberate, greppable
-    /// exposure of a secret. Use it only where the plaintext genuinely has to leave the type — a
-    /// key-derivation step or the single serialization boundary that writes the value to its
-    /// destination — never for a log, a label, a clipboard or an error message.
+    /// Named `expose` rather than `as_str` so every call site reads as a deliberate, greppable
+    /// exposure. Use it only where the plaintext genuinely has to leave the type — a key-derivation
+    /// step or the single serialization boundary — never for a log, label, clipboard or error.
     pub fn expose(&self) -> &str {
         &self.0
     }
@@ -42,9 +39,8 @@ impl Secret {
     /// Borrow the plaintext for a masked text field.
     ///
     /// A text input has to be handed the value it is editing, so this one crack in the redaction is
-    /// unavoidable. It is named for that single use so that any other call site reads as wrong: the
-    /// value must go straight into a `secure(true)` widget and nowhere else — not a log, not a
-    /// label, not a clipboard.
+    /// unavoidable. Named for that single use: the value must go straight into a `secure(true)`
+    /// widget and nowhere else.
     pub fn as_input(&self) -> &str {
         &self.0
     }
@@ -53,8 +49,8 @@ impl Secret {
         self.0.is_empty()
     }
 
-    /// Length in bytes — needed for the UI to show the WPA 8..63 and VNC 8-byte limits without
-    /// ever rendering the value itself.
+    /// Length in bytes — lets the UI show the WPA 8..63 and VNC 8-byte limits without rendering the
+    /// value itself.
     pub fn len(&self) -> usize {
         self.0.len()
     }

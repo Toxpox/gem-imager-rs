@@ -1,9 +1,8 @@
 //! Windows backend: WinRT for the connected SSID and home region.
 //!
-//! The connected SSID comes from the WinRT connection profile, not `WlanQueryInterface`
-//! (research plan §7.1): since the 2024 Windows 11 Wi-Fi location-privacy changes,
-//! `WlanQueryInterface(current_connection)` can return `ERROR_ACCESS_DENIED` when location is off,
-//! whereas `WlanConnectionProfileDetails.GetConnectedSsid()` keeps working. The chain is:
+//! The connected SSID comes from the WinRT connection profile, not `WlanQueryInterface` (§7.1):
+//! since the 2024 Windows 11 Wi-Fi location-privacy changes that call can return
+//! `ERROR_ACCESS_DENIED` when location is off, whereas `GetConnectedSsid()` keeps working.
 //!
 //! ```text
 //! NetworkInformation::GetConnectionProfiles()
@@ -12,14 +11,14 @@
 //!      -> NetworkAdapter().NetworkAdapterId()                 (the interface GUID)
 //! ```
 //!
-//! The country is a best-effort guess from `GlobalizationPreferences::HomeGeographicRegion`
-//! (§7.6): Windows has no unprivileged API for the *radio's* regulatory country, so this is tagged
-//! [`CountrySource::UserRegion`] and the UI leaves it editable.
+//! The country is a best-effort guess from `GlobalizationPreferences::HomeGeographicRegion` (§7.6):
+//! Windows has no unprivileged API for the *radio's* regulatory country, so it is tagged
+//! [`CountrySource::UserRegion`] and left editable.
 //!
 //! The security type and the saved password both come from the Win32 native profile, resolved by
 //! matching its SSID against the connected one (§7.2) and parsed in [`crate::pal::wlan_profile`].
-//! Discovery reads only the non-secret part of that document, so it never touches a key; the
-//! plaintext flag is used solely by [`read_saved_password`], as the deliberate second step.
+//! Discovery reads only the non-secret part of that document; the plaintext flag is used solely by
+//! [`read_saved_password`].
 
 use gem_helper::secret::{DerivedSecret, Secret};
 use windows::Networking::Connectivity::NetworkInformation;
@@ -95,9 +94,8 @@ pub(crate) fn detect_current_wifi() -> Result<DetectedWifi, HostWifiError> {
         let ssid = DetectedSsid::from_bytes(ssid_text.as_bytes());
 
         // The security type lives in the native profile, so classify it from there — reading each
-        // candidate profile *without* the plaintext flag, so discovery never touches a key. A
-        // failure here is not fatal: the SSID and country are still worth filling in, and password
-        // retrieval will report the reason on its own.
+        // candidate *without* the plaintext flag, so discovery never touches a key. A failure here
+        // is not fatal: the SSID and country are still worth filling in.
         let security = detect_security(&interface_guid, &ssid_text).unwrap_or(SecurityKind::Unknown);
 
         return Ok(DetectedWifi {
@@ -189,12 +187,11 @@ fn win32_result(status: u32, operation: Operation) -> Result<(), HostWifiError> 
     }
 }
 
-/// Whether a Win32 status is one that means "the secret specifically is not available", as opposed
-/// to a failure of the query itself.
+/// Whether a Win32 status means "the secret specifically is not available", as opposed to a failure
+/// of the query itself.
 ///
-/// `ERROR_ACCESS_DENIED` here is a normal outcome, not an error: on a debug build running as
-/// `asInvoker`, or under a restrictive DACL, the plaintext key is simply not granted (§7.4), and
-/// the UI should say so and keep the manual field rather than show a platform failure.
+/// `ERROR_ACCESS_DENIED` here is a normal outcome: on a debug build running as `asInvoker`, or under
+/// a restrictive DACL, the plaintext key is simply not granted (§7.4).
 fn secret_outcome_for_status(status: u32) -> Option<PasswordOutcome> {
     match status {
         5 => Some(PasswordOutcome::PermissionDenied),
@@ -206,18 +203,16 @@ fn secret_outcome_for_status(status: u32) -> Option<PasswordOutcome> {
 
 /// Parse the interface GUID that discovery stored in the [`NetworkRef`].
 ///
-/// Discovery formats it with `Debug`, which for `windows_core::GUID` is the standard braced form,
-/// and `GUID::try_from(&str)` accepts that. A ref we cannot parse is a malformed profile rather
-/// than a platform failure.
+/// Discovery formats it with `Debug`, which for `windows_core::GUID` is the standard braced form
+/// that `GUID::try_from(&str)` accepts.
 fn parse_interface_guid(text: &str) -> Result<GUID, HostWifiError> {
     GUID::try_from(text).map_err(|_| HostWifiError::MalformedProfile)
 }
 
-/// Read one profile's XML, asking for the plaintext key.
+/// Read one profile's XML, asking for the plaintext key when `plaintext` is set.
 ///
-/// The returned buffer belongs to the WLAN API. It is copied into a `Zeroizing<String>` and the
-/// native buffer is overwritten before being freed (§7.5), so the plaintext exists in as few places
-/// and for as short a time as possible.
+/// The returned buffer belongs to the WLAN API. It is copied into a zeroizing string and the native
+/// buffer is overwritten before being freed (§7.5).
 fn get_profile_xml(
     handle: &WlanHandle,
     interface: &GUID,
@@ -264,8 +259,8 @@ fn get_profile_xml(
     Ok(text)
 }
 
-/// Why reading a profile failed, kept separate from [`HostWifiError`] so the caller can decide
-/// whether a given status is a normal outcome or a genuine failure.
+/// Why reading a profile failed, kept separate from [`HostWifiError`] so the caller decides whether
+/// a given status is a normal outcome or a genuine failure.
 enum ProfileReadError {
     Status(u32),
 }
@@ -298,9 +293,8 @@ fn profile_names(handle: &WlanHandle, interface: &GUID) -> Result<Vec<String>, H
 
 /// Find the single saved profile whose SSID equals the connected one (§7.2).
 ///
-/// Every profile is read *without* the plaintext flag first, so resolving the profile never
-/// collects anybody's keys. Zero matches and more than one match are both refusals: the plan is
-/// explicit that a near match must not be guessed at.
+/// Every profile is read *without* the plaintext flag, so resolution never collects anybody's keys.
+/// Zero matches and more than one match are both refusals rather than a guess.
 fn resolve_profile(
     handle: &WlanHandle,
     interface: &GUID,
@@ -309,7 +303,7 @@ fn resolve_profile(
     let mut matches = Vec::new();
     for name in profile_names(handle, interface)? {
         let Ok(xml) = get_profile_xml(handle, interface, &name, false) else {
-            // A profile that cannot be read is skipped; it simply cannot be the match we can prove.
+            // A profile that cannot be read cannot be the match we can prove.
             continue;
         };
         let Some(profile) = wlan_profile::parse(&xml) else {

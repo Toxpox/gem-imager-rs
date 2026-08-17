@@ -1,26 +1,18 @@
 //! macOS backend: CoreLocation gates access, CoreWLAN reads the network, Keychain holds the key.
 //!
-//! On macOS 14+ the SSID, BSSID and country code are all Location-gated (research plan §6.1): the
-//! CoreWLAN getters return `nil` unless Location Services is on and this app is authorized. So the
-//! flow is:
-//!
-//! 1. Check [`CLLocationManager`] authorization; request it while in the foreground if undetermined.
-//! 2. Get the default interface from the shared [`CWWiFiClient`].
-//! 3. Read `ssid()`, `security()` and `countryCode()`.
-//!
-//! If Location is denied we do *not* fall back to a command-line workaround (§6.1); we return
+//! On macOS 14+ the SSID, BSSID and country code are all Location-gated (§6.1): the CoreWLAN
+//! getters return `nil` unless Location Services is on and this app is authorized. If Location is
+//! denied we do *not* fall back to a command-line workaround; we return
 //! [`HostWifiError::PermissionDenied`] and the UI keeps the manual SSID field.
 //!
 //! Password retrieval is a direct `SecItemCopyMatching` Keychain query (§6.4) — never the `security`
 //! CLI, never the Keychain database on disk, and never an attempt to modify an item's ACL (§6.6).
 //! It runs in two passes: a metadata-only query establishes that exactly one item matches the SSID,
-//! and only then does a second query ask for the bytes. That second call is the one that can show
-//! the Keychain prompt, which is why the public API makes password retrieval a separate, explicit
-//! user action rather than part of discovery.
+//! and only then does a second query ask for the bytes. That second call is the one that can prompt.
 //!
-//! Every CoreWLAN/CoreLocation call is `unsafe` because it is an Objective-C message send; the
-//! safety argument in each case is that we only ever pass the receiver the framework gave us and
-//! immediately convert the result to an owned Rust value.
+//! Every CoreWLAN/CoreLocation call is `unsafe` because it is an Objective-C message send; in each
+//! case we only pass the receiver the framework gave us and immediately convert the result to an
+//! owned Rust value.
 
 use std::ffi::c_void;
 use std::ptr::NonNull;
@@ -55,10 +47,8 @@ type OSStatus = i32;
 /// Ensure this process is authorized to read Location-gated Wi-Fi data, prompting once if the user
 /// has not decided yet.
 ///
-/// Returns [`HostWifiError::PermissionDenied`] for the denied/restricted states so discovery can
-/// stop cleanly. `notDetermined` triggers a request; the result of that request arrives
-/// asynchronously via the delegate, so this call treats "just asked" like "not yet allowed" and the
-/// user re-runs the action once the prompt is answered (§6.1).
+/// `notDetermined` triggers a request whose result arrives asynchronously via the delegate, so this
+/// treats "just asked" like "not yet allowed" and the user re-runs the action once answered (§6.1).
 fn ensure_location_authorized() -> Result<(), HostWifiError> {
     // SAFETY: `new`/`authorizationStatus`/`requestWhenInUseAuthorization` are standard instance
     // methods on CLLocationManager; we hold the manager alive for the duration of the call.
@@ -157,26 +147,22 @@ pub(crate) fn detect_current_wifi() -> Result<DetectedWifi, HostWifiError> {
 
 /// Map a Keychain `OSStatus` to the outcome it actually describes (§6.4).
 ///
-/// Constants come from the Security framework's `SecBase.h`. Everything here is a *normal* answer
-/// the UI states plainly: the manual password field stays the first-class fallback, so a denied or
-/// missing item is never presented as a product failure.
+/// Constants come from the Security framework's `SecBase.h`. Every result here is a *normal*
+/// answer, not a product failure: the manual password field stays the fallback.
 fn outcome_for_status(status: OSStatus) -> PasswordOutcome {
-    // Matched with guards rather than as bare patterns: a lowercase constant used directly as a
-    // match pattern would silently become a catch-all binding if the import ever broke, turning
-    // every Keychain error into the first arm. Comparing values keeps that impossible.
+    // Matched with guards rather than bare patterns: a lowercase constant used directly as a match
+    // pattern would silently become a catch-all binding if the import ever broke.
     match status {
-        // No AirPort item for this SSID. Common and not an error: the network may have been joined
-        // on another device, or the item may live in a keychain this app cannot see (§6.4).
+        // No AirPort item for this SSID: the network may have been joined on another device, or the
+        // item may live in a keychain this app cannot see.
         s if s == errSecItemNotFound => PasswordOutcome::NotStored,
-        // The user pressed Cancel on the Keychain prompt.
         s if s == errSecUserCanceled => PasswordOutcome::UserCancelled,
-        // The user pressed Deny, or authentication failed. Kept distinct from Cancel: they mean
-        // different things to the user and deserve different wording.
+        // Deny, or a failed authentication. Kept distinct from Cancel: they mean different things.
         s if s == errSecAuthFailed => PasswordOutcome::UserDenied,
-        // A prompt was required but could not be shown: a locked keychain, or a non-interactive
+        // A prompt was required but could not be shown: a locked keychain or a non-interactive
         // session. Not a decision by the user, so it is reported separately.
         s if s == errSecInteractionNotAllowed => PasswordOutcome::PermissionDenied,
-        // The app is not entitled to the item, e.g. an unsigned or wrongly-entitled build (§6.3).
+        // An unsigned or wrongly-entitled build (§6.3).
         s if s == errSecMissingEntitlement => PasswordOutcome::PermissionDenied,
         _ => PasswordOutcome::Unavailable,
     }
@@ -203,8 +189,8 @@ fn true_value() -> *const c_void {
 /// Build the Keychain query for the AirPort password of exactly one SSID.
 ///
 /// The shape is the one Apple's own network stack writes: a generic password whose *service* is the
-/// SSID. Apple does not document this as a stable Wi-Fi credential retrieval contract (§6.4), which
-/// is why a miss is reported as [`PasswordOutcome::NotStored`] rather than treated as a defect.
+/// SSID. Apple does not document this as a stable retrieval contract (§6.4), which is why a miss is
+/// [`PasswordOutcome::NotStored`] rather than a defect.
 fn keychain_query(ssid: &str, stage: QueryStage) -> CFRetained<CFMutableDictionary> {
     // SAFETY: the dictionary is created empty and then filled with framework constants and
     // CoreFoundation objects created here; kCFTypeDictionary*CallBacks make it retain each one, so
@@ -241,7 +227,7 @@ fn keychain_query(ssid: &str, stage: QueryStage) -> CFRetained<CFMutableDictiona
 
         match stage {
             // Ask for *all* matches so an ambiguous result can be detected rather than silently
-            // resolved to whichever item happens to come back first.
+            // resolved to whichever item comes back first.
             QueryStage::CountOnly => {
                 set(
                     kSecMatchLimit,
@@ -272,7 +258,7 @@ pub(crate) fn read_saved_password(network: &NetworkRef) -> Result<PasswordOutcom
         return Ok(PasswordOutcome::NotStored);
     }
 
-    // Stage one: metadata only. This establishes how many items match before anything asks for a
+    // Stage one: metadata only, establishing how many items match before anything asks for a
     // secret, so an ambiguous result is refused without ever reading a password (§6.4).
     match count_matching_items(ssid) {
         Ok(0) => return Ok(PasswordOutcome::NotStored),
@@ -282,7 +268,7 @@ pub(crate) fn read_saved_password(network: &NetworkRef) -> Result<PasswordOutcom
     }
 
     // Stage two: the single exact match, this time asking for the bytes. This is the call that can
-    // show the Keychain prompt, which is why the public API is split into two explicit steps.
+    // prompt, which is why the public API is split into two explicit steps.
     read_single_item(ssid)
 }
 
@@ -304,8 +290,8 @@ fn count_matching_items(ssid: &str) -> Result<usize, OSStatus> {
     // SAFETY: on success the framework returns a +1 object; `from_raw` takes that reference over so
     // it is released when `owned` drops.
     let owned = unsafe { CFRetained::from_raw(result) };
-    // With kSecMatchLimitAll the result is an array of attribute dictionaries. A lone dictionary
-    // (which some macOS versions return for a single hit) means exactly one match.
+    // With kSecMatchLimitAll the result is an array. A lone dictionary (which some macOS versions
+    // return for a single hit) means exactly one match.
     Ok(match owned.downcast_ref::<CFArray>() {
         Some(array) => array.count() as usize,
         None => 1,
@@ -334,7 +320,7 @@ fn read_single_item(ssid: &str) -> Result<PasswordOutcome, HostWifiError> {
     };
 
     // The copied bytes are wiped before this returns, so an unusable credential never lingers in
-    // memory and never reaches a Secret (§12.2).
+    // memory (§12.2).
     let mut bytes = data.to_vec();
     let outcome = match std::str::from_utf8(&bytes) {
         Ok(text) => classify_credential(text),
@@ -347,8 +333,7 @@ fn read_single_item(ssid: &str) -> Result<PasswordOutcome, HostWifiError> {
 
 /// Validate a credential read from the Keychain and wrap it, or say why it is unusable.
 ///
-/// Split out so the validation rule is unit-testable without a Keychain: a value that cannot satisfy
-/// the T3 serializer is reported rather than pushed into the form to fail later (§3.1).
+/// Split out so the rule is unit-testable without a Keychain (§3.1).
 fn classify_credential(value: &str) -> PasswordOutcome {
     if !crate::is_usable_wifi_credential(value) {
         return PasswordOutcome::Unavailable;

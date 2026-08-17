@@ -1,6 +1,6 @@
 //! Linux backend: talk to NetworkManager over the system D-Bus.
 //!
-//! The whole discovery path is these NetworkManager objects (research plan §8.1, §8.2):
+//! The discovery path is these NetworkManager objects (§8.1, §8.2):
 //!
 //! ```text
 //! org.freedesktop.NetworkManager
@@ -10,14 +10,11 @@
 //!         -> Settings.Connection.GetSettings -> 802-11-wireless-security.key-mgmt (security type)
 //! ```
 //!
-//! `GetSettings` is used for the security *type* only; it never returns the passphrase. Reading the
-//! actual secret needs `GetSecrets`, which is the separate, explicit second step. The country comes
-//! from `iw reg get` when it is available (the regulatory domain, the authoritative source), and
-//! otherwise from the locale.
+//! `GetSettings` never returns the passphrase; reading the secret needs `GetSecrets`, the separate
+//! second step. The country comes from `iw reg get` when available, otherwise from the locale.
 //!
-//! Everything here uses the generic untyped `blocking::Proxy` rather than a generated typed proxy:
-//! the calls are few, and staying untyped keeps the backend working across NetworkManager versions
-//! without pinning to a specific interface XML.
+//! Everything uses the untyped `blocking::Proxy` rather than a generated typed proxy: the calls are
+//! few, and staying untyped keeps the backend working across NetworkManager versions.
 
 use std::collections::HashMap;
 
@@ -51,8 +48,8 @@ const PSK_FLAGS_FIELD: &str = "psk-flags";
 
 /// `NMSettingSecretFlags` (`libnm/nm-setting.h`). A bitfield, not an enum, so it is tested by mask.
 ///
-/// - `NONE` (0x0): NetworkManager stores the secret itself; `GetSecrets` returns it.
-/// - `AGENT_OWNED` (0x1): a user secret agent holds it; `GetSecrets` works in that user's session.
+/// - `NONE` (0x0): NetworkManager stores the secret itself.
+/// - `AGENT_OWNED` (0x1): a user secret agent holds it.
 /// - `NOT_SAVED` (0x2): deliberately not persisted, so there is nothing to read.
 /// - `NOT_REQUIRED` (0x4): the connection does not need this secret at all.
 const SECRET_FLAG_NOT_SAVED: u32 = 0x02;
@@ -161,9 +158,6 @@ fn active_connection_path(
 }
 
 /// Classify the security type from the connection's non-secret settings (§8.4).
-///
-/// `GetSettings` returns everything *except* secrets, which is exactly enough to read
-/// `802-11-wireless-security.key-mgmt` and decide whether a single portable passphrase can exist.
 fn read_security(
     conn: &Connection,
     settings_path: &OwnedObjectPath,
@@ -202,20 +196,15 @@ fn security_from_settings(settings: &HashMap<String, HashMap<String, OwnedValue>
 
 /// Map a NetworkManager `key-mgmt` value to a [`SecurityKind`].
 ///
-/// Kept as a free function so the whole classification table is unit-testable without a live bus.
-///
 /// `has_security_block` disambiguates `key-mgmt = "none"`, which NetworkManager uses for *static
 /// WEP* rather than for an open network: an open network has no `802-11-wireless-security` setting
 /// at all. Treating WEP as open would tell the user "no password needed" about a secured network.
 fn classify_key_mgmt(key_mgmt: &str, has_security_block: bool) -> SecurityKind {
     match key_mgmt {
-        // A single portable passphrase: WPA/WPA2-PSK and WPA3-SAE.
         "wpa-psk" | "sae" => SecurityKind::Personal,
-        // No portable per-user secret.
         "wpa-eap" | "wpa-eap-suite-b-192" | "ieee8021x" => SecurityKind::Enterprise,
         // Opportunistic Wireless Encryption is "open" with no passphrase to carry.
         "owe" => SecurityKind::Open,
-        // With a security block present this is static WEP; without one it is a genuinely open network.
         "none" | "" => {
             if has_security_block {
                 SecurityKind::UnsupportedSecurity
@@ -237,7 +226,7 @@ fn country_from_iw() -> Option<CountryHint> {
     let text = String::from_utf8_lossy(&output.stdout);
     for line in text.lines() {
         let line = line.trim();
-        // Lines look like: "country TR: DFS-ETSI" or, when unset, "country 00: DFS-UNSET".
+        // "country TR: DFS-ETSI", or "country 00: DFS-UNSET" when unset.
         if let Some(rest) = line.strip_prefix("country ") {
             let code = rest.split(':').next().unwrap_or("").trim();
             if let Some(parsed) = CountryCode::parse(code) {
@@ -290,13 +279,11 @@ pub(crate) fn detect_current_wifi() -> Result<DetectedWifi, HostWifiError> {
 
 /// Decide, from the non-secret `psk-flags`, whether asking for the secret is worth it (§8.3).
 ///
-/// The flags are a hint, not a guarantee: `NONE`/`AGENT_OWNED` still only mean "a secret agent
-/// *should* be able to provide this". They let us skip a pointless `GetSecrets` round trip for the
-/// two cases where the answer is already known.
+/// The flags are a hint, not a guarantee, but they let us skip a pointless `GetSecrets` round trip
+/// for the two cases where the answer is already known.
 fn outcome_from_psk_flags(flags: u32) -> Option<PasswordOutcome> {
     if flags & SECRET_FLAG_NOT_SAVED != 0 {
-        // Deliberately not persisted: the user is asked to type it every time, so there is nothing
-        // stored for us to read either.
+        // Deliberately not persisted: the user types it every time, so nothing is stored for us.
         return Some(PasswordOutcome::NotStored);
     }
     if flags & SECRET_FLAG_NOT_REQUIRED != 0 {
@@ -308,10 +295,8 @@ fn outcome_from_psk_flags(flags: u32) -> Option<PasswordOutcome> {
 /// Map a `GetSecrets` D-Bus error to a [`PasswordOutcome`] where it is a normal answer, or to a
 /// [`HostWifiError`] where the query itself failed.
 ///
-/// The error names come from `libnm`'s `nm-errors.h`: `NMAgentManagerError` nicks live under the
-/// `org.freedesktop.NetworkManager.AgentManager` namespace and `NMConnectionError` nicks under
-/// `org.freedesktop.NetworkManager.Settings.Connection`. Only the *name* is inspected; the message
-/// is never parsed (it is localized) and never logged (it can quote connection data).
+/// The error names come from `libnm`'s `nm-errors.h` nicks. Only the *name* is inspected; the
+/// message is never parsed (it is localized) and never logged (it can quote connection data).
 fn classify_secrets_error(error: &zbus::Error) -> Result<PasswordOutcome, HostWifiError> {
     let zbus::Error::MethodError(name, _, _) = error else {
         return Err(HostWifiError::PlatformApi {
@@ -343,8 +328,8 @@ fn classify_secrets_error(error: &zbus::Error) -> Result<PasswordOutcome, HostWi
 
 /// Pull the `psk` out of a `GetSecrets` reply, validate its shape, and move it into a [`Secret`].
 ///
-/// The reply map is never rendered with `Debug` and never returned to the caller (§12.2): only the
-/// single expected field is touched, and it goes straight into the redacting, zeroizing type.
+/// The reply map is never rendered with `Debug` (§12.2): only the single expected field is touched,
+/// and it goes straight into the redacting, zeroizing type.
 fn psk_from_secrets(secrets: &HashMap<String, HashMap<String, OwnedValue>>) -> PasswordOutcome {
     let Some(security) = secrets.get(SECURITY_SETTING) else {
         return PasswordOutcome::NotStored;
@@ -358,7 +343,7 @@ fn psk_from_secrets(secrets: &HashMap<String, HashMap<String, OwnedValue>>) -> P
     };
 
     // A value that cannot satisfy the T3 serializer is reported as unusable rather than pushed into
-    // the form to fail there (§3.1). The plaintext is only ever measured, never logged.
+    // the form to fail there (§3.1).
     if !crate::is_usable_wifi_credential(&psk) {
         return PasswordOutcome::Unavailable;
     }
@@ -388,7 +373,7 @@ pub(crate) fn read_saved_password(network: &NetworkRef) -> Result<PasswordOutcom
         SecurityKind::Enterprise | SecurityKind::UnsupportedSecurity => {
             return Ok(PasswordOutcome::UnsupportedSecurity);
         }
-        // Unknown still gets a lookup: the flags and the reply itself are more informative than a
+        // Unknown still gets a lookup: the flags and the reply are more informative than a
         // key-mgmt string we did not recognise.
         SecurityKind::Personal | SecurityKind::Unknown => {}
     }
@@ -421,8 +406,8 @@ pub(crate) fn read_saved_password(network: &NetworkRef) -> Result<PasswordOutcom
 mod tests {
     use super::*;
 
-    /// Build a `a{sa{sv}}`-shaped map the way NetworkManager returns one, so the parsing helpers are
-    /// exercised against real `zvariant` values rather than a hand-rolled stand-in.
+    /// Build a `a{sa{sv}}`-shaped map the way NetworkManager returns one, so the parsing helpers
+    /// are exercised against real `zvariant` values.
     fn settings_map(
         entries: &[(&str, &[(&str, OwnedValue)])],
     ) -> HashMap<String, HashMap<String, OwnedValue>> {
