@@ -372,7 +372,7 @@ fn linux_sd_card_common<'a>(
                 !usr.validate_username(),
             )
             .into(),
-            input_with_label(
+            secret_input_with_label(
                 lang.text(Msg::Password),
                 "password",
                 &usr.password,
@@ -383,7 +383,6 @@ fn linux_sd_card_common<'a>(
                             .update_user(Some(usr.clone().update_password(inp))),
                     )
                 },
-                false,
             )
             .into(),
         ])
@@ -416,7 +415,7 @@ fn linux_sd_card_common<'a>(
                 false,
             )
             .into(),
-            input_with_label(
+            secret_input_with_label(
                 lang.text(Msg::Password),
                 "password",
                 &wifi.password,
@@ -427,7 +426,6 @@ fn linux_sd_card_common<'a>(
                             .update_wifi(Some(wifi.clone().update_password(inp))),
                     )
                 },
-                false,
             )
             .into(),
         ])

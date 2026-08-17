@@ -1348,7 +1348,7 @@ mod tests {
             .update_timezone(Some("UTC".parse().unwrap()))
             .update_keymap(Some("us".into()))
             .update_ssh(Some("k".into()))
-            .update_user(Some(SdCustomizationUser::new("u".into(), "p".into())))
+            .update_user(Some(SdCustomizationUser::new("u".into(), "p")))
             .update_wifi(Some(SdCustomizationWifi::default()));
         let mods = sd_modifications_common(&full, gem_i18n::Lang::En);
         assert_eq!(mods.len(), 6);
@@ -1389,7 +1389,7 @@ mod tests {
             FlashingCustomization::LinuxSdSysconfig(SdSysconfCustomization::default()).validate()
         );
         let root = SdSysconfCustomization::default()
-            .update_user(Some(SdCustomizationUser::new("root".into(), "p".into())));
+            .update_user(Some(SdCustomizationUser::new("root".into(), "p")));
         assert!(!FlashingCustomization::LinuxSdSysconfig(root).validate());
     }
 
