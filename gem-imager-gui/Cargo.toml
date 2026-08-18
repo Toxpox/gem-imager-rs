@@ -89,6 +89,9 @@ product_name = "T3 Gemstone Imager"
 banner_path = "assets/icons/installer_banner.png"
 dialog_image_path = "assets/icons/dialog_image.png"
 
+[package.metadata.packager.macos]
+info_plist_path = "assets/packages/darwin/Info.plist"
+
 [package.metadata.packager.deb]
 package_name = "gem-imager-gui"
 files = { "assets/packages/linux/udev/10-t3gemstone.rules" = "/etc/udev/rules.d/10-t3gemstone.rules" }

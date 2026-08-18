@@ -16,5 +16,7 @@
         <key>LSApplicationCategoryType</key><string>public.app-category.utilities</string>
         <key>LSRequiresCarbon</key><true/>
         <key>NSHighResolutionCapable</key><true/>
+        <key>NSLocationUsageDescription</key><string>Location access lets the imager read the name of the Wi-Fi network you are on so it can pre-fill the Wi-Fi settings for your board.</string>
+        <key>NSLocationWhenInUseUsageDescription</key><string>Location access lets the imager read the name of the Wi-Fi network you are on so it can pre-fill the Wi-Fi settings for your board.</string>
     </dict>
 </plist>
