@@ -5,31 +5,23 @@
 //! denied we do *not* fall back to a command-line workaround; we return
 //! [`HostWifiError::PermissionDenied`] and the UI keeps the manual SSID field.
 //!
-//! Password retrieval is a direct `SecItemCopyMatching` Keychain query (§6.4) — never the `security`
-//! CLI, never the Keychain database on disk, and never an attempt to modify an item's ACL (§6.6).
-//! The saved Wi-Fi password is the AirPort generic-password item whose account is the SSID. The
-//! query runs in two passes: a metadata-only query establishes that exactly one item matches, and
-//! only then does a second query ask for the bytes. That second call is the one that can prompt.
+//! Password retrieval goes through CoreWLAN's `CWKeychainFindWiFiPassword` against the System
+//! keychain domain (§6.4) — never the `security` CLI, never the Keychain database on disk, and never
+//! an attempt to modify an item's ACL (§6.6). macOS stores a joined network's password in the System
+//! keychain, owned by `airportd`, so a bare `SecItemCopyMatching` searches the login keychain, finds
+//! nothing and never prompts.
 //!
 //! Every CoreWLAN/CoreLocation call is `unsafe` because it is an Objective-C message send; in each
 //! case we only pass the receiver the framework gave us and immediately convert the result to an
 //! owned Rust value.
 
-use std::ffi::c_void;
-use std::ptr::NonNull;
-
 use gem_helper::secret::Secret;
-use objc2_core_foundation::{
-    CFArray, CFBoolean, CFData, CFMutableDictionary, CFRetained, CFString, CFType, kCFBooleanTrue,
-    kCFTypeDictionaryKeyCallBacks, kCFTypeDictionaryValueCallBacks,
-};
 use objc2_core_location::{CLAuthorizationStatus, CLLocationManager};
-use objc2_core_wlan::{CWSecurity, CWWiFiClient};
+use objc2_core_wlan::{CWKeychainDomain, CWKeychainFindWiFiPassword, CWSecurity, CWWiFiClient};
+use objc2_foundation::{NSData, NSString};
 use objc2_security::{
-    SecItemCopyMatching, errSecAuthFailed, errSecInteractionNotAllowed, errSecItemNotFound,
-    errSecMissingEntitlement, errSecSuccess, errSecUserCanceled, kSecAttrAccount,
-    kSecAttrDescription, kSecClass, kSecClassGenericPassword, kSecMatchLimit, kSecMatchLimitAll,
-    kSecMatchLimitOne, kSecReturnAttributes, kSecReturnData,
+    errSecAuthFailed, errSecInteractionNotAllowed, errSecItemNotFound, errSecMissingEntitlement,
+    errSecSuccess, errSecUserCanceled,
 };
 use zeroize::Zeroize;
 
@@ -169,176 +161,51 @@ fn outcome_for_status(status: OSStatus) -> PasswordOutcome {
     }
 }
 
-/// Which of the two query stages to build (§6.4).
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-enum QueryStage {
-    /// Metadata only: how many items match, with no secret returned.
-    CountOnly,
-    /// The single match, returning its bytes. This is the call that can prompt.
-    ReturnData,
-}
-
-/// `kCFBooleanTrue` as a raw pointer, for use as a query value.
-fn true_value() -> *const c_void {
-    // SAFETY: reading a CoreFoundation constant that the framework always defines. The binding is
-    // an `Option` only because it cannot prove non-nullness at the type level.
-    let boolean: &CFBoolean = unsafe { kCFBooleanTrue }.expect("kCFBooleanTrue is always defined");
-    boolean as *const CFBoolean as *const c_void
-}
-
-/// Build the Keychain query for the AirPort password of exactly one SSID.
-///
-/// Apple's own network stack stores a saved Wi-Fi password as a generic-password item whose
-/// `kSecAttrAccount` is the SSID and whose `kSecAttrDescription` is `"AirPort network password"`
-/// (this is what CoreWLAN's `CWKeychainFindWiFiPassword` and `security -D "AirPort network
-/// password" -a <ssid>` read). Apple does not document this as a stable retrieval contract (§6.4),
-/// which is why a miss is [`PasswordOutcome::NotStored`] rather than a defect.
-fn keychain_query(ssid: &str, stage: QueryStage) -> CFRetained<CFMutableDictionary> {
-    // SAFETY: the dictionary is created empty and then filled with framework constants and
-    // CoreFoundation objects created here; kCFTypeDictionary*CallBacks make it retain each one, so
-    // nothing dangles once this function returns.
-    unsafe {
-        let query = CFMutableDictionary::new(
-            None,
-            5,
-            &kCFTypeDictionaryKeyCallBacks,
-            &kCFTypeDictionaryValueCallBacks,
-        )
-        .expect("keychain query dictionary");
-
-        let set = |key: &CFString, value: *const c_void| {
-            CFMutableDictionary::set_value(
-                Some(&query),
-                key as *const CFString as *const c_void,
-                value,
-            );
-        };
-
-        set(
-            kSecClass,
-            kSecClassGenericPassword as *const CFString as *const c_void,
-        );
-
-        // Narrow to AirPort items so an unrelated generic password that merely shares the SSID as
-        // its account name cannot be returned in its place.
-        let description = CFString::from_str("AirPort network password");
-        set(
-            kSecAttrDescription,
-            CFRetained::as_ptr(&description).as_ptr() as *const c_void,
-        );
-
-        // The SSID is the item's account, matched exactly: a prefix or case-insensitive match could
-        // hand over the credential of a different network (§6.4).
-        let account = CFString::from_str(ssid);
-        set(
-            kSecAttrAccount,
-            CFRetained::as_ptr(&account).as_ptr() as *const c_void,
-        );
-
-        match stage {
-            // Ask for *all* matches so an ambiguous result can be detected rather than silently
-            // resolved to whichever item comes back first.
-            QueryStage::CountOnly => {
-                set(
-                    kSecMatchLimit,
-                    kSecMatchLimitAll as *const CFString as *const c_void,
-                );
-                set(kSecReturnAttributes, true_value());
-            }
-            QueryStage::ReturnData => {
-                set(
-                    kSecMatchLimit,
-                    kSecMatchLimitOne as *const CFString as *const c_void,
-                );
-                set(kSecReturnData, true_value());
-            }
-        }
-
-        query
-    }
-}
-
 pub(crate) fn read_saved_password(network: &NetworkRef) -> Result<PasswordOutcome, HostWifiError> {
     let NetworkRefInner::MacOs { ssid } = &network.0 else {
         return Err(HostWifiError::UnsupportedPlatform);
     };
     // Discovery stores an empty SSID when the name was not representable as text; there is nothing
-    // to match a Keychain item against in that case.
+    // to look up in that case.
     if ssid.is_empty() {
         return Ok(PasswordOutcome::NotStored);
     }
 
-    // Stage one: metadata only, establishing how many items match before anything asks for a
-    // secret, so an ambiguous result is refused without ever reading a password (§6.4).
-    match count_matching_items(ssid) {
-        Ok(0) => return Ok(PasswordOutcome::NotStored),
-        Ok(1) => {}
-        Ok(_) => return Err(HostWifiError::AmbiguousProfile),
-        Err(status) => return Ok(outcome_for_status(status)),
-    }
-
-    // Stage two: the single exact match, this time asking for the bytes. This is the call that can
-    // prompt, which is why the public API is split into two explicit steps.
-    read_single_item(ssid)
+    read_system_keychain_password(ssid)
 }
 
-/// How many Keychain items match this SSID, without returning any secret data.
-fn count_matching_items(ssid: &str) -> Result<usize, OSStatus> {
-    let query = keychain_query(ssid, QueryStage::CountOnly);
-    let mut result: *const CFType = std::ptr::null();
+/// Read the saved password for `ssid` from the System keychain, where macOS stores a joined
+/// network's password. A bare `SecItemCopyMatching` would search the login keychain, find nothing
+/// and never prompt; this is the call that raises the authorization dialog.
+fn read_system_keychain_password(ssid: &str) -> Result<PasswordOutcome, HostWifiError> {
+    objc2::rc::autoreleasepool(|_pool| {
+        let ssid_data = NSData::with_bytes(ssid.as_bytes());
+        let mut password: *mut NSString = std::ptr::null_mut();
 
-    // SAFETY: the query is a well-formed CFDictionary (a CFMutableDictionary is one) and `result`
-    // is a valid out pointer that the framework either fills or leaves null.
-    let status = unsafe { SecItemCopyMatching(&query, &mut result) };
-    if status != errSecSuccess {
-        return Err(status);
-    }
-    let Some(result) = NonNull::new(result.cast_mut()) else {
-        return Ok(0);
-    };
+        // SAFETY: `ssid_data` outlives the call and `password` is a valid out pointer the framework
+        // either fills or leaves null.
+        let status: OSStatus = unsafe {
+            CWKeychainFindWiFiPassword(CWKeychainDomain::System, &ssid_data, &mut password)
+        };
 
-    // SAFETY: on success the framework returns a +1 object; `from_raw` takes that reference over so
-    // it is released when `owned` drops.
-    let owned = unsafe { CFRetained::from_raw(result) };
-    // With kSecMatchLimitAll the result is an array. A lone dictionary (which some macOS versions
-    // return for a single hit) means exactly one match.
-    Ok(match owned.downcast_ref::<CFArray>() {
-        Some(array) => array.count() as usize,
-        None => 1,
+        if status != errSecSuccess {
+            return Ok(outcome_for_status(status));
+        }
+
+        // The out parameter is `AutoreleasingUnsafeMutablePointer`, so the string comes back +0 and
+        // must be retained rather than taken over with `from_raw`.
+        // SAFETY: the pointer is null or a valid autoreleased NSString.
+        let Some(password) = (unsafe { objc2::rc::Retained::retain(password) }) else {
+            return Ok(PasswordOutcome::NotStored);
+        };
+
+        let mut text = password.to_string();
+        let outcome = classify_credential(&text);
+        // Wipe the plaintext before the buffer is freed (§12.2).
+        // SAFETY: zeroes are valid UTF-8 and `text` is not read as text again.
+        unsafe { text.as_bytes_mut() }.zeroize();
+        Ok(outcome)
     })
-}
-
-/// Read the one matching item's password bytes and move them straight into a [`Secret`].
-fn read_single_item(ssid: &str) -> Result<PasswordOutcome, HostWifiError> {
-    let query = keychain_query(ssid, QueryStage::ReturnData);
-    let mut result: *const CFType = std::ptr::null();
-
-    // SAFETY: as in `count_matching_items`; this variant asks for kSecReturnData, so a successful
-    // result is a CFData rather than an array.
-    let status = unsafe { SecItemCopyMatching(&query, &mut result) };
-    if status != errSecSuccess {
-        return Ok(outcome_for_status(status));
-    }
-    let Some(result) = NonNull::new(result.cast_mut()) else {
-        return Ok(PasswordOutcome::NotStored);
-    };
-
-    // SAFETY: a +1 CFData we now own; its bytes are copied out and it is released on drop.
-    let owned = unsafe { CFRetained::from_raw(result) };
-    let Some(data) = owned.downcast_ref::<CFData>() else {
-        return Ok(PasswordOutcome::Unavailable);
-    };
-
-    // The copied bytes are wiped before this returns, so an unusable credential never lingers in
-    // memory (§12.2).
-    let mut bytes = data.to_vec();
-    let outcome = match std::str::from_utf8(&bytes) {
-        Ok(text) => classify_credential(text),
-        // A Wi-Fi passphrase is text; anything else is a Keychain item we cannot use.
-        Err(_) => PasswordOutcome::Unavailable,
-    };
-    bytes.zeroize();
-    Ok(outcome)
 }
 
 /// Validate a credential read from the Keychain and wrap it, or say why it is unusable.
@@ -461,12 +328,5 @@ mod tests {
             ssid: String::new(),
         });
         assert_eq!(read_saved_password(&empty), Ok(PasswordOutcome::NotStored));
-    }
-
-    #[test]
-    fn the_two_query_stages_are_distinct() {
-        // The metadata pass and the data pass must not be collapsed into one: the whole point of
-        // the split is that nothing asks for a secret until exactly one item is known to match.
-        assert_ne!(QueryStage::CountOnly, QueryStage::ReturnData);
     }
 }
