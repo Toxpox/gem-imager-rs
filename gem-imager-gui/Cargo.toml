@@ -37,6 +37,7 @@ chrono = "0.4"
 chrono-tz = { version = "0.10", features = ["serde"] }
 gem-iced-widgets = { path = "../gem-iced-widgets" }
 gem-i18n = { path = "../gem-i18n" }
+gem-host-wifi = { path = "../gem-host-wifi" }
 gem-winusb = { path = "../gem-winusb", optional = true }
 thiserror = "2.0"
 

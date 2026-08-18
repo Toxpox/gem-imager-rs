@@ -48,6 +48,10 @@ pub(crate) enum GemImagerMessage {
     // Customization Page
     UpdateFlashConfig(crate::helpers::FlashingCustomization),
     ResetFlashingConfig,
+    /// Toggle the Wi-Fi block. On enable it also kicks off host-network detection.
+    ToggleWifi(bool),
+    /// The host's current Wi-Fi network, detected off-thread, ready to pre-fill the form.
+    WifiAutofill(crate::helpers::HostWifiPrefill),
 
     // Review Page
     RequestFlash,
@@ -424,6 +428,24 @@ pub(crate) fn update(state: &mut GemImager, message: GemImagerMessage) -> Task<G
         GemImagerMessage::UpdateFlashConfig(x) => match state {
             GemImager::Customize(inner) => {
                 inner.customization = x;
+            }
+            _ => panic!("Unexpected message"),
+        },
+        GemImagerMessage::WifiAutofill(prefill) => {
+            if let GemImager::Customize(inner) = state {
+                inner.customization.apply_wifi_prefill(prefill);
+            }
+        }
+        GemImagerMessage::ToggleWifi(enabled) => match state {
+            GemImager::Customize(inner) => {
+                if enabled {
+                    inner.customization.enable_wifi();
+                    return Task::perform(
+                        blocking_future(helpers::detect_host_wifi),
+                        GemImagerMessage::WifiAutofill,
+                    );
+                }
+                inner.customization.disable_wifi();
             }
             _ => panic!("Unexpected message"),
         },

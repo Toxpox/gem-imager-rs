@@ -2047,6 +2047,7 @@ dependencies = [
  "gem-downloader",
  "gem-flasher",
  "gem-helper",
+ "gem-host-wifi",
  "gem-i18n",
  "gem-iced-widgets",
  "gem-winusb",
