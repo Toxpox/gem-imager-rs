@@ -288,8 +288,6 @@ pub(crate) fn detect_host_wifi() -> HostWifiPrefill {
     out.ssid = wifi.ssid.as_utf8().map(str::to_owned);
     out.country = wifi.country.as_ref().map(|c| c.code.as_str().to_owned());
 
-    // Only a Personal network carries a single portable passphrase; asking the OS for anything else
-    // would prompt (macOS) or fail for a credential the board could never reuse.
     if wifi.security.can_carry_passphrase() {
         match gem_host_wifi::read_saved_password(&wifi.network) {
             Ok(PasswordOutcome::Found(secret)) => out.password = Some(secret),
@@ -870,6 +868,15 @@ impl FlashingCustomization {
         }
     }
 
+    /// Whether the Wi-Fi block is currently enabled (shown as an expanded form).
+    pub(crate) fn wifi_enabled(&self) -> bool {
+        match self {
+            Self::LinuxSdSysconfig(c) | Self::LinuxSdCloudInit(c) => c.wifi.is_some(),
+            Self::T3GemInit { config, .. } => config.wifi.is_some(),
+            _ => false,
+        }
+    }
+
     /// Clear the Wi-Fi block, discarding any secret it held.
     pub(crate) fn disable_wifi(&mut self) {
         match self {
@@ -879,39 +886,27 @@ impl FlashingCustomization {
         }
     }
 
-    /// Apply a host-detected Wi-Fi prefill without overwriting anything the user already typed. A
-    /// missing host field leaves the corresponding form field untouched.
     pub(crate) fn apply_wifi_prefill(&mut self, prefill: HostWifiPrefill) {
         match self {
             Self::LinuxSdSysconfig(c) | Self::LinuxSdCloudInit(c) => {
                 if let Some(wifi) = c.wifi.as_mut() {
-                    if let Some(ssid) = prefill.ssid
-                        && wifi.ssid.is_empty()
-                    {
+                    if let Some(ssid) = prefill.ssid {
                         wifi.ssid = ssid;
                     }
-                    if let Some(password) = prefill.password
-                        && wifi.password.is_empty()
-                    {
+                    if let Some(password) = prefill.password {
                         wifi.password = password;
                     }
                 }
             }
             Self::T3GemInit { config, .. } => {
                 if let Some(wifi) = config.wifi.as_mut() {
-                    if let Some(ssid) = prefill.ssid
-                        && wifi.ssid.is_empty()
-                    {
+                    if let Some(ssid) = prefill.ssid {
                         wifi.ssid = ssid;
                     }
-                    if let Some(password) = prefill.password
-                        && wifi.password.is_empty()
-                    {
+                    if let Some(password) = prefill.password {
                         wifi.password = password;
                     }
-                    if let Some(country) = prefill.country
-                        && wifi.country.is_empty()
-                    {
+                    if let Some(country) = prefill.country {
                         wifi.country = country;
                     }
                 }

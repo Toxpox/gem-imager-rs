@@ -524,6 +524,13 @@ impl GemImager {
                     self.scroll_reset(),
                 ])
             }
+            Self::Customize(inner) if inner.customization.wifi_enabled() => Task::batch([
+                Task::perform(
+                    helpers::blocking_future(helpers::detect_host_wifi),
+                    GemImagerMessage::WifiAutofill,
+                ),
+                self.scroll_reset(),
+            ]),
             Self::Review(inner) => match &inner.customization {
                 helpers::FlashingCustomization::LinuxSdSysconfig(c) => {
                     let mut temp = inner
