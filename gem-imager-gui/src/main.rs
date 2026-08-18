@@ -80,6 +80,12 @@ fn main() -> iced::Result {
     // HACK: mac_notification_sys set application name (not an option in notify-rust)
     let _ = notify_rust::set_application(constants::APP_ID);
 
+    // macOS gates the Wi-Fi SSID behind Location authorization, and grants that asynchronously to
+    // the *main* thread's run loop. Asking here, before the event loop starts, means the answer is
+    // already in by the time the user opens the Wi-Fi form; asking from the worker that runs the
+    // detection would never receive it. A no-op on every other platform.
+    gem_host_wifi::prime_location_authorization();
+
     let settings = iced::window::Settings {
         icon,
         min_size: Some(constants::WINDOW_SIZE),

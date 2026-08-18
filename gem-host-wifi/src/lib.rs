@@ -42,6 +42,19 @@ pub fn detect_current_wifi() -> Result<DetectedWifi, HostWifiError> {
     pal::detect_current_wifi()
 }
 
+/// Ask the OS, once, for the permission host Wi-Fi discovery needs, so the answer is ready by the
+/// time the user opens the Wi-Fi form.
+///
+/// Only macOS needs this, and there it does real work: Location authorization gates the SSID, the
+/// grant is asynchronous, and CoreLocation delivers it to the **main thread's run loop**. Call this
+/// from `main` on the main thread, before the UI event loop starts. Everywhere else it is a no-op.
+///
+/// Calling it is optional — [`detect_current_wifi`] primes the request itself if it has to — but
+/// then the first detection races the user reading the permission dialog and comes back empty.
+pub fn prime_location_authorization() {
+    pal::prime_location_authorization();
+}
+
 /// Read the saved password for a previously [`detect_current_wifi`]-detected network.
 ///
 /// Never call this from the toggle or on startup: it is the step that can prompt. The returned

@@ -1988,6 +1988,7 @@ dependencies = [
 name = "gem-host-wifi"
 version = "0.9.0"
 dependencies = [
+ "dispatch2",
  "gem-helper",
  "objc2 0.6.4",
  "objc2-core-location 0.3.2",
@@ -1996,6 +1997,8 @@ dependencies = [
  "objc2-security",
  "roxmltree",
  "thiserror 2.0.20",
+ "tracing",
+ "tracing-subscriber",
  "windows 0.62.2",
  "zbus",
  "zeroize",

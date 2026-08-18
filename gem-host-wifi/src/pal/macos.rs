@@ -5,6 +5,11 @@
 //! denied we do *not* fall back to a command-line workaround; we return
 //! [`HostWifiError::PermissionDenied`] and the UI keeps the manual SSID field.
 //!
+//! Winning that authorization is its own problem, and it lives in [`super::macos_location`]: it
+//! needs a delegate, a retained manager and the main run loop, none of which this module can
+//! provide from the worker thread the detection runs on. Note that authorization is also refused
+//! outright to a bundle that is not code-signed, so an unsigned build can never autofill.
+//!
 //! Password retrieval goes through CoreWLAN's `CWKeychainFindWiFiPassword` against the System
 //! keychain domain (§6.4) — never the `security` CLI, never the Keychain database on disk, and never
 //! an attempt to modify an item's ACL (§6.6). macOS stores a joined network's password in the System
@@ -16,7 +21,6 @@
 //! owned Rust value.
 
 use gem_helper::secret::Secret;
-use objc2_core_location::{CLAuthorizationStatus, CLLocationManager};
 use objc2_core_wlan::{CWKeychainDomain, CWKeychainFindWiFiPassword, CWSecurity, CWWiFiClient};
 use objc2_foundation::{NSData, NSString};
 use objc2_security::{
@@ -40,27 +44,38 @@ type OSStatus = i32;
 /// Ensure this process is authorized to read Location-gated Wi-Fi data, prompting once if the user
 /// has not decided yet.
 ///
-/// `notDetermined` triggers a request whose result arrives asynchronously via the delegate, so this
-/// treats "just asked" like "not yet allowed" and the user re-runs the action once answered (§6.1).
+/// The prompt is asynchronous, so a first run that reaches this before the user has answered gets
+/// [`HostWifiError::PermissionDenied`] and autofill simply happens on the next attempt (§6.1). What
+/// this must never do is report "denied" merely because it asked too early — see
+/// [`super::macos_location`] for why reading `authorizationStatus` directly does exactly that.
 fn ensure_location_authorized() -> Result<(), HostWifiError> {
-    // SAFETY: `new`/`authorizationStatus`/`requestWhenInUseAuthorization` are standard instance
-    // methods on CLLocationManager; we hold the manager alive for the duration of the call.
-    unsafe {
-        let manager = CLLocationManager::new();
-        match manager.authorizationStatus() {
-            CLAuthorizationStatus::AuthorizedWhenInUse
-            | CLAuthorizationStatus::AuthorizedAlways => Ok(()),
-            CLAuthorizationStatus::NotDetermined => {
-                manager.requestWhenInUseAuthorization();
-                // The grant is asynchronous; this run cannot yet read the SSID.
-                Err(HostWifiError::PermissionDenied {
-                    operation: Operation::ReadSsid,
-                })
-            }
-            // Denied, restricted, or any future status: no access.
-            _ => Err(HostWifiError::PermissionDenied {
+    use super::macos_location;
+
+    macos_location::prime();
+    match macos_location::wait_for_decision() {
+        Some(status) if macos_location::is_authorized(status) => Ok(()),
+        // Denied, restricted, or still undecided: no access this time round.
+        Some(status) => {
+            tracing::info!(
+                "Wi-Fi autofill blocked: CoreLocation reports {}",
+                macos_location::describe(status)
+            );
+            Err(HostWifiError::PermissionDenied {
                 operation: Operation::ReadSsid,
-            }),
+            })
+        }
+        // Nothing came back at all. Either the main run loop never ran (so the request was never
+        // dispatched), or macOS is ignoring an app it will not authorize — an unsigned bundle, or
+        // one launched as a bare binary rather than from a .app.
+        None => {
+            tracing::warn!(
+                "Wi-Fi autofill blocked: CoreLocation never reported an authorization status. \
+                 This app must run from a code-signed .app bundle carrying \
+                 NSLocationWhenInUseUsageDescription for macOS to grant Location access."
+            );
+            Err(HostWifiError::PermissionDenied {
+                operation: Operation::ReadSsid,
+            })
         }
     }
 }

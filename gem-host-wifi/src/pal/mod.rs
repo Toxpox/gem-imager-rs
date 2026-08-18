@@ -6,6 +6,8 @@
 mod linux;
 #[cfg(target_os = "macos")]
 mod macos;
+#[cfg(target_os = "macos")]
+mod macos_location;
 #[cfg(target_os = "windows")]
 mod windows;
 
@@ -46,6 +48,14 @@ pub(crate) fn detect_current_wifi() -> Result<DetectedWifi, HostWifiError> {
 pub(crate) fn read_saved_password(network: &NetworkRef) -> Result<PasswordOutcome, HostWifiError> {
     macos::read_saved_password(network)
 }
+
+#[cfg(target_os = "macos")]
+pub(crate) fn prime_location_authorization() {
+    macos_location::prime();
+}
+
+#[cfg(not(target_os = "macos"))]
+pub(crate) fn prime_location_authorization() {}
 
 #[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))]
 pub(crate) fn detect_current_wifi() -> Result<DetectedWifi, HostWifiError> {
