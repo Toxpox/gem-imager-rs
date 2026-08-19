@@ -76,8 +76,7 @@ fn main() -> iced::Result {
     .ok();
     assert!(icon.is_some());
 
-    #[cfg(target_os = "macos")]
-    // HACK: mac_notification_sys set application name (not an option in notify-rust)
+    #[cfg(all(target_os = "macos", feature = "notify-rust"))]
     let _ = notify_rust::set_application(constants::APP_ID);
 
     // macOS gates the Wi-Fi SSID behind Location authorization, and grants that asynchronously to
