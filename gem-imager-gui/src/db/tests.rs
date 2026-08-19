@@ -1176,3 +1176,140 @@ fn board_list_search_filters_boards_case_insensitive() {
     assert!(results.iter().any(|b| b.name == "Test Board 2"));
     assert!(results.iter().any(|b| b.name == "Test Board 3"));
 }
+
+/// This test verifies that board rows carry the catalog tags the board screen matches its
+/// bundled photographs on.
+///
+/// What this test checks:
+/// 1. A board is inserted with two tags.
+/// 2. `board_list()` returns both tags on the row.
+/// 3. `board_by_id()` returns both tags on the detail record.
+///
+/// Why this test is needed:
+/// - The bundled board photograph is selected by tag, not by display name, so an empty `tags`
+///   vector silently falls back to the catalog icon and the picture disappears with no error.
+/// - The tags travel through an aggregated column; a `group_concat` separator change or a missing
+///   join would produce one merged pseudo-tag that matches nothing.
+///
+/// Without this test:
+/// - A query refactor could drop the tag column and the board photos would quietly vanish.
+#[test]
+#[cfg_attr(
+    not(feature = "sd"),
+    ignore = "needs `sd`: fixture boards use Flasher::SdCard"
+)]
+fn board_rows_carry_catalog_tags() {
+    let db = Db::new().expect("Failed to create DB");
+    db.init().expect("DB init should succeed");
+
+    let board = gem_config::config::Device {
+        name: "T3-GEM-O1".to_string(),
+        description: "T3 Gemstone Obsidian".to_string(),
+        icon: None,
+        flasher: gem_config::config::Flasher::SdCard,
+        instructions: None,
+        oshw: None,
+        specification: vec![],
+        emmc_dfu: true,
+        documentation: None,
+        tags: HashSet::from(["t3-gem-o1".to_string(), "extra-tag".to_string()]),
+    };
+
+    let config = Config {
+        imager: gem_config::config::Imager {
+            remote_configs: Default::default(),
+            devices: vec![board],
+        },
+        os_list: vec![],
+    };
+
+    db.add_config(config, None)
+        .expect("add_config should succeed");
+
+    let row = db
+        .board_list("T3-GEM-O1")
+        .expect("search should succeed")
+        .into_iter()
+        .find(|b| b.name == "T3-GEM-O1")
+        .expect("the inserted board should be listed");
+
+    assert!(
+        row.tags.iter().any(|t| t == "t3-gem-o1"),
+        "board_list() must carry the catalog tag the board photo is matched on, got {:?}",
+        row.tags
+    );
+    assert_eq!(
+        row.tags.len(),
+        2,
+        "both tags should survive, got {:?}",
+        row.tags
+    );
+
+    let detail = db.board_by_id(row.id).expect("board_by_id should succeed");
+    assert!(
+        detail.tags.iter().any(|t| t == "t3-gem-o1"),
+        "board_by_id() must carry the catalog tag, got {:?}",
+        detail.tags
+    );
+}
+
+/// This test verifies that a board with no tags yields an empty tag list rather than a single
+/// empty string.
+///
+/// What this test checks:
+/// 1. A board is inserted with no tags at all.
+/// 2. Its row reports zero tags.
+///
+/// Why this test is needed:
+/// - `group_concat` over no rows returns SQL NULL, and a naive parse of that value produces a
+///   one-element vector holding "". A board photo lookup would then compare against a phantom tag
+///   instead of skipping cleanly to the catalog icon.
+///
+/// Without this test:
+/// - The untagged "No filtering" catalog pseudo-device could grow a spurious tag.
+#[test]
+#[cfg_attr(
+    not(feature = "sd"),
+    ignore = "needs `sd`: fixture boards use Flasher::SdCard"
+)]
+fn an_untagged_board_reports_no_tags() {
+    let db = Db::new().expect("Failed to create DB");
+    db.init().expect("DB init should succeed");
+
+    let board = gem_config::config::Device {
+        name: "No filtering".to_string(),
+        description: "Show every possible image".to_string(),
+        icon: None,
+        flasher: gem_config::config::Flasher::SdCard,
+        instructions: None,
+        oshw: None,
+        specification: vec![],
+        emmc_dfu: false,
+        documentation: None,
+        tags: HashSet::new(),
+    };
+
+    let config = Config {
+        imager: gem_config::config::Imager {
+            remote_configs: Default::default(),
+            devices: vec![board],
+        },
+        os_list: vec![],
+    };
+
+    db.add_config(config, None)
+        .expect("add_config should succeed");
+
+    let row = db
+        .board_list("No filtering")
+        .expect("search should succeed")
+        .into_iter()
+        .find(|b| b.name == "No filtering")
+        .expect("the inserted board should be listed");
+
+    assert!(
+        row.tags.is_empty(),
+        "an untagged board must report no tags, got {:?}",
+        row.tags
+    );
+}

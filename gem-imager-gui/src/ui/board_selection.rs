@@ -29,12 +29,11 @@ fn board_list_pane<'a>(state: &'a ChooseBoardState) -> Element<'a, GemImagerMess
                 .as_ref()
                 .map(|x| x.id == dev.id)
                 .unwrap_or(false);
-            let img = helpers::network_image_or_default(
+            let img = helpers::board_list_image(
                 &state.common.img_handle_cache,
+                &dev.tags,
                 dev.icon.as_ref(),
-                helpers::BOARD_ICON.clone(),
                 ICON_WIDTH,
-                iced::Shrink,
             );
             helpers::list_item(
                 [img, helpers::list_label(&dev.name).into()],

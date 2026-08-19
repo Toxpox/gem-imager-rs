@@ -37,6 +37,91 @@ pub(crate) static USB_DFU_BOOTMODE: LazyLock<svg::Handle> =
 pub(crate) static EMMC_BOOTMODE: LazyLock<svg::Handle> =
     LazyLock::new(|| svg::Handle::from_memory(constants::EMMC_BOOTMODE_BYTES));
 
+pub(crate) static BOARD_PHOTO_T3_GEM_O1: LazyLock<BoardPhoto> =
+    LazyLock::new(|| BoardPhoto::new(constants::BOARD_PHOTO_T3_GEM_O1_BYTES));
+pub(crate) static BOARD_PHOTO_BEAGLEY_AI: LazyLock<BoardPhoto> =
+    LazyLock::new(|| BoardPhoto::new(constants::BOARD_PHOTO_BEAGLEY_AI_BYTES));
+
+/// A bundled board photograph and the aspect ratio it must be drawn at.
+///
+/// The ratio is read from the asset rather than written down beside it: a list row gives the image
+/// a fixed width and would otherwise need a hard-coded height, which silently starts cropping or
+/// letterboxing the moment someone re-exports the picture at a different size.
+#[derive(Debug, Clone)]
+pub(crate) struct BoardPhoto {
+    handle: widget::image::Handle,
+    /// width / height of the source image.
+    aspect: f32,
+}
+
+impl BoardPhoto {
+    fn new(bytes: &'static [u8]) -> Self {
+        let (w, h) = image::load_from_memory(bytes)
+            .map(|img| (img.width().max(1), img.height().max(1)))
+            .expect("bundled board photo is not a decodable image");
+
+        Self {
+            handle: widget::image::Handle::from_bytes(bytes),
+            aspect: w as f32 / h as f32,
+        }
+    }
+
+    /// Height that keeps the photo undistorted at `width`.
+    fn height_for(&self, width: f32) -> f32 {
+        width / self.aspect
+    }
+}
+
+/// The bundled photograph of a board, matched on its catalog tag.
+///
+/// Matching is on tag, not on name: the tag is the identity the catalog itself uses to attach
+/// images to a board, so a display-name change cannot detach the picture. A board this build has
+/// no photograph of returns `None` and keeps the catalog icon it always had — the fallback chain
+/// is never shortened by adding a picture for one board.
+pub(crate) fn board_photo(tags: &[String]) -> Option<&'static BoardPhoto> {
+    tags.iter().find_map(|tag| match tag.as_str() {
+        gem_config::t3::T3_BOARD_TAG => Some(&*BOARD_PHOTO_T3_GEM_O1),
+        gem_config::t3::BEAGLEY_BOARD_TAG => Some(&*BOARD_PHOTO_BEAGLEY_AI),
+        _ => None,
+    })
+}
+
+/// A board's row picture in the selection list: the bundled photograph when this build has one,
+/// else the catalog icon, else the generic board glyph.
+pub(crate) fn board_list_image<'a>(
+    cache: &'a gem_iced_widgets::cached_icon::Cache<url::Url>,
+    tags: &[String],
+    icon: Option<&url::Url>,
+    width: u32,
+) -> Element<'a, GemImagerMessage> {
+    match board_photo(tags) {
+        Some(photo) => widget::image(photo.handle.clone())
+            .width(width as f32)
+            .height(photo.height_for(width as f32))
+            .content_fit(iced::ContentFit::Contain)
+            .into(),
+        None => network_image_or_default(cache, icon, BOARD_ICON.clone(), width, iced::Shrink),
+    }
+}
+
+/// A board's picture on a detail pane, where the width is whatever the pane gives it.
+fn board_image<'a>(
+    cache: &'a gem_iced_widgets::cached_icon::Cache<url::Url>,
+    tags: &[String],
+    icon: Option<&url::Url>,
+    width: impl Into<iced::Length>,
+    height: impl Into<iced::Length>,
+) -> Element<'a, GemImagerMessage> {
+    match board_photo(tags) {
+        Some(photo) => widget::image(photo.handle.clone())
+            .width(width)
+            .height(height)
+            .content_fit(iced::ContentFit::Contain)
+            .into(),
+        None => network_image_or_default(cache, icon, BOARD_ICON.clone(), width, height),
+    }
+}
+
 pub(crate) const VIEW_COL_PADDING: u16 = 16;
 pub(crate) const LIST_COL_PADDING: iced::Padding = iced::Padding {
     right: 16.0,
@@ -172,10 +257,10 @@ pub(crate) fn board_view_pane<'a>(
     dev: &'a crate::db::Board,
     state: &'a crate::GemImagerCommon,
 ) -> Element<'a, GemImagerMessage> {
-    let img = network_image_or_default(
+    let img = board_image(
         &state.img_handle_cache,
+        &dev.tags,
         dev.icon.as_ref(),
-        BOARD_ICON.clone(),
         iced::Fill,
         iced::Shrink,
     );
@@ -416,5 +501,76 @@ pub(crate) fn network_image_or_default<'a>(
             .height(height)
             .style(svg_icon_style)
             .into(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{BOARD_PHOTO_BEAGLEY_AI, BOARD_PHOTO_T3_GEM_O1, board_photo};
+
+    /// Each shipped board resolves to *its own* photograph.
+    ///
+    /// The two boards look alike at list-row size, so a copy/paste in the match arm would swap
+    /// them without anything failing to compile — and a user holding a BeagleY-AI would be shown
+    /// an Obsidian. Comparing the resolved handle against the expected asset is what catches that.
+    #[test]
+    fn each_board_tag_resolves_to_its_own_photo() {
+        let t3 = board_photo(&[gem_config::t3::T3_BOARD_TAG.to_string()])
+            .expect("T3-GEM-O1 must have a bundled photo");
+        let beagley = board_photo(&[gem_config::t3::BEAGLEY_BOARD_TAG.to_string()])
+            .expect("BeagleY-AI must have a bundled photo");
+
+        assert_eq!(t3.handle, BOARD_PHOTO_T3_GEM_O1.handle);
+        assert_eq!(beagley.handle, BOARD_PHOTO_BEAGLEY_AI.handle);
+        assert_ne!(
+            t3.handle, beagley.handle,
+            "the two boards must not share one picture"
+        );
+    }
+
+    /// A board this build has no photograph of keeps the catalog icon path.
+    ///
+    /// `board_photo` returning `Some` for an unknown board would replace a correct remote icon
+    /// with a picture of different hardware, which is worse than the generic glyph.
+    #[test]
+    fn an_unknown_board_has_no_bundled_photo() {
+        assert!(board_photo(&[]).is_none());
+        assert!(board_photo(&["beagleplay".to_string()]).is_none());
+    }
+
+    /// The photo is found regardless of where the tag sits in the catalog's tag set.
+    ///
+    /// Tags arrive from a `HashSet` in the config model, so their order is not stable between
+    /// runs; matching only the first tag would make the picture appear intermittently.
+    #[test]
+    fn the_photo_is_found_behind_other_tags() {
+        let tags = vec![
+            "some-other-tag".to_string(),
+            gem_config::t3::BEAGLEY_BOARD_TAG.to_string(),
+        ];
+
+        assert_eq!(
+            board_photo(&tags)
+                .expect("tag order must not hide the photo")
+                .handle,
+            BOARD_PHOTO_BEAGLEY_AI.handle
+        );
+    }
+
+    /// The aspect ratio used for list rows comes from the asset and is landscape.
+    ///
+    /// A list row fixes the width and derives the height from this ratio. If the ratio were ever
+    /// read as height/width, every board row would render a tall, cropped sliver.
+    #[test]
+    fn board_photos_report_a_landscape_aspect_ratio() {
+        for photo in [&*BOARD_PHOTO_T3_GEM_O1, &*BOARD_PHOTO_BEAGLEY_AI] {
+            assert!(
+                photo.aspect > 1.0,
+                "board photos are landscape; got aspect {}",
+                photo.aspect
+            );
+            // A 100px-wide row must stay shorter than it is wide.
+            assert!(photo.height_for(100.0) < 100.0);
+        }
     }
 }

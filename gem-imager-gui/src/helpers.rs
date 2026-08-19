@@ -1611,6 +1611,7 @@ mod tests {
             id: 1,
             name: name.to_string(),
             icon: None,
+            tags: Vec::new(),
             description: String::new(),
             documentation: None,
             specification: Vec::new(),
