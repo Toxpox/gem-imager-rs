@@ -9,7 +9,9 @@ fn main() {
             fn CFRunLoopRunInMode(m: *const std::ffi::c_void, s: f64, r: u8) -> i32;
         }
 
-        tracing_subscriber::fmt().with_max_level(tracing::Level::DEBUG).init();
+        tracing_subscriber::fmt()
+            .with_max_level(tracing::Level::DEBUG)
+            .init();
 
         // Exactly what gem-imager-gui's `main` now does, before its event loop starts.
         gem_host_wifi::prime_location_authorization();
