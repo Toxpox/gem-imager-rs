@@ -379,8 +379,8 @@ catalog! {
     EnableUsbDhcp { en: "Enable USB DHCP", tr: "USB DHCP'yi etkinleştir" },
     SshAuthorizationKey { en: "SSH authorization public key", tr: "SSH yetkilendirme açık anahtarı" },
     WifiKeyHint {
-        en: "The passphrase is converted to a network key before it is written, so it never reaches the card. A 64-digit hexadecimal key is accepted as-is.",
-        tr: "Parola yazılmadan önce ağ anahtarına dönüştürülür; bu nedenle karta hiçbir zaman ulaşmaz. 64 haneli onaltılık anahtar olduğu gibi kabul edilir."
+        en: "The passphrase is written to the card as typed, because WPA3 networks need it; the board removes it from the boot partition on first boot. A 64-digit hexadecimal key is accepted as-is, but it is a WPA2-only credential.",
+        tr: "Parola karta yazıldığı gibi gider, çünkü WPA3 ağları buna ihtiyaç duyar; kart ilk açılışta parolayı önyükleme bölümünden siler. 64 haneli onaltılık anahtar olduğu gibi kabul edilir, ancak yalnızca WPA2 ağlarında geçerlidir."
     },
     VncProtocolHint {
         en: "VNC passwords are limited to 8 characters by the protocol. A longer one is rejected rather than silently shortened.",
@@ -405,6 +405,10 @@ catalog! {
     InvalidSsidError {
         en: "Enter a Wi-Fi name between 1 and 32 bytes.",
         tr: "1 ile 32 bayt arasında bir Wi-Fi adı girin."
+    },
+    SsidUnsupportedError {
+        en: "This Wi-Fi name cannot be configured: the board's first-boot script uses it as a file name, so it must not contain \"/\". Set this network up on the board instead.",
+        tr: "Bu Wi-Fi adı yapılandırılamıyor: kartın ilk açılış betiği bu adı dosya adı olarak kullanıyor, bu yüzden \"/\" içeremez. Bu ağı kart üzerinde elle kurun."
     },
     UnknownTimezoneError {
         en: "Select a timezone offered by the application.",

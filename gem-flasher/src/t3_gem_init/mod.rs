@@ -18,12 +18,20 @@
 //! **not** written: `gem-first-boot` does not read them, so offering them would be a UI that claims
 //! to configure something it does not.
 //!
-//! # Known SDK defect
+//! # Wi-Fi values
+//!
+//! The first-boot script copies the Wi-Fi values into a NetworkManager key file. Passphrases stay
+//! unhashed so WPA3/SAE can use them, while ready-made 64-digit PSKs pass through unchanged.
+//! [`escape_for_keyfile`] preserves backslashes, tabs and leading spaces across the extra parse.
+//!
+//! # Known SDK defects
 //!
 //! `gem-first-boot` reads `vncpassword` but its cleanup pass deletes `vncpasswd=` — the names do
 //! not match, so the VNC secret survives on the boot partition after first boot. That is an SDK
 //! bug, not something this crate can fix, and [`T3GemInitConfig::vnc_secret_survives_first_boot`]
 //! exists so the UI can say so out loud instead of hiding it.
+//!
+//! The script also uses the SSID in the profile file name, so [`Ssid::parse`] rejects `/`.
 
 mod crypt;
 mod secret;
@@ -92,6 +100,12 @@ pub enum T3GemInitError {
 
     #[error("SSID must be 1 to {SSID_MAX_LEN} bytes")]
     InvalidSsid,
+
+    #[error(
+        "an SSID containing '/' cannot be configured, because the board's first-boot script uses \
+         it as a file name"
+    )]
+    SsidUnsupportedByCurrentSdk,
 
     #[error("\"{0}\" is not a time zone this application offers")]
     UnknownTimezone(String),
@@ -265,9 +279,18 @@ impl Ssid {
     ///
     /// The 802.11 limit is 32 **bytes**, not characters — a Turkish SSID reaches it sooner than an
     /// ASCII one, and truncating it would join the wrong network.
+    ///
+    /// `/` is rejected because the current first-boot script uses the SSID in the profile path.
+    ///
+    /// Surrounding whitespace is **not** trimmed: an SSID is a byte string on the air, so a name
+    /// that really does end in a space has to stay reachable.
     pub fn parse(value: &str) -> Result<Self, T3GemInitError> {
         if value.is_empty() || value.len() > SSID_MAX_LEN {
             return Err(T3GemInitError::InvalidSsid);
+        }
+
+        if value.contains('/') {
+            return Err(T3GemInitError::SsidUnsupportedByCurrentSdk);
         }
 
         Ok(Self(value.to_owned()))
@@ -278,11 +301,13 @@ impl Ssid {
     }
 }
 
-/// Wireless credentials, resolved to a PSK at serialization time.
+/// Wireless credentials, written to the card as the value NetworkManager's `psk=` field takes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WifiSettings {
     pub ssid: Ssid,
     /// Either an 8..=63 byte passphrase or a 64-digit hex PSK; which one is decided by length.
+    ///
+    /// Passphrases remain available for WPA3/SAE; a ready-made PSK is a WPA2 credential.
     pub password: Secret,
     pub country: WifiCountry,
 }
@@ -382,9 +407,10 @@ impl T3GemInitConfig {
         }
 
         if let Some(wifi) = &self.wifi {
-            let psk = derive_wifi_psk(wifi)?;
-            out.quoted(Key::WifiName, wifi.ssid.as_str())?;
-            out.quoted(Key::WifiPasswd, &psk)?;
+            let key = wifi_key(&wifi.password)?;
+            out.quoted(Key::WifiName, &escape_for_keyfile(wifi.ssid.as_str()))?;
+            out.quoted(Key::WifiPasswd, &escape_for_keyfile(&key))?;
+            // Two upper-case ASCII letters by construction, so nothing to escape.
             out.quoted(Key::WifiCountry, wifi.country.as_str())?;
         }
 
@@ -406,19 +432,46 @@ impl T3GemInitConfig {
     }
 }
 
-/// Resolve a Wi-Fi password to a PSK.
+/// Produce the value copied into NetworkManager's `psk=` field.
 ///
-/// The length decides the interpretation, which is how every WPA supplicant does it: exactly 64 hex
-/// digits is already a PSK, and 8..=63 characters is a passphrase to run through PBKDF2. Anything
-/// else is neither, and guessing would produce a card that silently fails to join the network.
-fn derive_wifi_psk(wifi: &WifiSettings) -> Result<DerivedSecret, T3GemInitError> {
-    match wifi.password.len() {
-        WPA_PSK_HEX_LEN => crypt::normalize_psk_hex(&wifi.password),
+/// An 8..=63-byte passphrase is preserved for WPA3/SAE. Exactly 64 hexadecimal digits are treated
+/// as a ready-made WPA2 PSK; other values are rejected.
+fn wifi_key(password: &Secret) -> Result<DerivedSecret, T3GemInitError> {
+    match password.len() {
+        WPA_PSK_HEX_LEN => crypt::normalize_psk_hex(password),
         WPA_PASSPHRASE_MIN_LEN..=WPA_PASSPHRASE_MAX_LEN => {
-            crypt::wpa_psk(wifi.ssid.as_str(), &wifi.password)
+            Ok(DerivedSecret::new(password.expose().to_owned()))
         }
         _ => Err(T3GemInitError::WifiPassphraseLength),
     }
+}
+
+/// Escape a value for the GLib key file `gem-first-boot` copies it into.
+///
+/// GLib strips leading whitespace and decodes backslash escapes. Newlines, carriage returns and
+/// NUL bytes are rejected earlier by [`shell::quote`].
+fn escape_for_keyfile(value: &str) -> DerivedSecret {
+    let mut out = String::with_capacity(value.len());
+    let mut leading_whitespace = true;
+
+    for c in value.chars() {
+        match c {
+            '\\' => {
+                out.push_str(r"\\");
+                leading_whitespace = false;
+            }
+            // A tab is whitespace, so the leading run continues. Escaping a non-leading one is
+            // unnecessary but harmless: the reader decodes `\t` back to a tab either way.
+            '\t' => out.push_str(r"\t"),
+            ' ' if leading_whitespace => out.push_str(r"\s"),
+            _ => {
+                out.push(c);
+                leading_whitespace = false;
+            }
+        }
+    }
+
+    DerivedSecret::new(out)
 }
 
 /// Accumulates `config.ini` lines. The only way to add one is through a [`Key`].
@@ -490,8 +543,9 @@ mod tests {
         assert!(out.contains("wificountry='TR'\n"));
         assert!(out.contains("timezone='Europe/Istanbul'\n"));
         assert!(out.contains("keyboardlayout='tr'\n"));
-        // The passphrase itself must never appear; only the derived PSK does.
-        assert!(!out.contains("parola1234"));
+        // The passphrase reaches the card verbatim: WPA3 needs it, and the consumer scrubs the
+        // line after first boot. See `wifi_key`.
+        assert!(out.contains("wifipasswd='parola1234'\n"));
     }
 
     /// Keys the current `gem-first-boot` does not read must not reach the file
@@ -551,8 +605,9 @@ mod tests {
                 "wificountry"
             ]
         );
-        // It survives as *data*: the SSID reads back exactly as typed, metacharacters and all.
-        assert_eq!(parsed[2].1, payload);
+        // It survives as *data*: the SSID reads back exactly as typed, metacharacters and all,
+        // once the key-file layer the consumer feeds it to has been decoded too.
+        assert_eq!(parse_like_keyfile(&parsed[2].1), payload);
         // And `EVIL` is not a variable the file defines — the literal text is inside the SSID
         // value, which is the whole point of quoting it.
         assert!(!keys.contains(&"EVIL"));
@@ -693,6 +748,23 @@ mod tests {
         assert!(Ssid::parse(&"ç".repeat(17)).is_err());
     }
 
+    /// A `/` is legal on the air but becomes a path separator in the consumer's file name, so it
+    /// has to fail here — where the user can still change it — rather than on the board.
+    #[test]
+    fn an_ssid_the_current_sdk_cannot_name_is_rejected() {
+        for bad in ["Ağ/2", "/", "a/b/c"] {
+            assert!(matches!(
+                Ssid::parse(bad),
+                Err(T3GemInitError::SsidUnsupportedByCurrentSdk)
+            ));
+        }
+
+        // Neighbouring characters stay legal: only `/` breaks the path.
+        for good in ["Ağ-2", "Ağ_2", r"Ağ\2", "Ağ 2"] {
+            assert!(Ssid::parse(good).is_ok(), "{good} should be valid");
+        }
+    }
+
     #[test]
     fn timezone_and_keymap_only_accept_offered_values() {
         assert_eq!(
@@ -713,40 +785,112 @@ mod tests {
     }
 
     #[test]
-    fn wifi_password_length_selects_the_derivation() {
-        let ssid = Ssid::parse("ThisIsASSID").unwrap();
-        let country = WifiCountry::parse("TR").unwrap();
+    fn wifi_password_length_selects_the_interpretation() {
+        // SAE needs the original passphrase.
+        let passphrase = wifi_key(&Secret::new("ThisIsAPassword")).unwrap();
+        assert_eq!(*passphrase, "ThisIsAPassword");
 
-        // A passphrase is run through PBKDF2 with the SSID as salt.
-        let passphrase = derive_wifi_psk(&WifiSettings {
-            ssid: ssid.clone(),
-            password: Secret::new("ThisIsAPassword"),
-            country,
-        })
-        .unwrap();
+        // A 64-hex PSK is a ready-made key: lower-cased, never hashed again.
+        let psk = "0DC0D6EB90555ED6419756B9A15EC3E3209B63DF707DD508D14581F8982721AF";
+        assert_eq!(*wifi_key(&Secret::new(psk)).unwrap(), psk.to_lowercase());
+
+        // A 64-byte value is reserved for hexadecimal PSKs.
+        for bad in ["short", &"z".repeat(64)] {
+            assert!(
+                matches!(
+                    wifi_key(&Secret::new(bad)),
+                    Err(T3GemInitError::WifiPassphraseLength)
+                ),
+                "{bad} should be rejected"
+            );
+        }
+
+        // 64 hex digits is a PSK even when it does not look like one.
         assert_eq!(
-            *passphrase,
-            "0dc0d6eb90555ed6419756b9a15ec3e3209b63df707dd508d14581f8982721af"
+            *wifi_key(&Secret::new("a".repeat(64))).unwrap(),
+            "a".repeat(64)
         );
+    }
 
-        // A 64-hex PSK is taken as-is, not hashed again.
-        let psk = derive_wifi_psk(&WifiSettings {
-            ssid: ssid.clone(),
-            password: Secret::new(passphrase.to_uppercase()),
-            country,
-        })
-        .unwrap();
-        assert_eq!(*psk, *passphrase);
+    #[test]
+    fn keyfile_escaping_covers_exactly_what_glib_decodes() {
+        let cases = [
+            ("parola1234", "parola1234"),
+            (r"pa\ssword", r"pa\\ssword"),
+            (" parola", r"\sparola"),
+            ("  parola", r"\s\sparola"),
+            // Trailing whitespace is not stripped when the key file is read, so it is left alone.
+            ("parola ", "parola "),
+            ("\tparola", r"\tparola"),
+            // A backslash ends the leading run, so a space after it is a normal character.
+            (r"\ parola", r"\\ parola"),
+        ];
 
-        // Five characters is neither a legal passphrase nor a PSK.
-        assert!(matches!(
-            derive_wifi_psk(&WifiSettings {
-                ssid,
-                password: Secret::new("short"),
-                country,
-            }),
-            Err(T3GemInitError::WifiPassphraseLength)
-        ));
+        for (input, expected) in cases {
+            assert_eq!(*escape_for_keyfile(input), expected, "escaping {input:?}");
+        }
+    }
+
+    /// Decode the GLib key-file escapes used by these tests.
+    fn parse_like_keyfile(raw: &str) -> String {
+        let mut chars = raw.trim_start_matches([' ', '\t']).chars();
+        let mut out = String::new();
+
+        while let Some(c) = chars.next() {
+            if c != '\\' {
+                out.push(c);
+                continue;
+            }
+            match chars
+                .next()
+                .expect("a trailing backslash is not a valid value")
+            {
+                's' => out.push(' '),
+                't' => out.push('\t'),
+                'n' => out.push('\n'),
+                'r' => out.push('\r'),
+                '\\' => out.push('\\'),
+                other => panic!("GLib would reject the escape \\{other}"),
+            }
+        }
+
+        out
+    }
+
+    #[test]
+    fn wifi_values_survive_the_shell_and_the_key_file() {
+        for (ssid, password) in [
+            ("Ağ-Çekirdek", "parola1234"),
+            ("Ağ'ı $HOME `id`", r"pa\ssword"),
+            ("  boşluklu ağ  ", "  kenarda boşluk  "),
+            ("sekmeli\tağ", "sekmeli\tparola"),
+            (
+                "Ağ",
+                "0dc0d6eb90555ed6419756b9a15ec3e3209b63df707dd508d14581f8982721af",
+            ),
+        ] {
+            let config = T3GemInitConfig::new().with_wifi(Some(WifiSettings {
+                ssid: Ssid::parse(ssid).unwrap(),
+                password: Secret::new(password),
+                country: WifiCountry::parse("TR").unwrap(),
+            }));
+
+            let parsed = parse_like_shell(&rendered(&config));
+            let get = |k: &str| {
+                parsed
+                    .iter()
+                    .find(|(key, _)| key == k)
+                    .map(|(_, v)| v.as_str())
+                    .expect("key is present")
+            };
+
+            assert_eq!(parse_like_keyfile(get("wifiname")), ssid, "ssid {ssid:?}");
+            assert_eq!(
+                parse_like_keyfile(get("wifipasswd")),
+                password,
+                "password for {ssid:?}"
+            );
+        }
     }
 
     #[test]

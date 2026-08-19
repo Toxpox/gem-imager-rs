@@ -256,6 +256,49 @@ pub(crate) fn system_keymap() -> &'static str {
     (*SYSTEM_KEYMAP).unwrap_or("us")
 }
 
+/// The host's current Wi-Fi network, discovered so the customization form can pre-fill itself.
+///
+/// Every field is optional: a missing password must not discard a good SSID. The passphrase is
+/// carried in a redacting, zeroizing [`Secret`].
+#[derive(Debug, Clone, Default)]
+pub(crate) struct HostWifiPrefill {
+    pub(crate) ssid: Option<String>,
+    pub(crate) password: Option<gem_flasher::t3_gem_init::Secret>,
+    pub(crate) country: Option<String>,
+}
+
+/// Detect the host's current Wi-Fi network and, for a WPA/WPA2/WPA3-Personal network, read its
+/// saved passphrase through the OS's own API.
+///
+/// Blocking, so the caller drives it from a [`blocking_future`]. Every failure is an ordinary "let
+/// the user type it" situation, logged at info and folded into an empty result.
+pub(crate) fn detect_host_wifi() -> HostWifiPrefill {
+    use gem_host_wifi::PasswordOutcome;
+
+    let mut out = HostWifiPrefill::default();
+
+    let wifi = match gem_host_wifi::detect_current_wifi() {
+        Ok(wifi) => wifi,
+        Err(e) => {
+            tracing::info!("Host Wi-Fi autofill unavailable: {e}");
+            return out;
+        }
+    };
+
+    out.ssid = wifi.ssid.as_utf8().map(str::to_owned);
+    out.country = wifi.country.as_ref().map(|c| c.code.as_str().to_owned());
+
+    if wifi.security.can_carry_passphrase() {
+        match gem_host_wifi::read_saved_password(&wifi.network) {
+            Ok(PasswordOutcome::Found(secret)) => out.password = Some(secret),
+            Ok(other) => tracing::info!("No saved Wi-Fi password to autofill: {other:?}"),
+            Err(e) => tracing::info!("Reading the saved Wi-Fi password failed: {e}"),
+        }
+    }
+
+    out
+}
+
 /// A catalog image, with the integrity values the catalog published for it.
 ///
 /// The two hashes are *not* interchangeable and never share a name (`instruction.md` §6.2):
@@ -812,6 +855,66 @@ impl FlashingCustomization {
         }
     }
 
+    /// Enable the Wi-Fi block with an empty form, ready for the user or host autofill to fill.
+    pub(crate) fn enable_wifi(&mut self) {
+        match self {
+            Self::LinuxSdSysconfig(c) | Self::LinuxSdCloudInit(c) if c.wifi.is_none() => {
+                c.wifi = Some(crate::persistance::SdCustomizationWifi::default());
+            }
+            Self::T3GemInit { config, .. } if config.wifi.is_none() => {
+                config.wifi = Some(crate::persistance::T3WifiCustomization::default());
+            }
+            _ => {}
+        }
+    }
+
+    /// Whether the Wi-Fi block is currently enabled (shown as an expanded form).
+    pub(crate) fn wifi_enabled(&self) -> bool {
+        match self {
+            Self::LinuxSdSysconfig(c) | Self::LinuxSdCloudInit(c) => c.wifi.is_some(),
+            Self::T3GemInit { config, .. } => config.wifi.is_some(),
+            _ => false,
+        }
+    }
+
+    /// Clear the Wi-Fi block, discarding any secret it held.
+    pub(crate) fn disable_wifi(&mut self) {
+        match self {
+            Self::LinuxSdSysconfig(c) | Self::LinuxSdCloudInit(c) => c.wifi = None,
+            Self::T3GemInit { config, .. } => config.wifi = None,
+            _ => {}
+        }
+    }
+
+    pub(crate) fn apply_wifi_prefill(&mut self, prefill: HostWifiPrefill) {
+        match self {
+            Self::LinuxSdSysconfig(c) | Self::LinuxSdCloudInit(c) => {
+                if let Some(wifi) = c.wifi.as_mut() {
+                    if let Some(ssid) = prefill.ssid {
+                        wifi.ssid = ssid;
+                    }
+                    if let Some(password) = prefill.password {
+                        wifi.password = password;
+                    }
+                }
+            }
+            Self::T3GemInit { config, .. } => {
+                if let Some(wifi) = config.wifi.as_mut() {
+                    if let Some(ssid) = prefill.ssid {
+                        wifi.ssid = ssid;
+                    }
+                    if let Some(password) = prefill.password {
+                        wifi.password = password;
+                    }
+                    if let Some(country) = prefill.country {
+                        wifi.country = country;
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
     pub(crate) fn validate(&self) -> bool {
         match self {
             FlashingCustomization::LinuxSdSysconfig(sd_customization) => {
@@ -841,6 +944,9 @@ impl FlashingCustomization {
                             gem_i18n::Msg::InvalidWifiCountryError
                         }
                         T3GemInitError::InvalidSsid => gem_i18n::Msg::InvalidSsidError,
+                        T3GemInitError::SsidUnsupportedByCurrentSdk => {
+                            gem_i18n::Msg::SsidUnsupportedError
+                        }
                         T3GemInitError::UnknownTimezone(_) => gem_i18n::Msg::UnknownTimezoneError,
                         T3GemInitError::UnknownKeyboardLayout(_) => {
                             gem_i18n::Msg::UnknownKeymapError
@@ -1345,7 +1451,7 @@ mod tests {
             .update_timezone(Some("UTC".parse().unwrap()))
             .update_keymap(Some("us".into()))
             .update_ssh(Some("k".into()))
-            .update_user(Some(SdCustomizationUser::new("u".into(), "p".into())))
+            .update_user(Some(SdCustomizationUser::new("u".into(), "p")))
             .update_wifi(Some(SdCustomizationWifi::default()));
         let mods = sd_modifications_common(&full, gem_i18n::Lang::En);
         assert_eq!(mods.len(), 6);
@@ -1386,7 +1492,7 @@ mod tests {
             FlashingCustomization::LinuxSdSysconfig(SdSysconfCustomization::default()).validate()
         );
         let root = SdSysconfCustomization::default()
-            .update_user(Some(SdCustomizationUser::new("root".into(), "p".into())));
+            .update_user(Some(SdCustomizationUser::new("root".into(), "p")));
         assert!(!FlashingCustomization::LinuxSdSysconfig(root).validate());
     }
 
@@ -1505,6 +1611,7 @@ mod tests {
             id: 1,
             name: name.to_string(),
             icon: None,
+            tags: Vec::new(),
             description: String::new(),
             documentation: None,
             specification: Vec::new(),

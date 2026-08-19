@@ -76,9 +76,14 @@ fn main() -> iced::Result {
     .ok();
     assert!(icon.is_some());
 
-    #[cfg(target_os = "macos")]
-    // HACK: mac_notification_sys set application name (not an option in notify-rust)
+    #[cfg(all(target_os = "macos", feature = "notify-rust"))]
     let _ = notify_rust::set_application(constants::APP_ID);
+
+    // macOS gates the Wi-Fi SSID behind Location authorization, and grants that asynchronously to
+    // the *main* thread's run loop. Asking here, before the event loop starts, means the answer is
+    // already in by the time the user opens the Wi-Fi form; asking from the worker that runs the
+    // detection would never receive it. A no-op on every other platform.
+    gem_host_wifi::prime_location_authorization();
 
     let settings = iced::window::Settings {
         icon,
@@ -524,6 +529,13 @@ impl GemImager {
                     self.scroll_reset(),
                 ])
             }
+            Self::Customize(inner) if inner.customization.wifi_enabled() => Task::batch([
+                Task::perform(
+                    helpers::blocking_future(helpers::detect_host_wifi),
+                    GemImagerMessage::WifiAutofill,
+                ),
+                self.scroll_reset(),
+            ]),
             Self::Review(inner) => match &inner.customization {
                 helpers::FlashingCustomization::LinuxSdSysconfig(c) => {
                     let mut temp = inner

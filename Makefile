@@ -364,7 +364,7 @@ package-bundle-pc-windows-msvc:
 	mkdir -p gem-imager-gui/dist/windows-temp/x64/licenses/libwdi
 	cp gem-winusb/third_party/libwdi/COPYING-LGPL gem-winusb/third_party/libwdi/Microsoft-WDF-License.rtf gem-imager-gui/dist/windows-temp/x64/licenses/libwdi/
 	winapp manifest update-assets gem-imager-gui/assets/icons/icon.png --manifest gem-imager-gui/Package.appxmanifest
-	winapp pack --manifest gem-imager-gui/Package.appxmanifest gem-imager-gui/dist/windows-temp/aarch64/ gem-imager-gui/dist/windows-temp/x64/
+	winapp pack --manifest gem-imager-gui/Package.appxmanifest --executable gem-imager-gui.exe gem-imager-gui/dist/windows-temp/aarch64/ gem-imager-gui/dist/windows-temp/x64/
 	rm -rf gem-imager-gui/dist/windows-temp
 	mv *.msixbundle gem-imager-gui/dist/
 

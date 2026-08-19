@@ -55,6 +55,17 @@ pub(crate) const INFO_ICON_BYTES: &[u8] = include_bytes!("../assets/icons/info.s
 pub(crate) const COPY_ICON_BYTES: &[u8] = include_bytes!("../assets/icons/content-copy.svg");
 pub(crate) const SEARCH_ICON_BYTES: &[u8] = include_bytes!("../assets/icons/search.svg");
 
+// Board photographs
+//
+// Bundled rather than fetched: the catalog publishes schematic Fritzing drawings for both boards,
+// which do not tell a user holding the hardware which board is which. These are photographs of the
+// real boards, keyed by the catalog board tag so a renamed board keeps its picture, and they
+// render before the network answers — the board screen is the first screen of the application.
+pub(crate) const BOARD_PHOTO_T3_GEM_O1_BYTES: &[u8] =
+    include_bytes!("../assets/boards/t3-gem-o1.png");
+pub(crate) const BOARD_PHOTO_BEAGLEY_AI_BYTES: &[u8] =
+    include_bytes!("../assets/boards/beagley-ai.png");
+
 // Boot mode illustrations
 pub(crate) const USB_DFU_BOOTMODE_BYTES: &[u8] =
     include_bytes!("../assets/icons/usb-dfu-bootmode.svg");

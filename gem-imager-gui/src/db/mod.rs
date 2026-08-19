@@ -20,6 +20,12 @@ pub(crate) struct BoardListItem {
     pub(crate) id: i64,
     pub(crate) icon: Option<Url>,
     pub(crate) name: String,
+    /// Catalog tags of this board, e.g. `t3-gem-o1`.
+    ///
+    /// The list screen identifies a board by tag rather than by name so the bundled board photo
+    /// keeps matching when a catalog author renames "T3-GEM-O1" — the tag is the same value the
+    /// catalog already uses to attach images to boards.
+    pub(crate) tags: Vec<String>,
 }
 
 impl BoardListItem {
@@ -28,8 +34,22 @@ impl BoardListItem {
             id: value.get("id")?,
             icon: value.get("icon")?,
             name: value.get("name")?,
+            tags: parse_tags(value.get::<_, Option<String>>("tags")?),
         })
     }
+}
+
+/// Separator the tag queries aggregate with.
+///
+/// A unit separator rather than a comma: a tag is free-form catalog text, and a comma inside one
+/// would silently split it into two tags that match nothing.
+const TAG_SEPARATOR: &str = "\u{1f}";
+
+/// Split an aggregated tag column back into individual tags.
+fn parse_tags(raw: Option<String>) -> Vec<String> {
+    raw.filter(|s| !s.is_empty())
+        .map(|s| s.split(TAG_SEPARATOR).map(str::to_string).collect())
+        .unwrap_or_default()
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -37,6 +57,8 @@ pub(crate) struct Board {
     pub(crate) id: i64,
     pub(crate) name: String,
     pub(crate) icon: Option<Url>,
+    /// Catalog tags of this board. See [`BoardListItem::tags`].
+    pub(crate) tags: Vec<String>,
     pub(crate) description: String,
     pub(crate) documentation: Option<Url>,
     pub(crate) specification: Vec<(String, String)>,
@@ -58,6 +80,7 @@ impl Board {
             id: value.get("id")?,
             name: value.get("name")?,
             icon: value.get("icon")?,
+            tags: parse_tags(value.get::<_, Option<String>>("tags")?),
             description: value.get("description")?,
             documentation: value.get("documentation")?,
             specification: serde_json::from_slice(&spec).unwrap(),
@@ -557,11 +580,16 @@ impl Db {
         Ok(res)
     }
 
-    /// Get board list data. (ID, Icon, Name)
+    /// Get board list data. (ID, Icon, Name, Tags)
     pub(crate) fn board_list(&self, search: &str) -> rusqlite::Result<Vec<BoardListItem>> {
         let db = self.db.lock().unwrap();
         let mut stmt = db.prepare_cached(
-            "SELECT id, icon, name FROM boards WHERE name LIKE $1 COLLATE NOCASE",
+            r#"
+            SELECT b.id, b.icon, b.name,
+                (SELECT group_concat(t.tag, char(31))
+                 FROM board_tags t WHERE t.board_id = b.id) AS tags
+            FROM boards b
+            WHERE b.name LIKE $1 COLLATE NOCASE"#,
         )?;
         let res = stmt
             .query_map([format!("%{}%", search)], BoardListItem::from_row)?
@@ -575,10 +603,12 @@ impl Db {
         let db = self.db.lock().unwrap();
         let mut stmt = db.prepare_cached(
             r#"
-        SELECT id, name, icon, description, documentation, specification, oshw,
-            flasher, emmc_dfu, instructions
-        FROM boards
-        WHERE id = $1"#,
+        SELECT b.id, b.name, b.icon, b.description, b.documentation, b.specification, b.oshw,
+            b.flasher, b.emmc_dfu, b.instructions,
+            (SELECT group_concat(t.tag, char(31))
+             FROM board_tags t WHERE t.board_id = b.id) AS tags
+        FROM boards b
+        WHERE b.id = $1"#,
         )?;
         stmt.query_row([id], Board::from_row)
     }

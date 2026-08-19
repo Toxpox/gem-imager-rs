@@ -93,10 +93,7 @@ fn t3_gem_init<'a>(
     col = col.push(
         widget::toggler(config.wifi.is_some())
             .label(lang.text(Msg::ConfigureWirelessLan))
-            .on_toggle(move |t| {
-                let c = if t { Some(Default::default()) } else { None };
-                GemImagerMessage::UpdateFlashConfig(wrap(config.clone().update_wifi(c)))
-            }),
+            .on_toggle(GemImagerMessage::ToggleWifi),
     );
     if let Some(wifi) = config.wifi.as_ref() {
         col = col.extend([
@@ -372,7 +369,7 @@ fn linux_sd_card_common<'a>(
                 !usr.validate_username(),
             )
             .into(),
-            input_with_label(
+            secret_input_with_label(
                 lang.text(Msg::Password),
                 "password",
                 &usr.password,
@@ -383,7 +380,6 @@ fn linux_sd_card_common<'a>(
                             .update_user(Some(usr.clone().update_password(inp))),
                     )
                 },
-                false,
             )
             .into(),
         ])
@@ -395,10 +391,7 @@ fn linux_sd_card_common<'a>(
     col = col.push(
         widget::toggler(config.wifi.is_some())
             .label(lang.text(Msg::ConfigureWirelessLan))
-            .on_toggle(move |t| {
-                let c = if t { Some(Default::default()) } else { None };
-                GemImagerMessage::UpdateFlashConfig(wrap(config.clone().update_wifi(c)))
-            }),
+            .on_toggle(GemImagerMessage::ToggleWifi),
     );
     if let Some(wifi) = config.wifi.as_ref() {
         col = col.extend([
@@ -416,7 +409,7 @@ fn linux_sd_card_common<'a>(
                 false,
             )
             .into(),
-            input_with_label(
+            secret_input_with_label(
                 lang.text(Msg::Password),
                 "password",
                 &wifi.password,
@@ -427,7 +420,6 @@ fn linux_sd_card_common<'a>(
                             .update_wifi(Some(wifi.clone().update_password(inp))),
                     )
                 },
-                false,
             )
             .into(),
         ])

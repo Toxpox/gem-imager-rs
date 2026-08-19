@@ -332,8 +332,10 @@ impl SdSysconfCustomization {
             self.hostname.map(Into::into),
             self.timezone.map(|x| x.to_string()).map(Into::into),
             self.keymap.map(Into::into),
-            self.user.map(|x| (x.username.into(), x.password.into())),
-            self.wifi.map(|x| (x.ssid.into(), x.password.into())),
+            self.user
+                .map(|x| (x.username.into(), x.password.expose().into())),
+            self.wifi
+                .map(|x| (x.ssid.into(), x.password.expose().into())),
             self.ssh.map(Into::into),
             self.usb_enable_dhcp,
         )
@@ -345,8 +347,10 @@ impl SdSysconfCustomization {
             self.hostname.map(Into::into),
             self.timezone.map(|x| x.to_string()).map(Into::into),
             self.keymap.map(Into::into),
-            self.user.map(|x| (x.username.into(), x.password.into())),
-            self.wifi.map(|x| (x.ssid.into(), x.password.into())),
+            self.user
+                .map(|x| (x.username.into(), x.password.expose().into())),
+            self.wifi
+                .map(|x| (x.ssid.into(), x.password.expose().into())),
             self.ssh.map(Into::into),
         )
     }
@@ -355,12 +359,18 @@ impl SdSysconfCustomization {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct SdCustomizationUser {
     pub(crate) username: String,
-    pub(crate) password: String,
+    /// Never serialized: a plaintext account password must not land in `config.json`
+    /// (`instruction.md` §10.3). Reloading restores the username but not the password.
+    #[serde(skip)]
+    pub(crate) password: Secret,
 }
 
 impl SdCustomizationUser {
-    pub(crate) const fn new(username: String, password: String) -> Self {
-        Self { username, password }
+    pub(crate) fn new(username: String, password: impl Into<Secret>) -> Self {
+        Self {
+            username,
+            password: password.into(),
+        }
     }
 
     pub(crate) fn update_username(mut self, t: String) -> Self {
@@ -368,8 +378,8 @@ impl SdCustomizationUser {
         self
     }
 
-    pub(crate) fn update_password(mut self, t: String) -> Self {
-        self.password = t;
+    pub(crate) fn update_password(mut self, t: impl Into<Secret>) -> Self {
+        self.password = t.into();
         self
     }
 
@@ -380,14 +390,17 @@ impl SdCustomizationUser {
 
 impl Default for SdCustomizationUser {
     fn default() -> Self {
-        Self::new(whoami::username().unwrap_or_default(), String::new())
+        Self::new(whoami::username().unwrap_or_default(), Secret::default())
     }
 }
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct SdCustomizationWifi {
     pub(crate) ssid: String,
-    pub(crate) password: String,
+    /// Never serialized: same rule as the account password. The SSID is kept so a reload restores
+    /// the network name, but the passphrase has to be re-entered.
+    #[serde(skip)]
+    pub(crate) password: Secret,
 }
 
 impl SdCustomizationWifi {
@@ -396,8 +409,8 @@ impl SdCustomizationWifi {
         self
     }
 
-    pub(crate) fn update_password(mut self, t: String) -> Self {
-        self.password = t;
+    pub(crate) fn update_password(mut self, t: impl Into<Secret>) -> Self {
+        self.password = t.into();
         self
     }
 }
@@ -408,8 +421,8 @@ mod tests {
 
     #[test]
     fn sd_user_validate_rejects_root() {
-        assert!(!SdCustomizationUser::new("root".into(), "pw".into()).validate_username());
-        assert!(SdCustomizationUser::new("beagle".into(), "pw".into()).validate_username());
+        assert!(!SdCustomizationUser::new("root".into(), "pw").validate_username());
+        assert!(SdCustomizationUser::new("beagle".into(), "pw").validate_username());
     }
 
     #[test]
@@ -421,18 +434,18 @@ mod tests {
     fn sd_user_builders_set_fields() {
         let user = SdCustomizationUser::default()
             .update_username("alice".into())
-            .update_password("secret".into());
+            .update_password("secret");
         assert_eq!(user.username, "alice");
-        assert_eq!(user.password, "secret");
+        assert_eq!(user.password.expose(), "secret");
     }
 
     #[test]
     fn sd_wifi_builders_set_fields() {
         let wifi = SdCustomizationWifi::default()
             .update_ssid("net".into())
-            .update_password("pw".into());
+            .update_password("pw");
         assert_eq!(wifi.ssid, "net");
-        assert_eq!(wifi.password, "pw");
+        assert_eq!(wifi.password.expose(), "pw");
     }
 
     #[test]
@@ -441,10 +454,10 @@ mod tests {
         assert!(SdSysconfCustomization::default().validate_user());
         // A configured non-root user is valid; root is not.
         let ok = SdSysconfCustomization::default()
-            .update_user(Some(SdCustomizationUser::new("beagle".into(), "pw".into())));
+            .update_user(Some(SdCustomizationUser::new("beagle".into(), "pw")));
         assert!(ok.validate_user());
         let bad = SdSysconfCustomization::default()
-            .update_user(Some(SdCustomizationUser::new("root".into(), "pw".into())));
+            .update_user(Some(SdCustomizationUser::new("root".into(), "pw")));
         assert!(!bad.validate_user());
     }
 
@@ -459,7 +472,7 @@ mod tests {
             .update_wifi(Some(
                 SdCustomizationWifi::default().update_ssid("net".into()),
             ))
-            .update_user(Some(SdCustomizationUser::new("beagle".into(), "pw".into())));
+            .update_user(Some(SdCustomizationUser::new("beagle".into(), "pw")));
 
         assert_eq!(cfg.hostname.as_deref(), Some("beagle"));
         assert_eq!(cfg.timezone, Some(chrono_tz::Tz::UTC));
@@ -539,14 +552,81 @@ mod tests {
         // Exercises the sysconfig/cloudinit bridges into gem_flasher.
         let base = SdSysconfCustomization::default()
             .update_hostname(Some("beagle".into()))
-            .update_user(Some(SdCustomizationUser::new("beagle".into(), "pw".into())))
+            .update_user(Some(SdCustomizationUser::new("beagle".into(), "pw")))
             .update_wifi(Some(
                 SdCustomizationWifi::default()
                     .update_ssid("net".into())
-                    .update_password("pw".into()),
+                    .update_password("pw"),
             ));
         let _ = base.clone().sysconfig();
         let _ = base.cloudinit();
+    }
+
+    #[test]
+    fn generic_sd_passwords_never_reach_the_config_file() {
+        // The whole point of moving these fields to `Secret` with `#[serde(skip)]`: a saved
+        // config.json must not carry the account or Wi-Fi password, only the non-secret fields.
+        let mut gui = GuiConfiguration::default();
+        gui.update_sd_customization({
+            let mut sd = SdCustomization::default();
+            sd.update_sysconfig(
+                SdSysconfCustomization::default()
+                    .update_user(Some(SdCustomizationUser::new(
+                        "beagle".into(),
+                        "account-secret-9021",
+                    )))
+                    .update_wifi(Some(
+                        SdCustomizationWifi::default()
+                            .update_ssid("HomeNet".into())
+                            .update_password("wifi-secret-4471"),
+                    )),
+            );
+            sd
+        });
+
+        let json = serde_json::to_string_pretty(&gui).unwrap();
+        assert!(
+            !json.contains("account-secret-9021"),
+            "account password leaked into config.json:\n{json}"
+        );
+        assert!(
+            !json.contains("wifi-secret-4471"),
+            "wifi password leaked into config.json:\n{json}"
+        );
+        // The non-secret fields are still there, so this is redaction, not data loss.
+        assert!(json.contains("beagle"));
+        assert!(json.contains("HomeNet"));
+
+        // Reloading restores the username/SSID but leaves the passwords empty for re-entry.
+        let back: GuiConfiguration = serde_json::from_str(&json).unwrap();
+        let sysconf = back
+            .sd_customization
+            .and_then(|s| s.sysconf.clone())
+            .unwrap();
+        assert_eq!(sysconf.user.as_ref().unwrap().username, "beagle");
+        assert!(sysconf.user.as_ref().unwrap().password.is_empty());
+        assert_eq!(sysconf.wifi.as_ref().unwrap().ssid, "HomeNet");
+        assert!(sysconf.wifi.as_ref().unwrap().password.is_empty());
+    }
+
+    #[test]
+    fn generic_sd_customization_debug_redacts_passwords() {
+        // A `Debug` render of the customization state (logged, panicked, or snapshotted) must not
+        // print either password (`instruction.md` §10.3).
+        let sysconf = SdSysconfCustomization::default()
+            .update_user(Some(SdCustomizationUser::new(
+                "beagle".into(),
+                "account-secret-9021",
+            )))
+            .update_wifi(Some(
+                SdCustomizationWifi::default()
+                    .update_ssid("HomeNet".into())
+                    .update_password("wifi-secret-4471"),
+            ));
+        let rendered = format!("{sysconf:#?}");
+        assert!(!rendered.contains("account-secret-9021"), "{rendered}");
+        assert!(!rendered.contains("wifi-secret-4471"), "{rendered}");
+        assert!(rendered.contains("<redacted>"));
     }
 
     fn t3_form() -> T3GemInitCustomization {

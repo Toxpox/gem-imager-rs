@@ -28,9 +28,6 @@ anyhow = "1.0"
 # T3 GemInit `config.ini` secrets. Kept on the mature RustCrypto generation (digest 0.10) so the
 # whole workspace shares one `sha2`/`digest` version.
 sha-crypt = { version = "0.5", default-features = false, optional = true }
-pbkdf2 = { version = "0.12", default-features = false, features = ["hmac"], optional = true }
-hmac = { version = "0.12", optional = true }
-sha1 = { version = "0.10", optional = true }
 des = { version = "0.8", optional = true }
 cipher = { version = "0.4", optional = true }
 zeroize = { version = "1", optional = true }
@@ -57,14 +54,12 @@ sd = ["gem-flasher-sd", "serde", "dep:yaml_serde", "gem-helper/reader_progress",
 # eMMC/DFU path writes the same file into a staging image.
 t3_gem_init = [
 	"dep:sha-crypt",
-	"dep:pbkdf2",
-	"dep:hmac",
-	"dep:sha1",
 	"dep:des",
 	"dep:cipher",
 	"dep:zeroize",
 	"dep:getrandom",
 	"dep:chrono-tz",
+	"gem-helper/secret",
 ]
 sd_linux_udev = ["gem-flasher-sd?/udev"]
 sd_macos_authopen = ["gem-flasher-sd?/macos_authopen"]
