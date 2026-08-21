@@ -18,9 +18,8 @@ pub enum DownloadFlashingStatus {
     Customizing,
 
     // ---- DFU / eMMC phases -------------------------------------------------------------------
-    // The DFU chain is not one write. Collapsing it into `FlashingProgress` would mean either a
-    // bar that restarts four times or one whose first 3 % of bytes occupy most of the motion, and
-    // it would have to invent a number for the two phases that cannot be measured at all.
+    // The DFU chain is not one write: collapsing it into `FlashingProgress` would give a bar that
+    // restarts four times, and would have to invent a number for two unmeasurable phases.
     /// Resolving and verifying the three boot artifacts. Indeterminate.
     ResolvingBootArtifacts,
     /// Hashing the staged image so the eMMC write can be verified against it. Byte-measured: it

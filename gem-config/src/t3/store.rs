@@ -720,8 +720,7 @@ fn insert_board(tx: &rusqlite::Transaction<'_>, board: &Board) -> Result<(), Sto
 }
 
 fn insert_image(tx: &rusqlite::Transaction<'_>, image: &Image) -> Result<(), StoreError> {
-    // SQLite integers are signed 64-bit, so sizes are converted explicitly rather than with `as`,
-    // which would silently wrap a value past `i64::MAX` into a negative row.
+    // SQLite integers are signed 64-bit, so a value past `i64::MAX` must not silently wrap via `as`.
     let archive_size = image
         .integrity
         .archive_size

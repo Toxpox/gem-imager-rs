@@ -181,14 +181,12 @@ impl Db {
     }
 
     pub(crate) fn init(&self) -> rusqlite::Result<()> {
-        // Populate initial data
         let cfg =
             serde_json::from_slice::<gem_config::config::Config>(crate::constants::DEFAULT_CONFIG)
                 .expect("Failed to parse config");
 
         let mut db = self.db.lock().unwrap();
 
-        // Run migrations
         db.execute_batch(MIGRATIONS)?;
 
         Self::add_config_internal(&mut db, cfg, None)
@@ -256,8 +254,7 @@ impl Db {
 
     pub(crate) fn remote_configs(&self) -> rusqlite::Result<Vec<(i64, Url)>> {
         let db = self.db.lock().unwrap();
-        // Runs once per process, so there is nothing to gain from occupying a
-        // slot in rusqlite's prepared-statement cache.
+        // Runs once per process, so a slot in rusqlite's prepared-statement cache would be wasted.
         let mut stmt = db.prepare("SELECT id, url FROM remote_configs WHERE fetched = FALSE")?;
         let res = stmt
             .query_map([], |r| {
@@ -403,7 +400,6 @@ impl Db {
     fn insert_board(exec: &Connection, board: &config::Device) -> rusqlite::Result<()> {
         let spec = serde_json::to_vec(&board.specification).unwrap();
 
-        // Insert or update board
         let mut stmt = exec.prepare_cached(
             r#"
         INSERT INTO boards(
@@ -445,7 +441,6 @@ impl Db {
             |r| r.get(0),
         )?;
 
-        // Remove old tags
         exec.execute(
             r#"
         DELETE FROM board_tags
@@ -454,7 +449,6 @@ impl Db {
             [id],
         )?;
 
-        // Insert new tags
         let mut stmt = exec.prepare_cached(
             r#"
             INSERT INTO board_tags(board_id, tag)
@@ -474,14 +468,10 @@ impl Db {
         parent_id: Option<i64>,
         remote_config_id: Option<i64>,
     ) -> rusqlite::Result<i64> {
-        // The same image legitimately arrives more than once: a catalog entry that several boards
-        // accept is offered once per board, and the unique key below is exactly the statement that
-        // those are one image. Letting the conflict propagate aborts the whole merge transaction,
-        // and the board list is what is lost with it — not just the duplicate image.
-        //
-        // `DO UPDATE` rather than `DO NOTHING` because only an updating upsert produces a row for
-        // `RETURNING`; the assignment is a deliberate no-op, so the first copy's data stands and
-        // the second copy contributes only its board mapping below.
+        // The same image legitimately arrives once per board that accepts it, and letting the unique-key
+        // conflict propagate aborts the whole merge -- losing the board list, not just the duplicate.
+        // `DO UPDATE` rather than `DO NOTHING` because only an updating upsert produces a `RETURNING` row;
+        // the assignment is a deliberate no-op, so the first copy's data stands.
         let mut stmt = exec.prepare_cached(
             r#"
             INSERT INTO os_images(name, parent_id, description, icon, url,

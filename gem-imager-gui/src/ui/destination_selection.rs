@@ -70,9 +70,8 @@ fn dest_list_pane<'a>(state: &'a ChooseDestState) -> Element<'a, GemImagerMessag
     let mut header: Vec<Element<'a, GemImagerMessage>> =
         vec![filter_toggle.into(), helpers::list_separator()];
 
-    // A stand-in for the DFU target the board would expose if it were in DFU mode. It lives in the
-    // header slot rather than as a `DestinationItem` variant so that it stays out of the selection
-    // machinery entirely: `selected_dest` is never touched, so NEXT stays disabled on its own.
+    // A stand-in for the DFU target the board would expose in DFU mode. It sits in the header slot
+    // rather than as a `DestinationItem`, so `selected_dest` is untouched and NEXT stays disabled.
     if state.show_dfu_placeholder() {
         let icon: Element<GemImagerMessage> = widget::svg(helpers::USB_ICON.clone())
             .height(ICON_WIDTH)

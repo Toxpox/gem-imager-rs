@@ -56,9 +56,8 @@ pub(crate) fn classify(devices: &[DeviceFacts]) -> DriverState {
         .filter(|device| is_driverless(device))
         .count();
 
-    // libwdi's MVP installer binds by hardware ID, not by one SetupAPI instance. Even a healthy
-    // second exact ROM devnode makes that mutation ambiguous, so refuse whenever more than one
-    // exact present target exists (not merely when more than one of them is driverless).
+    // libwdi's installer binds by hardware ID, not by SetupAPI instance, so a second exact ROM devnode
+    // makes the mutation ambiguous even when healthy -- refuse on more than one exact present target.
     if devices.len() > 1 {
         return DriverState::MultipleCandidates {
             count: devices.len(),
@@ -100,10 +99,9 @@ pub(crate) fn classify(devices: &[DeviceFacts]) -> DriverState {
 }
 
 fn is_driverless(device: &DeviceFacts) -> bool {
-    // A clean Windows enumeration normally reports CM_PROB_FAILED_INSTALL (28). PnPUtil's
-    // `/delete-driver ... /uninstall` path instead installs the NULL driver and can leave the
-    // exact present devnode stopped with CM_PROB_NONE (0). Empty service *and* empty driver key
-    // are the decisive facts in both cases; every other problem code remains non-mutating.
+    // A clean enumeration reports CM_PROB_FAILED_INSTALL (28), but PnPUtil's `/delete-driver
+    // ... /uninstall` installs the NULL driver and can leave the devnode stopped with CM_PROB_NONE (0).
+    // Empty service *and* empty driver key decide both cases; every other problem code stays non-mutating.
     matches!(device.problem_code, 0 | 28)
         && device.service.as_deref().is_none_or(str::is_empty)
         && device.driver_key.as_deref().is_none_or(str::is_empty)

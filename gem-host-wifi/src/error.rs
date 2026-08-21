@@ -61,8 +61,7 @@ mod tests {
 
     #[test]
     fn error_display_never_carries_data_only_operation_and_code() {
-        // A representative check that the Display strings are free of any secret-shaped payload:
-        // they mention the operation and an integer, nothing else.
+        // The Display strings name the operation and an integer, nothing secret-shaped.
         let e = HostWifiError::PlatformApi {
             operation: Operation::ReadSecret,
             code: 5,

@@ -73,16 +73,20 @@ jobs:
 
     - run: ln -sf snapcraft.gui.yaml snapcraft.yaml
     - uses: snapcore/action-build@v1
+      id: build-gui
 
     - run: ln -sf snapcraft.cli.yaml snapcraft.yaml
     - uses: snapcore/action-build@v1
+      id: build-cli
 
+    # The built file is taken from the action's output rather than matched by a glob: the snap
+    # is named after `name:` in the recipe, which is not the crate directory name.
     - name: Move to dist folders
       run: |
         mkdir -p gem-imager-cli/dist/
         mkdir -p gem-imager-gui/dist/
-        mv gem-imager-cli_*.snap gem-imager-cli/dist/ 2>/dev/null || true
-        mv gem-imager_*.snap gem-imager-gui/dist/ 2>/dev/null || true
+        mv "${{ steps.build-cli.outputs.snap }}" gem-imager-cli/dist/
+        mv "${{ steps.build-gui.outputs.snap }}" gem-imager-gui/dist/
 
     # Do not do versioning for Pre-Release packages
     - name: Rename Pre-Release Packages
@@ -118,13 +122,14 @@ jobs:
     - run: make vendor
     - run: ln -sf snapcraft.cli.yaml snapcraft.yaml
     - uses: canonical/snapcraft-multiarch-action@v1
+      id: build-cli
       with:
         architecture: ${{ matrix.platform }}
 
     - name: Move to dist folders
       run: |
         mkdir -p gem-imager-cli/dist/
-        mv gem-imager-cli_*.snap gem-imager-cli/dist/
+        mv "${{ steps.build-cli.outputs.snap }}" gem-imager-cli/dist/
 
     # Do not do versioning for Pre-Release packages
     - name: Rename Pre-Release Packages

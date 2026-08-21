@@ -139,8 +139,7 @@ fn parse_ssid(root: roxmltree::Node<'_, '_>) -> ProfileSsid {
     let Some(config) = find_element(root, "SSIDConfig") else {
         return ProfileSsid::Missing;
     };
-    // Look inside <SSID> when it is there, so the profile's own <name> element (a sibling of
-    // SSIDConfig, holding the *profile* name) is never mistaken for the SSID.
+    // Scoped to <SSID> so the sibling <name>, which holds the *profile* name, is never taken for the SSID.
     let scope = find_element(config, "SSID").unwrap_or(config);
 
     if let Some(name) = find_text(scope, "name")
@@ -160,8 +159,7 @@ fn parse_credential(root: roxmltree::Node<'_, '_>) -> ProfileCredential {
         return ProfileCredential::None;
     };
 
-    // `protected` true means the material is DPAPI-encrypted: the plaintext flag was not granted,
-    // or the caller lacked the rights for it. Trying to decrypt it is forbidden (§7.7).
+    // `protected` means DPAPI-encrypted material the caller has no plaintext rights to; decrypting is forbidden (§7.7).
     let protected = find_text(shared_key, "protected")
         .map(|v| v.eq_ignore_ascii_case("true"))
         .unwrap_or(false);
@@ -176,9 +174,8 @@ fn parse_credential(root: roxmltree::Node<'_, '_>) -> ProfileCredential {
         return ProfileCredential::Encrypted;
     }
 
-    // `networkKey` is a 64-hex-digit PSK; `passPhrase` is the 8..=63 byte form. Both are checked
-    // against the T3 serializer's contract, so an unusable value is reported rather than pushed
-    // into the form (§3.1).
+    // `networkKey` is a 64-hex-digit PSK, `passPhrase` the 8..=63 byte form. Both are checked against
+    // the T3 serializer's contract, so an unusable value is reported rather than pushed on (§3.1).
     let key_type = find_text(shared_key, "keyType").unwrap_or_default();
     if key_type.eq_ignore_ascii_case("networkKey")
         && !(material.len() == 64 && material.bytes().all(|b| b.is_ascii_hexdigit()))
@@ -261,8 +258,7 @@ mod tests {
 
     #[test]
     fn a_networkkey_that_is_not_hex_is_unusable() {
-        // A networkKey must be a real PSK; a passphrase-shaped value under that key type is a
-        // malformed profile, not a credential to hand over.
+        // A passphrase-shaped value under networkKey is a malformed profile, not a credential.
         let xml = profile_xml(
             "<SSID><name>HomeNet</name></SSID>",
             r#"<authEncryption><authentication>WPA2PSK</authentication></authEncryption>
@@ -372,8 +368,7 @@ mod tests {
 
     #[test]
     fn ssid_matching_is_exact_and_never_uses_the_profile_name() {
-        // The <name> directly under WLANProfile is the *profile* name, which the plan says must not
-        // be assumed equal to the SSID (§7.2). Only the one inside SSIDConfig/SSID counts.
+        // The <name> directly under WLANProfile is the *profile* name (§7.2); only SSIDConfig/SSID counts.
         let xml = profile_xml(
             "<SSID><name>ActualSsid</name></SSID>",
             r#"<authEncryption><authentication>WPA2PSK</authentication></authEncryption>"#,

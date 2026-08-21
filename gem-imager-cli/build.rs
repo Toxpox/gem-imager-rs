@@ -2,9 +2,8 @@ use std::path::PathBuf;
 
 use clap::CommandFactory;
 
-// Pull in the CLI definition directly instead of depending on the crate itself, so the generated
-// man pages and shell completions always reflect the exact command tree (including feature-gated
-// subcommands) that this build produces.
+// The CLI definition is pulled in directly rather than via the crate, so the generated man pages
+// and completions match the exact command tree this build produces, feature gates included.
 #[path = "src/cli.rs"]
 mod cli;
 

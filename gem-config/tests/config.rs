@@ -47,9 +47,8 @@ fn config_with_os_list(items_json: &str) -> Config {
 
 #[test]
 fn full_config_round_trip() {
-    // Deserialize a rich document, then serialize -> deserialize again and
-    // assert equality. This exercises both `Serialize` and `Deserialize` for
-    // `Config` and every nested type without needing manual construction.
+    // Round-trips a rich document, exercising `Serialize` and `Deserialize` for `Config` and every
+    // nested type without manual construction.
     let doc = format!(
         r#"{{
             "imager": {{
@@ -119,8 +118,7 @@ fn os_list_item_untagged_disambiguation() {
 
 #[test]
 fn vec_skip_error_drops_malformed_items() {
-    // `os_list` is wrapped in VecSkipError: a malformed entry is silently
-    // dropped rather than failing the whole parse.
+    // `os_list` is wrapped in VecSkipError: a malformed entry is dropped rather than failing the parse.
     let config = config_with_os_list(&format!(r#"[{OS_IMAGE_JSON}, {{"garbage": true}}]"#));
     assert_eq!(
         config.os_list.len(),
@@ -132,8 +130,7 @@ fn vec_skip_error_drops_malformed_items() {
 
 #[test]
 fn init_format_serde_strings() {
-    // Documents the *live* serde representation (distinct from the unused
-    // Display impl, which renders Sysconf as "sysconfig").
+    // Documents the *live* serde representation, distinct from the unused Display impl.
     let cases = [
         (InitFormat::None, "\"none\""),
         (InitFormat::Sysconf, "\"sysconf\""),

@@ -475,7 +475,7 @@ fn test_read_aligned_padding_needed() {
 
     let result = read_aligned(&mut cursor, &mut buf);
     assert!(result.is_ok());
-    // It should pad out to the next 512-byte alignment boundary
+    // Pads out to the next 512-byte boundary.
     assert_eq!(result.unwrap(), 512);
 
     // Original data intact
@@ -492,17 +492,14 @@ fn test_reader_task_stops_at_eof() {
     let (buf_tx_pool, buf_rx_pool) = mpsc::channel();
     let (buf_tx_out, buf_rx_out) = mpsc::sync_channel(2);
 
-    // Supply one buffer to the pool
     buf_tx_pool.send(Box::new(DirectIoBuffer::new())).unwrap();
 
-    // Run the task (it should read, send data, and then wait or finish if buffer pool empties)
-    // Dropping the pool transmitter ensures the loop terminates when buffers run out or EOF hits
+    // Dropping the pool transmitter ends the loop when buffers run out or EOF hits.
     drop(buf_tx_pool);
 
     let result = reader_task(&mut cursor, buf_rx_pool, buf_tx_out, None);
     assert!(result.is_ok());
 
-    // Verify data reached the output channel
     let (received_buf, count) = buf_rx_out.recv().unwrap();
     // Since input was 100 bytes, it got aligned up to 512
     assert_eq!(count, 512);
@@ -516,7 +513,6 @@ fn test_writer_task_success() {
     let (tx_pool, rx_pool) = mpsc::sync_channel(2);
     let (progress_tx, progress_rx) = mpsc::sync_channel(2);
 
-    // Prep a buffer with data to write
     let mut mock_buf = Box::new(DirectIoBuffer::new());
     mock_buf.as_mut_slice()[0..10].copy_from_slice(&[9u8; 10]);
 
@@ -537,13 +533,10 @@ fn test_writer_task_success() {
     assert_eq!(outcome.written, 10);
     assert_eq!(outcome.sha256, sha256(&[9u8; 10]));
 
-    // Assert content was written correctly
     let written_bytes = writer_target.into_inner();
     assert_eq!(&written_bytes[0..10], &[9u8; 10]);
 
-    // Assert progress tracking worked
     assert!(progress_rx.try_recv().is_ok());
-    // Assert buffer was successfully recycled back to tx_pool
     assert!(rx_pool.try_recv().is_ok());
 }
 
@@ -561,6 +554,5 @@ fn test_cancellation_token() {
 
     let result = reader_task(&mut cursor, buf_rx_pool, buf_tx_out, Some(token));
 
-    // Should return an error variant associated with cancellation
     assert!(result.is_err());
 }

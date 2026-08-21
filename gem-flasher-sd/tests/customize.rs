@@ -13,9 +13,8 @@ use gem_flasher_sd::{ContentType, Customization, Destination, ParitionType};
 
 #[test]
 fn flash_applies_customization_through_public_api() {
-    // A freshly-created MockSd is a valid 128 MiB MBR + FAT32 image. Use its
-    // bytes as the OS image and flash them back onto its own path so the result
-    // can be inspected with `open_boot`.
+    // A fresh MockSd is a valid 128 MiB MBR + FAT32 image, so its bytes are flashed back onto its own
+    // path and the result inspected with `open_boot`.
     let mut mock = MockSd::new();
     let image_bytes: Box<[u8]> = std::fs::read(mock.path()).unwrap().into_boxed_slice();
     let img_size = image_bytes.len() as u64;
@@ -24,10 +23,8 @@ fn flash_applies_customization_through_public_api() {
 
     const FILE_NAME: &str = "customization.txt";
     const FILE_DATA: &[u8] = b"hello from the flasher test";
-    // `ContentType` is not Send, so the content iterator must construct it
-    // lazily from Send inputs via `map` (a Map iterator is Send when its inner
-    // iterator and closure are, regardless of the item type) — the same shape
-    // the real facade uses to satisfy `flash`'s `+ Send` bound.
+    // `ContentType` is not Send, so the iterator constructs it lazily from Send inputs via `map` --
+    // the same shape the real facade uses to satisfy `flash`'s `+ Send` bound.
     let content = vec![(FILE_NAME.into(), FILE_DATA.to_vec().into_boxed_slice())]
         .into_iter()
         .map(|(name, data): (Box<str>, Box<[u8]>)| (name, ContentType::DataAppend(data)));
@@ -36,8 +33,7 @@ fn flash_applies_customization_through_public_api() {
         content,
     };
 
-    // Progress-to-completion is covered by tests/flashing.rs; this test focuses
-    // on the customization loop, so it flashes without a progress channel.
+    // Progress to completion is covered by tests/flashing.rs, so this flashes without a channel.
     gem_flasher_sd::flash(
         img_resolver,
         Destination::File(mock.path().into()),

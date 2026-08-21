@@ -147,7 +147,6 @@ fn os_view_pane<'a>(state: &'a crate::state::ChooseOsState) -> Element<'a, GemIm
 
             let mut col = widget::column![icon];
 
-            // Add button to copy image info when it makes sense.
             if let Some(json) = state.img_json() {
                 col = col.push(widget::center(
                     helpers::copy_btn(helpers::COPY_ICON.clone())
@@ -168,7 +167,6 @@ fn os_view_pane<'a>(state: &'a crate::state::ChooseOsState) -> Element<'a, GemIm
                     .width(iced::Length::Fill),
             );
 
-            // Add description if present
             let col = match img.description() {
                 Some(x) => col
                     .push(

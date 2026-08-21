@@ -262,12 +262,9 @@ fn successful_events(payloads: [&[u8]; 4], terminal: DfuState) -> Vec<Event> {
             Event::Finish(1),
         ]);
         if index < 3 {
-            // A boot artifact still has to be *manifested*: the zero-length download only asks to
-            // end the transfer, and the device leaves dfuDNLOAD-SYNC when the host polls status.
-            // A device that is still on the bus afterwards is waiting for the host to let go, so
-            // it is detached and then reset — the pair is what makes U-Boot's DFU gadget leave its
-            // download loop and boot what it was just given. The reset alone only restarts the
-            // gadget, which is why the reference flow is `dfu-util -R` and not a bare reset.
+            // A boot artifact still has to be *manifested*: the zero-length download only asks to end the
+            // transfer, and the device leaves dfuDNLOAD-SYNC when the host polls status. A device still on
+            // the bus is waiting for the host to let go, so detach-then-reset is what makes U-Boot boot it.
             events.extend([
                 Event::Status(DfuState::DfuManifest, 0),
                 Event::Status(DfuState::DfuIdle, 0),

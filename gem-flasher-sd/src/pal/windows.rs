@@ -46,9 +46,8 @@ const VOLUME_LOCK_RETRY_DELAY: Duration = Duration::from_millis(200);
 
 impl WinDrive {
     pub(crate) fn open(path: &Path) -> anyhow::Result<Self> {
-        // Raw removable-media probes must return errors to the application instead of opening a
-        // system modal "format this disk"/"insert a disk" dialog. Preserve every existing mode
-        // bit and add only the Microsoft-recommended critical-error suppression flag.
+        // Raw removable-media probes must return errors instead of opening a system modal "format this
+        // disk" dialog. Every mode bit is preserved; only the critical-error suppression flag is added.
         unsafe {
             SetErrorMode(THREAD_ERROR_MODE(GetErrorMode() | SEM_FAILCRITICALERRORS.0));
         }
@@ -66,9 +65,8 @@ impl WinDrive {
             .write(true)
             .custom_flags(FILE_FLAG_WRITE_THROUGH | FILE_FLAG_NO_BUFFERING)
             .open(path)?;
-        // Keep the old-layout locks until the physical disk handle is acquired. The replacement
-        // layout stays hidden in `SdCardWrapper` until all verification and customization work is
-        // complete, so no post-write volume enumeration is needed.
+        // Keep the old-layout locks until the physical disk handle is acquired. The replacement layout
+        // stays hidden in `SdCardWrapper` until verification and customization finish.
         drop(existing_volumes);
 
         Ok(Self { drive })

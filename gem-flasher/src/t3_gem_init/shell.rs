@@ -59,8 +59,7 @@ mod tests {
         ] {
             let quoted = quote("test", payload).unwrap();
             assert!(quoted.starts_with('\'') && quoted.ends_with('\''));
-            // No unescaped quote can appear in the middle, which is what would end the literal
-            // early and let the rest of the payload be parsed as code.
+            // No unescaped quote can appear in the middle, which is what would end the literal early.
             assert_eq!(quoted, format!("'{payload}'"));
         }
     }

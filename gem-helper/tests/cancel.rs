@@ -17,7 +17,6 @@ fn test_default_state() {
 fn test_drop_guard_cancels() {
     let token = CancellationToken::default();
 
-    // Create a guard in a nested scope and drop it
     {
         let _guard = token.drop_guard();
         assert!(
@@ -56,7 +55,6 @@ fn test_cross_thread_cancellation() {
     let handle = thread::spawn(move || {
         assert!(!token_clone.is_cancelled());
 
-        // Create and immediately drop the guard in the background thread
         let _guard = token_clone.drop_guard();
     });
 

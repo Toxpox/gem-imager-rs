@@ -79,9 +79,8 @@ define_class!(
             tracing::info!("CoreLocation authorization status: {}", describe(status));
             publish(status);
             if status != CLAuthorizationStatus::NotDetermined {
-                // The prompt has been answered. Location updates were only ever the lever that
-                // makes macOS show it, so drop them rather than keep the radio (and the menu bar
-                // indicator) alive for a position this crate never reads.
+                // The prompt has been answered. Location updates were only the lever that makes macOS show it,
+                // so drop them rather than keep the radio and menu-bar indicator alive for an unread position.
                 unsafe { manager.stopUpdatingLocation() };
             }
         }
@@ -111,9 +110,8 @@ pub(crate) fn prime() {
             // The call that actually surfaces the prompt; stopped again in the delegate.
             manager.startUpdatingLocation();
 
-            // Both objects must outlive this closure: the request is asynchronous, and CoreLocation
-            // holds the delegate weakly. Leaking them for the life of the process is the point, not
-            // an oversight — there is exactly one, and it is needed until the process exits.
+            // Both must outlive this closure: the request is asynchronous and CoreLocation holds the
+            // delegate weakly. Leaking one per process is the point, not an oversight.
             std::mem::forget(delegate);
             std::mem::forget(manager);
         }

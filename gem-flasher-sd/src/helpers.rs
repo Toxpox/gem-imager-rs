@@ -228,7 +228,7 @@ where
         Ok(Self {
             f,
             offset: 0,
-            // Hack to make reading from 0 working
+            // Hack: makes reading from offset 0 work.
             cache_offset: 1,
             buf: Box::new(DirectIoBuffer::new()),
         })
@@ -632,7 +632,6 @@ mod tests {
         std::io::copy(&mut test_data, &mut sd).unwrap();
         sd.flush().unwrap();
 
-        // Read underlying file contents directly
         sd.inner.rewind().unwrap();
         sd.inner.read_to_end(&mut temp_buf).unwrap();
 

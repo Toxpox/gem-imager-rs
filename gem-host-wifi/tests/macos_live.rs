@@ -44,8 +44,7 @@ fn detects_the_current_network_on_this_host() {
                     println!("retrieved a {len}-byte credential (value not shown)");
                 }
                 (SecurityKind::Personal, PasswordOutcome::NotStored) => {
-                    // Before the System-keychain fix this was the outcome for *every* network,
-                    // with no prompt shown, which is the regression this test exists to catch.
+                    // Before the System-keychain fix this was the outcome for every network, with no prompt shown.
                     println!(
                         "NotStored on a Personal network: no prompt was shown. If this network's \
                          password is saved in Settings > Wi-Fi, the System keychain lookup is \
@@ -78,8 +77,7 @@ fn detects_the_current_network_on_this_host() {
 /// This is a pure-logic guard that runs without a live network.
 #[test]
 fn an_unrepresentable_ssid_never_reaches_the_keychain() {
-    // A non-UTF-8 SSID leaves the name empty, and an empty name must short-circuit rather than
-    // query the keychain with a blank account.
+    // An empty name (a non-UTF-8 SSID) must short-circuit rather than query with a blank account.
     let wifi = gem_host_wifi::detect_current_wifi();
     if let Ok(w) = wifi
         && matches!(w.ssid, DetectedSsid::UnsupportedEncoding)

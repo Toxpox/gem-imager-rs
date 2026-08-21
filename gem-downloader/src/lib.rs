@@ -143,7 +143,6 @@ impl Downloader {
                 return Some(file_path);
             }
 
-            // Delete old file
             let _ = std::fs::remove_file(&file_path);
         }
 
@@ -181,7 +180,6 @@ impl Downloader {
         let url = self.check_url(url)?;
         let file_path = self.path_from_url(&url);
 
-        // Check cache
         if file_path.exists() {
             return Ok(file_path);
         }
@@ -222,8 +220,7 @@ impl Downloader {
         let _slot = self.in_flight.acquire(integrity.sha256).await;
         let file_path = self.path_from_sha(integrity.sha256);
 
-        // Re-checked inside the single-flight slot: another task may have published these exact
-        // bytes while this one was waiting.
+        // Re-checked inside the single-flight slot: another task may have published these exact bytes.
         if let Some(cached) = self.check_cache_from_sha(integrity.sha256) {
             tracing::info!("Serving archive from cache instead of downloading again");
             return copy_cached_to_writer(&cached, &mut writer).await;
@@ -480,7 +477,6 @@ async fn copy_cached_to_writer(
 mod tests {
     use super::*;
 
-    // Helper to generate a 32-byte SHA256 array from a slice
     fn mock_sha256(data: &[u8]) -> [u8; 32] {
         let mut hasher = Sha256::new();
         hasher.update(data);
@@ -509,20 +505,17 @@ mod tests {
         let sha = mock_sha256(content);
         let expected_path = downloader.path_from_sha(sha);
 
-        // Scenario A: Check cache when empty -> Should return None
         assert!(downloader.check_cache_from_sha(sha).is_none());
 
         // Scenario B: Manually populate valid file into cache
         std::fs::write(&expected_path, content).unwrap();
 
-        // Check cache -> Should return Some(PathBuf) matching expected path
         let cached_path = downloader.check_cache_from_sha(sha).unwrap();
         assert_eq!(cached_path, expected_path);
 
         // Scenario C: Corrupt the file to trigger invalidation
         std::fs::write(&expected_path, b"Tampered/Corrupted data").unwrap();
 
-        // Check cache -> Should return None and evict/delete the corrupted file from disk
         assert!(downloader.check_cache_from_sha(sha).is_none());
         assert!(
             !expected_path.exists(),
@@ -582,8 +575,7 @@ mod tests {
 
     #[test]
     fn a_plaintext_chain_is_not_treated_as_a_downgrade() {
-        // With `require_https` disabled the entry point may legitimately be http; only losing
-        // https that we already had counts as a downgrade.
+        // With `require_https` disabled an http entry point is legitimate; only losing https is a downgrade.
         let previous = ["http://localhost:8080/a".parse().unwrap()];
         let next = "http://localhost:8080/b".parse().unwrap();
 

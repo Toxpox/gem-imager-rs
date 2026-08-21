@@ -93,8 +93,7 @@ impl Read for OsImage {
             OsImageCompression::QCow2(x) => x.read(buf),
         }?;
 
-        // A zero-length `buf` also yields `count == 0` without the stream having ended, so it must
-        // not be mistaken for EOF.
+        // A zero-length `buf` also yields `count == 0` without EOF, so it must not be taken for one.
         if !buf.is_empty() {
             self.gate.observe(&buf[..count])?;
         }

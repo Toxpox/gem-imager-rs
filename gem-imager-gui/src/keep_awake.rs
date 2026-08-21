@@ -40,9 +40,8 @@ fn set_inhibit(on: bool) -> bool {
         ES_CONTINUOUS, ES_SYSTEM_REQUIRED, SetThreadExecutionState,
     };
 
-    // `ES_SYSTEM_REQUIRED` without `ES_DISPLAY_REQUIRED`: the display may still blank, only the
-    // machine must not suspend. `ES_CONTINUOUS` makes the state stick until it is cleared, rather
-    // than resetting the idle timer once.
+    // `ES_SYSTEM_REQUIRED` without `ES_DISPLAY_REQUIRED`: the display may blank, the machine may not
+    // suspend. `ES_CONTINUOUS` makes it stick until cleared instead of resetting the idle timer once.
     let flags = if on {
         ES_CONTINUOUS | ES_SYSTEM_REQUIRED
     } else {

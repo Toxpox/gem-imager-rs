@@ -48,8 +48,7 @@ impl TransportPolicy {
             connect_timeout: Duration::from_secs(10),
             idle_timeout: Duration::from_secs(30),
             metadata_timeout: Duration::from_secs(60),
-            // Six hours covers a multi-gigabyte image on a slow link; the idle timeout is what
-            // actually catches stalls.
+            // Six hours covers a multi-gigabyte image on a slow link; the idle timeout is what catches stalls.
             stream_timeout: Duration::from_secs(6 * 60 * 60),
             max_redirects: 5,
             max_metadata_body: Self::DEFAULT_MAX_METADATA_BODY,

@@ -9,8 +9,7 @@ use sha2::{Digest, Sha256};
 fn main() {
     println!("cargo:rerun-if-env-changed=GEM_IMAGER_SKIP_ADMIN_MANIFEST");
     println!("cargo:rerun-if-env-changed=PROFILE");
-    // The application icon is embedded by the Windows resource compiler. Track both the
-    // resource script and the ICO so changing branding always updates the executable icon.
+    // Track the resource script and the ICO so a branding change rebuilds the executable icon.
     println!("cargo:rerun-if-changed=assets/packages/windows/gui-manifest.rc");
     println!("cargo:rerun-if-changed=assets/packages/windows/gui-as-invoker-manifest.rc");
     println!("cargo:rerun-if-changed=assets/packages/windows/gui-as-invoker.exe.manifest");
@@ -18,12 +17,10 @@ fn main() {
 
     embed_winusb_helper_hash();
 
-    // The production executable must currently be elevated to open raw disks on Windows. Build
-    // scripts cannot distinguish Cargo's test harness from the package binary at link time, so an
-    // admin manifest in the debug profile also lands in every unit-test executable and makes a
-    // normal `cargo test` fail with Windows error 740. Release/package builds retain the existing
-    // manifest; debug builds and tests are asInvoker. The WinUSB helper has its own independent
-    // requireAdministrator manifest, so this distinction cannot bypass driver-install elevation.
+    // Raw-disk access on Windows needs elevation, but a debug-profile admin manifest also lands in
+    // every unit-test executable and makes `cargo test` fail with error 740. Release keeps the
+    // manifest; debug and tests are asInvoker. The WinUSB helper carries its own, so driver-install
+    // elevation is unaffected.
     let resource = if std::env::var_os("GEM_IMAGER_SKIP_ADMIN_MANIFEST").is_none()
         && std::env::var_os("PROFILE").as_deref() == Some(std::ffi::OsStr::new("release"))
     {

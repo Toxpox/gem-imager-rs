@@ -280,11 +280,8 @@ mod status_tests {
         .flash(None, None)
         .expect_err("an image that fails the extracted digest must not flash successfully");
 
-        // Asserted on the source chain, not on `err.to_string()`. The SD backend wraps the decoder's
-        // `io::Error` in its catch-all `IoError` variant, whose own message is "Unknown Error during
-        // IO" — so the outermost text says nothing about integrity and the reason lives one level
-        // down. The front-end renders this same chain (`{e:#}`); asserting on the chain here is what
-        // keeps the two in step.
+        // Asserted on the source chain, not `err.to_string()`: the SD backend wraps the decoder error in
+        // its catch-all `IoError`, so the reason lives one level down, where the front-end also reads it.
         let chain = format!("{err:#}");
         assert!(
             chain.contains("integrity"),
@@ -428,8 +425,7 @@ where
             Some(chan) => {
                 let (tx, rx) = std::sync::mpsc::sync_channel(2);
                 std::thread::spawn(move || {
-                    // Should run until tx is dropped, i.e. flasher task is done.
-                    // If it is aborted, then cancel should be dropped, thereby signaling the flasher task to abort
+                    // Runs until tx is dropped; on abort cancel is dropped too, signalling the flasher task.
                     while let Ok(x) = rx.recv() {
                         let _ = chan.try_send(translate_status(x, is_file_dest));
                     }

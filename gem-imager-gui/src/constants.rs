@@ -41,7 +41,6 @@ pub(crate) const APP_COPYRIGHT: &str =
     "\u{a9} 2026 T3 Gemstone Devteam \u{b7} \u{a9} 2024 Ayush Singh (BeagleBoard.org)";
 pub(crate) const APP_LINCESE: &str = include_str!("../../LICENSE");
 
-// Icons
 pub(crate) const WINDOW_ICON_BYTES: &[u8] = include_bytes!("../assets/icons/icon.png");
 pub(crate) const ARROW_BACK_ICON_BYTES: &[u8] = include_bytes!("../assets/icons/arrow-back.svg");
 pub(crate) const FILE_ADD_ICON_BYTES: &[u8] = include_bytes!("../assets/icons/file-add.svg");
@@ -55,18 +54,14 @@ pub(crate) const INFO_ICON_BYTES: &[u8] = include_bytes!("../assets/icons/info.s
 pub(crate) const COPY_ICON_BYTES: &[u8] = include_bytes!("../assets/icons/content-copy.svg");
 pub(crate) const SEARCH_ICON_BYTES: &[u8] = include_bytes!("../assets/icons/search.svg");
 
-// Board photographs
-//
-// Bundled rather than fetched: the catalog publishes schematic Fritzing drawings for both boards,
-// which do not tell a user holding the hardware which board is which. These are photographs of the
-// real boards, keyed by the catalog board tag so a renamed board keeps its picture, and they
-// render before the network answers — the board screen is the first screen of the application.
+// Photographs rather than the catalog's Fritzing schematics, which do not tell a user holding the
+// hardware which board is which. Keyed by board tag, and bundled so the first screen renders
+// before the network answers.
 pub(crate) const BOARD_PHOTO_T3_GEM_O1_BYTES: &[u8] =
     include_bytes!("../assets/boards/t3-gem-o1.png");
 pub(crate) const BOARD_PHOTO_BEAGLEY_AI_BYTES: &[u8] =
     include_bytes!("../assets/boards/beagley-ai.png");
 
-// Boot mode illustrations
 pub(crate) const USB_DFU_BOOTMODE_BYTES: &[u8] =
     include_bytes!("../assets/icons/usb-dfu-bootmode.svg");
 pub(crate) const EMMC_BOOTMODE_BYTES: &[u8] = include_bytes!("../assets/icons/emmc-bootmode.svg");
@@ -75,7 +70,6 @@ pub(crate) const EMMC_BOOTMODE_BYTES: &[u8] = include_bytes!("../assets/icons/em
 /// DIP switch labels in these diagrams do not.
 pub(crate) const ILLUSTRATED_DIALOG_WIDTH: f32 = 960.0;
 
-// Font
 pub(crate) const FONT_REGULAR: iced::Font = iced::Font::with_name("Nunito");
 pub(crate) const FONT_BOLD: iced::Font = {
     let mut font = FONT_REGULAR;
@@ -84,20 +78,13 @@ pub(crate) const FONT_BOLD: iced::Font = {
     font
 };
 
-// Base Fonts
 pub(crate) const FONT_NORMAL_BYTES: &[u8] =
     include_bytes!("../assets/fonts/Nunito-Regular-subset.ttf");
 pub(crate) const FONT_BOLD_BYTES: &[u8] = include_bytes!("../assets/fonts/Nunito-Bold-subset.ttf");
 
-// Theme
-//
-// The brand colours are taken from the T3 Gemstone reference application (`gem-imager`), so the
-// two utilities look like the same product: `#18224f` is its main surface (`src/main.qml:95`,
-// `qmlcomponents/ImButton.qml:17`) and `#d15d7d` its action accent (`src/main.qml:250`). The
-// previous names encoded BeagleBoard's mascot (tongue orange, hair light brown) and are gone.
-//
-// `SUCCESS_GREEN` and `DANGER_RED` are semantic, not brand: they keep the upstream values so the
-// "finished" and "this destroys data" signals do not shift meaning along with the repaint.
+// Brand colours match the reference `gem-imager` application: `#18224f` surface, `#d15d7d`
+// accent. `SUCCESS_GREEN` and `DANGER_RED` are semantic rather than brand, so they keep the
+// upstream values and their meaning does not shift with a repaint.
 
 /// Brand accent — buttons, progress, selection.
 pub(crate) const GEMSTONE_ROSE: iced::Color = color!(0xd1, 0x5d, 0x7d);

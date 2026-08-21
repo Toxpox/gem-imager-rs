@@ -114,8 +114,7 @@ mod tests {
         let b = sha512_crypt_os_salt(&Secret::new("gemstone")).unwrap();
 
         assert!(a.starts_with("$6$"));
-        // Same password, different salt: a byte-for-byte comparison of two runs is therefore not a
-        // valid test, which is why the vector above fixes the salt instead.
+        // Same password, different salt, so the fixed-salt vector above is the real check.
         assert_ne!(*a, *b);
         sha_crypt::sha512_check("gemstone", &a).expect("verifies against its own salt");
 

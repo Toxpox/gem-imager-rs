@@ -91,8 +91,7 @@ fn main() -> rusb::Result<()> {
             descriptor.max_packet_size()
         );
 
-        // Opening can fail (no WinUSB driver); the descriptors are still readable without it, and
-        // only the human-readable alt-setting names are lost.
+        // Opening can fail (no WinUSB driver); only the human-readable alt-setting names are lost.
         let handle = match device.open() {
             Ok(handle) => Some(handle),
             Err(e) => {
@@ -108,9 +107,8 @@ fn main() -> rusb::Result<()> {
         });
 
         if let Some(handle) = handle.as_ref() {
-            // `rusb::Version` assumes valid BCD digits. Some later T3 boot stages have previously
-            // appeared in Windows as `REV_7>94`, so preserve the raw bcdDevice word as evidence
-            // instead of relying only on the parsed display value.
+            // `rusb::Version` assumes valid BCD digits, and some T3 boot stages have appeared as `REV_7>94`,
+            // so keep the raw bcdDevice word as evidence rather than only the parsed value.
             let mut raw_device_descriptor = [0u8; 18];
             match handle.read_control(
                 0x80, // standard device-to-host request for the device recipient

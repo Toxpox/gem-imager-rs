@@ -44,10 +44,8 @@ fn main() -> iced::Result {
         .try_init()
         .expect("Failed to register tracing_subscriber");
 
-    // Release builds are `windows_subsystem = "windows"`, so a panic message has nowhere to go:
-    // there is no console, and the default hook does not touch tracing. A panic on a worker thread
-    // therefore left no trace at all while the screen sat on its last phase forever. Route panics
-    // into the same log file as everything else before any of them can happen.
+    // Release builds are `windows_subsystem = "windows"`, so a panic has nowhere to go and the default
+    // hook does not touch tracing. Route panics into the log file before any of them can happen.
     {
         let default_hook = std::panic::take_hook();
         std::panic::set_hook(Box::new(move |info| {
@@ -62,8 +60,7 @@ fn main() -> iced::Result {
     tracing::info!("Resolved GUI keymap: {:?}", helpers::system_keymap());
 
     // A staging image is a full OS image carrying the user's Wi-Fi PSK and password hash. `Drop`
-    // removes it on every ordinary path; this covers the one it cannot — a previous run that was
-    // killed or crashed mid-write.
+    // removes it on every ordinary path; this covers a previous run killed mid-write.
     staging::cleanup_stale();
 
     // Force using the low power gpu since this is not a GPU intensive application
@@ -79,10 +76,8 @@ fn main() -> iced::Result {
     #[cfg(all(target_os = "macos", feature = "notify-rust"))]
     let _ = notify_rust::set_application(constants::APP_ID);
 
-    // macOS gates the Wi-Fi SSID behind Location authorization, and grants that asynchronously to
-    // the *main* thread's run loop. Asking here, before the event loop starts, means the answer is
-    // already in by the time the user opens the Wi-Fi form; asking from the worker that runs the
-    // detection would never receive it. A no-op on every other platform.
+    // macOS grants Wi-Fi SSID access asynchronously to the *main* thread's run loop, so ask before
+    // the event loop starts; the detection worker would never receive the answer. No-op elsewhere.
     gem_host_wifi::prime_location_authorization();
 
     let settings = iced::window::Settings {
@@ -254,8 +249,7 @@ impl GemImager {
         const INTERVAL: std::time::Duration = std::time::Duration::from_secs(1);
 
         let destinations = match self {
-            // Nothing is enumerated for a pair with no write method: polling for SD cards on a
-            // board that cannot take one only produces destinations the write path would refuse.
+            // A pair with no write method only enumerates destinations the write path would refuse.
             Self::ChooseDest(x) if !x.write_methods.is_empty() => Subscription::run_with(
                 (
                     x.write_methods,
@@ -342,11 +336,9 @@ impl GemImager {
                 }
                 Err(e) => {
                     tracing::error!("Flashing failed with error: {:#?}", e);
-                    // `{e}` prints only the outermost error, and the outermost error is often the
-                    // least informative one: an integrity failure arrives wrapped as "Unknown Error
-                    // during IO", which reads exactly like a full disk or a permissions problem.
-                    // `{e:#}` appends the source chain, so the user can tell "this image is not the
-                    // one the catalog published, download it again" from "your card is faulty".
+                    // `{e}` prints only the outermost error, which is often the least informative: an integrity
+                    // failure arrives as "Unknown Error during IO", reading like a full disk. `{e:#}` appends the
+                    // source chain, so a bad download can be told apart from a faulty card.
                     GemImagerMessage::FlashFail(format!("{e:#}"))
                 }
             };
@@ -549,9 +541,8 @@ impl GemImager {
 
                     Task::batch([inner.save_app_config(), self.scroll_reset()])
                 }
-                // Saved for convenience on the next run. The secret fields are `#[serde(skip)]`,
-                // so what lands on disk is the host name, network name, country, time zone and
-                // keymap — never a password (`instruction.md` §10.3).
+                // Saved for the next run. The secret fields are `#[serde(skip)]`, so only the host name, network
+                // name, country, time zone and keymap land on disk (`instruction.md` 10.3).
                 helpers::FlashingCustomization::T3GemInit { config, .. } => {
                     let mut temp = inner
                         .common
