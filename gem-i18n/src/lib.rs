@@ -533,11 +533,9 @@ mod tests {
 
     #[test]
     fn every_message_has_both_languages() {
-        // The macro guarantees a Turkish arm exists; this guards against one that was "filled in"
-        // by pasting the English string, which the compiler cannot catch.
-        //
-        // The exceptions are strings that are genuinely identical in both languages: acronyms and
-        // proper nouns. Listing them here means adding a new one is a deliberate act.
+        // The macro guarantees a Turkish arm exists, but not that it differs from the English one. The
+        // exceptions are strings genuinely identical in both languages -- acronyms and proper nouns --
+        // so listing them here makes adding one a deliberate act.
         const IDENTICAL_BY_DESIGN: &[Msg] = &[Msg::Ssid];
 
         for &msg in Msg::ALL {

@@ -184,24 +184,16 @@ impl std::io::Read for ReaderFileStream {
     }
 }
 
-// ReaderFileStream behaves like a stream backed by a growing file rather than
-// a normal fully materialized file.
-//
-// Seeking within the currently written region works normally. However:
-//
-// - Seeking beyond the current file length waits until the writer produces
-//   enough data or closes.
-// - SeekFrom::End is unsupported while the writer is still active because the
-//   final file length is not yet known, so offsets relative to the end cannot
-//   be resolved correctly.
-// - Once the writer is dropped, seek behavior matches normal file semantics.
+// ReaderFileStream is backed by a growing file, so seeking within the written region behaves
+// normally but seeking past it waits for the writer, and SeekFrom::End is unsupported until the
+// writer is dropped -- the final length is not known before that. Afterwards it matches normal
+// file semantics.
 impl std::io::Seek for ReaderFileStream {
     fn seek(&mut self, pos: io::SeekFrom) -> io::Result<u64> {
         loop {
             let (lock, cvar) = &*self.writing;
             let writing = lock.lock().unwrap();
 
-            // If writing done, use normal file seek.
             if !*writing {
                 return self.file.seek(pos);
             }
@@ -210,8 +202,7 @@ impl std::io::Seek for ReaderFileStream {
             let target = match pos {
                 io::SeekFrom::Start(x) => x,
                 io::SeekFrom::End(_) => {
-                    // We don't know true file len yet. So just return
-                    // unsupported. Not sure if we should just wait for writing to finish.
+                    // The final length is unknown while the writer is active, so End-relative offsets cannot be resolved.
                     return Err(io::Error::new(
                         io::ErrorKind::Unsupported,
                         "Seek from end is unsupported",

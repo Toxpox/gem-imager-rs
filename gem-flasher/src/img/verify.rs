@@ -94,8 +94,7 @@ impl ExtractVerifier {
 
         self.seen += chunk.len() as u64;
 
-        // Fail as soon as the stream is provably too long, rather than decompressing gigabytes
-        // that can no longer match.
+        // Fail as soon as the stream is provably too long, rather than decompressing gigabytes.
         if self.seen > expected.size {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,

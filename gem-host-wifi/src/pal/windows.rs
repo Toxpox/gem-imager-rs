@@ -41,8 +41,7 @@ use crate::{HostWifiError, PasswordOutcome};
 /// Turn a WinRT `windows::core::Error` into our data-free error for a given stage.
 fn platform_err(operation: Operation) -> impl Fn(windows::core::Error) -> HostWifiError {
     move |e| {
-        // HRESULT for E_ACCESSDENIED / access-denied family; treat as a permission problem so the
-        // UI can say "location is off" rather than a generic platform failure.
+        // E_ACCESSDENIED family: treated as a permission problem so the UI can say location is off.
         const E_ACCESSDENIED: i32 = -0x7FFF_BFFB; // 0x80070005 as i32
         if e.code().0 == E_ACCESSDENIED {
             HostWifiError::PermissionDenied { operation }
@@ -81,29 +80,25 @@ pub(crate) fn detect_current_wifi() -> Result<DetectedWifi, HostWifiError> {
             continue;
         }
 
-        // The interface GUID is not needed for the SSID itself, but the WlanGetProfile lookup keys
-        // off it. Capture it now so the returned NetworkRef is self-contained.
+        // Captured now so the returned NetworkRef is self-contained; WlanGetProfile keys off it.
         let interface_guid = profile
             .NetworkAdapter()
             .and_then(|na| na.NetworkAdapterId())
             .map(|guid| format!("{guid:?}"))
             .unwrap_or_default();
 
-        // WinRT hands back the SSID as text; represent it through the same byte-classifying path so
-        // the model stays consistent, even though HSTRING is already UTF-16-derived.
+        // Routed through the same byte-classifying path as the other backends, for a consistent model.
         let ssid = DetectedSsid::from_bytes(ssid_text.as_bytes());
 
-        // The security type lives in the native profile, so classify it from there — reading each
-        // candidate *without* the plaintext flag, so discovery never touches a key. A failure here
-        // is not fatal: the SSID and country are still worth filling in.
+        // The security type lives in the native profile, read *without* the plaintext flag so discovery
+        // never touches a key. A failure is not fatal: the SSID and country are still worth filling in.
         let security =
             detect_security(&interface_guid, &ssid_text).unwrap_or(SecurityKind::Unknown);
 
         return Ok(DetectedWifi {
             network: NetworkRef(NetworkRefInner::Windows {
                 interface_guid,
-                // Retrieval resolves the real native profile name from the SSID; store the SSID as
-                // the starting point rather than assuming the profile name equals it (§7.2).
+                // Stored as the starting point: retrieval resolves the real native profile name (§7.2).
                 profile_name: ssid_text,
             }),
             ssid,
@@ -276,8 +271,7 @@ fn profile_names(handle: &WlanHandle, interface: &GUID) -> Result<Vec<String>, H
         return Ok(Vec::new());
     }
 
-    // SAFETY: on success the API returns a list whose ProfileInfo array has dwNumberOfItems entries;
-    // the declared `[_; 1]` is the usual Win32 variable-length-array idiom.
+    // SAFETY: on success the list's ProfileInfo array has dwNumberOfItems entries; `[_; 1]` is the Win32 VLA idiom.
     let names = unsafe {
         let count = (*list).dwNumberOfItems as usize;
         let items = (*list).ProfileInfo.as_ptr();
@@ -367,8 +361,7 @@ pub(crate) fn read_saved_password(network: &NetworkRef) -> Result<PasswordOutcom
 
 /// Turn a parsed profile into the outcome the UI states (§7.3).
 fn outcome_from_profile(profile: &wlan_profile::WlanProfile) -> PasswordOutcome {
-    // The security type decides whether a portable passphrase can exist at all, before the key
-    // material is even considered.
+    // The security type decides whether a portable passphrase can exist at all.
     match profile.security {
         SecurityKind::Open => return PasswordOutcome::NotRequired,
         SecurityKind::Enterprise | SecurityKind::UnsupportedSecurity => {
@@ -412,8 +405,7 @@ mod tests {
 
     #[test]
     fn access_denied_on_the_secret_is_an_outcome_not_a_failure() {
-        // A debug build running as asInvoker hits exactly this, and it must degrade to the manual
-        // field rather than surfacing a platform error (§7.4).
+        // A debug build running as asInvoker hits this and must degrade to the manual field (§7.4).
         assert_eq!(
             secret_outcome_for_status(5),
             Some(PasswordOutcome::PermissionDenied)

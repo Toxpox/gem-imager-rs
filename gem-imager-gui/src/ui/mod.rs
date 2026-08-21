@@ -30,8 +30,7 @@ pub(crate) fn view(state: &GemImager) -> iced::Element<'_, GemImagerMessage> {
         _ => panic!("Unexpected message"),
     };
 
-    // Inner layer. A missing WinUSB driver is the more actionable of the two problems, so
-    // `driver_prompt` goes on top of this one rather than under it.
+    // Inner layer: a missing WinUSB driver is the more actionable problem, so `driver_prompt` sits on top.
     let page = notice_modal::wrap(page, notice_for(state), state.common().lang());
 
     #[cfg(feature = "dfu-driver-mvp")]
@@ -49,9 +48,8 @@ pub(crate) fn view(state: &GemImager) -> iced::Element<'_, GemImagerMessage> {
 fn notice_for(state: &GemImager) -> Option<notice_modal::Notice> {
     match state {
         GemImager::ChooseDest(x) if x.dfu_notice => {
-            // A board that is in DFU mode but has no driver bound enumerates as nothing, which
-            // looks identical to no board at all. Telling that user to move the switches is wrong,
-            // and `driver_prompt` is already on screen with the right answer.
+            // A board in DFU mode with no driver bound enumerates as nothing, which looks like no board at
+            // all. Telling that user to move the switches is wrong; `driver_prompt` has the right answer.
             #[cfg(feature = "dfu-driver-mvp")]
             if state.common().dfu_driver.device_present() {
                 return None;
@@ -74,9 +72,8 @@ fn notice_for(state: &GemImager) -> Option<notice_modal::Notice> {
                 dismiss: GemImagerMessage::DismissNotice,
             })
         }
-        // Everything else, `AppInfo` included. An `AppInfo` overlay opened from the success screen
-        // still carries `OverlayData::FlashingSuccess`, and a notice rendered over it would leave
-        // an undismissable scrim on a screen that has no dismiss button of its own.
+        // Everything else, `AppInfo` included: an `AppInfo` overlay opened from the success screen still
+        // carries `OverlayData::FlashingSuccess`, and a notice over it would leave an undismissable scrim.
         _ => None,
     }
 }

@@ -92,9 +92,8 @@ fn board_to_device(board: &Board) -> Device {
         description: board.description.clone(),
         // `Flasher` still only names the SD path; the DFU capability travels beside it.
         flasher: Flasher::SdCard,
-        // Only a board with a *verified* DFU profile reports the capability. `emmc: true` in the
-        // catalog is not enough on its own — `board_capabilities` refuses to attach a profile to a
-        // board this build has no verified contract for.
+        // Only a board with a *verified* DFU profile reports the capability: `emmc: true` in the catalog
+        // is not enough, since `board_capabilities` refuses a profile this build has no contract for.
         emmc_dfu: board.capabilities.supports_dfu(),
         documentation: None,
         instructions: None,
@@ -269,8 +268,7 @@ fn distribution_sublist(name: &str, members: &[&Image], boards: &[&Board]) -> Op
 
     Some(OsListItem::SubList(OsSubList {
         name: name.to_owned(),
-        // `OsSubList::description` is metadata: the front-end list pane renders only name and icon.
-        // Listing the releases keeps it honest and derived rather than invented.
+        // Metadata only: the list pane renders name and icon, so listing the releases keeps it derived rather than invented.
         description: releases
             .iter()
             .map(|(key, images)| release_label(key, images))
@@ -731,8 +729,7 @@ mod tests {
             ],
         );
 
-        // Deliberately not in the `{distro}/{release}/{board}/` shape: the release cannot be
-        // derived, and the image must still be listed.
+        // Deliberately not the `{distro}/{release}/{board}/` shape: no release can be derived, but it must still be listed.
         let pardus = sublist_entry(
             "Pardus Images",
             &[image_entry(

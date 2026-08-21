@@ -205,8 +205,7 @@ fn validate_board(
 
     let tags: BTreeSet<String> = raw.tags.iter().cloned().collect();
     if tags.is_empty() {
-        // The live catalog carries a tagless "No filtering" pseudo-device; it can never match an
-        // image, so it is not a board as far as this model is concerned.
+        // The catalog's tagless "No filtering" pseudo-device can never match an image, so it is not a board here.
         return Err(vec![T3Diagnostic::BoardWithoutTags {
             path: path.to_owned(),
             board: name,
@@ -349,8 +348,7 @@ fn validate_image(
     let release_date = require_release_date(raw.release_date.as_deref(), path, &mut rejections);
     let devices = require_device_tags(&raw.devices, path, known_tags, &mut rejections);
 
-    // Every `None` above pushed a rejection, so this destructuring cannot panic and needs no
-    // `unwrap`/`expect`.
+    // Every `None` above pushed a rejection, so this destructuring cannot panic and needs no `unwrap`.
     let (
         Some(name),
         Some(url),

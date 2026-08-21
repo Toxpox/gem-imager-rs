@@ -100,8 +100,7 @@ impl StagingImage {
             });
         }
 
-        // The name only has to be unique among live processes; the sweep cleans up anything an
-        // earlier one left behind.
+        // Unique among live processes only; the sweep cleans up whatever an earlier one left behind.
         let path = dir.join(format!("{PREFIX}{}.img", std::process::id()));
         Ok(Self { path })
     }
@@ -117,8 +116,7 @@ impl Drop for StagingImage {
             Ok(()) => tracing::info!("Removed the DFU staging image"),
             // The common case: the write failed before the file was created.
             Err(e) if e.kind() == io::ErrorKind::NotFound => {}
-            // A staging image carries the user's secrets, so a failure to remove it is worth a
-            // warning even though it cannot fail the flash that already finished.
+            // Worth a warning because the file holds user secrets, though it cannot fail a finished flash.
             Err(e) => tracing::warn!("Failed to remove the DFU staging image: {e}"),
         }
     }
@@ -153,8 +151,7 @@ pub(crate) fn cleanup_stale() {
 fn available_space(dir: &Path) -> io::Result<u64> {
     use std::os::windows::ffi::OsStrExt as _;
 
-    // `GetDiskFreeSpaceExW` reports the quota-aware figure for the calling user, which is the
-    // number that decides whether *this* process can write the file.
+    // The quota-aware figure for the calling user, which is what decides whether this process can write.
     let mut wide: Vec<u16> = dir.as_os_str().encode_wide().collect();
     wide.push(0);
 
@@ -191,8 +188,7 @@ fn available_space(dir: &Path) -> io::Result<u64> {
         return Err(io::Error::last_os_error());
     }
 
-    // `f_bavail` rather than `f_bfree`: the reserved-for-root blocks are not writable by the user
-    // running the GUI, and counting them would turn a pre-check into a false pass.
+    // `f_bavail`, not `f_bfree`: root-reserved blocks would turn the pre-check into a false pass.
     Ok((stat.f_bavail as u64).saturating_mul(stat.f_frsize as u64))
 }
 
@@ -204,8 +200,7 @@ mod tests {
     fn available_space_reports_a_real_figure_for_the_temp_dir() {
         let dir = tempfile::tempdir().unwrap();
         let free = available_space(dir.path()).unwrap();
-        // Any machine that can run this test has more than a megabyte free; the assertion is that
-        // the platform call was made and parsed, not that the disk is large.
+        // Asserts that the platform call was made and parsed, not that the disk is large.
         assert!(free > 1024 * 1024, "implausible free space: {free}");
     }
 

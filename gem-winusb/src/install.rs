@@ -276,8 +276,7 @@ pub fn install_t3_rom_dfu() -> Result<InstallOutcome, InstallError> {
     let cert = CString::new("CN=T3 Gemstone AM62x ROM DFU MVP").expect("static string");
     let fallback_description = CString::new("T3 Gemstone AM62x ROM DFU").expect("static string");
 
-    // Copy the list record so a fallback description can be supplied without making
-    // `wdi_destroy_list` free memory owned by Rust.
+    // The list record is copied so a fallback description can be set without `wdi_destroy_list` freeing Rust-owned memory.
     let mut device = unsafe { *selected };
     device.next = null_mut();
     if device.desc.is_null() {

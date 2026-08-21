@@ -28,9 +28,7 @@ impl ProgressCircle {
     }
 }
 
-// Then, we implement the `Program` trait
 impl<Message> canvas::Program<Message> for ProgressCircle {
-    // No internal state
     type State = ();
 
     fn draw(

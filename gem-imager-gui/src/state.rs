@@ -135,8 +135,7 @@ pub(crate) struct ChooseOsState {
 
 impl ChooseOsState {
     pub(crate) fn update_images(&mut self, mut imgs: Vec<OsImageItem>, pos: Option<i64>) {
-        // `Flasher` only has `SdCard` now, so every board offers the format and
-        // local-image entries.
+        // `Flasher` only has `SdCard`, so every board offers the format and local-image entries.
         imgs.extend([
             OsImageItem::format(),
             OsImageItem::local(config::Flasher::SdCard),
@@ -312,8 +311,7 @@ fn show_dfu_placeholder(
 
 impl From<CustomizeState> for ChooseDestState {
     fn from(value: CustomizeState) -> Self {
-        // Recomputed rather than carried along: going BACK is also how a user reaches this screen
-        // after changing the image, and the write methods are a property of the pair.
+        // Recomputed rather than carried: BACK also reaches this screen, and the methods follow the pair.
         let write_methods =
             helpers::WriteMethods::resolve(&value.selected_board, &value.selected_image.1);
 
@@ -505,9 +503,8 @@ pub(crate) fn flash_phase(status: gem_flasher::DownloadFlashingStatus, is_dfu: b
             label: Msg::ResolvingBootArtifacts,
             fraction: None,
         },
-        // Reading the staged image end to end sits between the boot files and the first USB
-        // packet. It is measurable and slow, so it gets its own slice rather than hiding inside
-        // the indeterminate phase before it.
+        // Reading the staged image end to end is measurable and slow, so it gets its own slice instead of
+        // hiding inside the indeterminate phase before it.
         (S::ChecksummingImage(x), _) => FlashPhase {
             label: Msg::ChecksummingImage,
             fraction: span(0.53, 0.03, x),
@@ -618,8 +615,7 @@ impl From<FlashingFailState> for CustomizeState {
     }
 }
 
-// State for Pages that can be opened from any of the normal pages but are not part of normal flow.
-// Eg: Application info
+// Pages reachable from any normal page but outside the normal flow, e.g. application info.
 pub(crate) enum OverlayData {
     ChooseBoard(ChooseBoardState),
     ChooseOs(ChooseOsState),
@@ -798,9 +794,8 @@ mod tests {
             let Some(fraction) = flash_phase(status, true).fraction else {
                 continue;
             };
-            // The epsilon covers f32 representation at a hand-over point (0.30 + 0.15 lands a
-            // fraction of a ulp above 0.45), not a real regression; `max_progress` clamps the
-            // rendered value anyway.
+            // The epsilon covers f32 representation at a hand-over point (0.30 + 0.15), not a regression;
+            // `max_progress` clamps the rendered value anyway.
             assert!(
                 fraction >= last - f32::EPSILON,
                 "{status:?} moved the indicator from {last} to {fraction}"

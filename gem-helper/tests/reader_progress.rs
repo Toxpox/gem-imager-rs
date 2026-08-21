@@ -44,9 +44,8 @@ fn test_progress_tracks_absolute_position_after_seek() {
 
     let reported_progress = rx.try_recv().unwrap();
 
-    // The Seek impl re-syncs `pos` to the reader's absolute position
-    // (`self.pos = self.reader.seek(pos)?`), so progress after a seek stays
-    // accurate: 60%, not the 20% a naive read-only byte counter would report.
+    // The Seek impl re-syncs `pos` to the reader's absolute position, so progress after a seek is 60%,
+    // not the 20% a naive read-only byte counter would report.
     assert_eq!(
         reported_progress, 0.60,
         "Progress should track absolute position after a seek, got {}",
@@ -63,11 +62,9 @@ fn test_zero_size_handling() {
     let mut reader = ReaderWithProgress::new(std::io::Cursor::new(data), 0, Some(tx));
     let mut buf = vec![0u8; 10];
 
-    // This shouldn't panic, but let's check what it emits
     let _ = reader.read(&mut buf);
 
     if let Ok(progress) = rx.try_recv() {
-        // If this is NaN, this assertion will fail because NaN != NaN
         assert!(!progress.is_nan(), "Progress emitted NaN!");
     }
 }
@@ -80,9 +77,8 @@ fn test_dropped_receiver_does_not_panic() {
     let mut reader = ReaderWithProgress::new(std::io::Cursor::new(data), 10, Some(tx));
     let mut buf = vec![0u8; 5];
 
-    // Explicitly drop the receiver side
     drop(rx);
 
-    // This should succeed cleanly because of your `let _ = ` pattern
+    // Succeeds cleanly because the send result is discarded with `let _ =`.
     assert!(reader.read(&mut buf).is_ok());
 }

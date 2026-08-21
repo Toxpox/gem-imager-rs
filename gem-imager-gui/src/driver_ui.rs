@@ -130,9 +130,8 @@ pub(crate) fn subscription() -> Subscription<GemImagerMessage> {
         ticks.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
         iced::futures::stream::unfold(ticks, async move |mut ticks| {
-            // Tokio's first interval tick completes immediately, covering a board attached before
-            // application startup. Subsequent ticks also cover hotplug without trusting an event
-            // payload as an install target.
+            // Tokio's first tick fires immediately, covering a board attached before startup; later ticks
+            // cover hotplug without trusting an event payload as an install target.
             ticks.tick().await;
             let state = blocking_future(gem_winusb::probe).await;
             Some((GemImagerMessage::DfuDriverProbe(state), ticks))

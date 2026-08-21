@@ -95,8 +95,7 @@ mod tests {
 
     #[test]
     fn locale_region_parsing_handles_common_shapes() {
-        // All three locale vars are cleared first so the host's own environment cannot leak a
-        // region into the "no region" cases.
+        // All three locale vars are cleared first so the host cannot leak a region into the no-region cases.
         let saved: Vec<(&str, Option<String>)> = ["LC_ALL", "LC_MESSAGES", "LANG"]
             .iter()
             .map(|&k| (k, std::env::var(k).ok()))

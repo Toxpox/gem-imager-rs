@@ -224,8 +224,7 @@ pub fn devices(_show_all: bool) -> Vec<Device> {
                          as {access:?}",
                         device.bus_number()
                     );
-                    // The descriptor strings live behind the handle we could not get, so the
-                    // identity is all there is to show.
+                    // The descriptor strings live behind the handle we could not get.
                     (
                         access,
                         format!(
@@ -422,8 +421,7 @@ fn digest_raw_image(
             let _ = sender.try_send(DfuProgress::ChecksummingImage(fraction));
         }
     };
-    // Roughly 200 updates over the whole image, and never more than one per 8 MiB: the channel
-    // drops on contention anyway, and the front-end only needs enough motion to show work.
+    // Roughly 200 updates over the image and never more than one per 8 MiB; the channel drops on contention.
     let step = (expected / 200).max(8 * 1024 * 1024);
     let mut next_report = step;
     let mut hasher = Sha256::new();
@@ -577,8 +575,7 @@ fn flash_t3_inner(
     cancel: Option<CancellationToken>,
 ) -> Result<FlashReport> {
     let cache_dir = cache_dir.as_ref();
-    // Announced before the first network call: on a cold cache this phase can take a while, and a
-    // screen that says nothing here looks like a hang before the board has even been touched.
+    // Announced before the first network call: on a cold cache silence here looks like a hang.
     if let Some(sender) = &chan {
         let _ = sender.try_send(DfuProgress::BootArtifacts);
     }
@@ -641,8 +638,7 @@ mod enumeration_tests {
             classify_open_error(rusb::Error::NotSupported),
             DeviceAccess::DriverMissing
         );
-        // Unknown reasons take the driver branch rather than being dropped or reported as a
-        // permission problem the user does not have.
+        // Unknown reasons take the driver branch rather than a permission problem the user does not have.
         assert_eq!(
             classify_open_error(rusb::Error::Other),
             DeviceAccess::DriverMissing

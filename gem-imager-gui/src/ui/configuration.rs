@@ -69,7 +69,6 @@ fn t3_gem_init<'a>(
 
     let mut col = widget::column([]);
 
-    // Account password
     col = col.push(
         widget::toggler(config.user_password.is_some())
             .label(lang.text(Msg::SetPassword))
@@ -89,7 +88,6 @@ fn t3_gem_init<'a>(
 
     col = col.push(widget::rule::horizontal(2));
 
-    // Wireless network
     col = col.push(
         widget::toggler(config.wifi.is_some())
             .label(lang.text(Msg::ConfigureWirelessLan))
@@ -138,7 +136,6 @@ fn t3_gem_init<'a>(
 
     col = col.push(widget::rule::horizontal(2));
 
-    // Timezone
     let toggle = widget::toggler(config.timezone.is_some())
         .label(lang.text(Msg::SetTimezone))
         .on_toggle(move |t| {
@@ -170,7 +167,6 @@ fn t3_gem_init<'a>(
 
     col = col.push(widget::rule::horizontal(2));
 
-    // Hostname
     let toggle = widget::toggler(config.hostname.is_some())
         .label(lang.text(Msg::SetHostname))
         .on_toggle(move |t| {
@@ -197,7 +193,6 @@ fn t3_gem_init<'a>(
 
     col = col.push(widget::rule::horizontal(2));
 
-    // Keymap
     let toggle = widget::toggler(config.keymap.is_some())
         .label(lang.text(Msg::SetKeymap))
         .on_toggle(move |t| {
@@ -264,9 +259,8 @@ fn t3_gem_init<'a>(
                     },
                 )
                 .into(),
-                // Both facts are stated rather than hidden: the length limit is the protocol's, not
-                // the application's, and the leftover secret is a known SDK defect
-                // (`instruction.md` §10.5).
+                // Both facts are stated rather than hidden: the length limit is the protocol's, not the
+                // application's, and the leftover secret is a known SDK defect (`instruction.md` 10.5).
                 hint(lang.text(Msg::VncProtocolHint)),
                 hint(lang.text(Msg::VncKnownIssueHint)),
             ]);
@@ -344,7 +338,6 @@ fn linux_sd_card_common<'a>(
     let lang = state.common.lang();
     let mut col = widget::column([]);
 
-    // Username and Password
     col = col.push(
         widget::toggler(config.user.is_some())
             .label(lang.text(Msg::ConfigureUsernamePassword))
@@ -387,7 +380,6 @@ fn linux_sd_card_common<'a>(
 
     col = col.push(widget::rule::horizontal(2));
 
-    // Wifi
     col = col.push(
         widget::toggler(config.wifi.is_some())
             .label(lang.text(Msg::ConfigureWirelessLan))
@@ -427,7 +419,6 @@ fn linux_sd_card_common<'a>(
 
     col = col.push(widget::rule::horizontal(2));
 
-    // Timezone
     let toggle = widget::toggler(config.timezone.is_some())
         .label(lang.text(Msg::SetTimezone))
         .on_toggle(move |t| {
@@ -437,8 +428,7 @@ fn linux_sd_card_common<'a>(
     col = match config.timezone.as_ref() {
         Some(tz) => {
             let xc = config.clone();
-            // The configuration stores the zone as a string, so it has to be resolved
-            // back to a `Tz` for the combo box to show it as the current selection.
+            // Stored as a string, so it has to be resolved back to a `Tz` for the combo box.
             col.push(element_with_element(
                 toggle.into(),
                 widget::combo_box(
@@ -460,7 +450,6 @@ fn linux_sd_card_common<'a>(
 
     col = col.push(widget::rule::horizontal(2));
 
-    // Hostname
     let toggle = widget::toggler(config.hostname.is_some())
         .label(lang.text(Msg::SetHostname))
         .on_toggle(move |t| {
@@ -484,7 +473,6 @@ fn linux_sd_card_common<'a>(
 
     col = col.push(widget::rule::horizontal(2));
 
-    // Keymap
     let toggle = widget::toggler(config.keymap.is_some())
         .label(lang.text(Msg::SetKeymap))
         .on_toggle(move |t| {
@@ -498,9 +486,8 @@ fn linux_sd_card_common<'a>(
     col = match config.keymap.as_ref() {
         Some(keymap) => {
             let xc = config.clone();
-            // The current selection needs to be resolved back to one of the options,
-            // which are kept sorted (see `constants::KEYMAP_LAYOUTS`) to allow a binary
-            // search.
+            // The selection is resolved back to one of the options, which are kept sorted
+            // (`constants::KEYMAP_LAYOUTS`) to allow a binary search.
             let options = state.common.keymaps.options();
             let selection = options
                 .binary_search(&keymap.as_str())
@@ -528,7 +515,6 @@ fn linux_sd_card_common<'a>(
 
     col = col.push(widget::rule::horizontal(2));
 
-    // SSH Key
     col.extend([
         text(lang.text(Msg::SshAuthorizationKey)).into(),
         widget::center(
@@ -562,7 +548,6 @@ fn linux_sd_card_sysconfig<'a>(
     let mut col = linux_sd_card_common(state, config, FlashingCustomization::LinuxSdSysconfig);
 
     col = col.push(widget::rule::horizontal(2));
-    // Enable USB DHCP
     col = col.push(
         widget::toggler(config.usb_enable_dhcp == Some(true))
             .label(state.common.lang().text(Msg::EnableUsbDhcp))

@@ -56,9 +56,8 @@ pub trait DfuTransport {
     ) -> Result<bool> {
         loop {
             crate::check_cancel(cancel)?;
-            // Mid-reset the device can still be listed but no longer openable. That is the
-            // transition being waited for, so an enumeration error keeps the wait going rather
-            // than ending it either way.
+            // Mid-reset the device can still be listed but no longer openable -- that is the transition being
+            // waited for, so an enumeration error keeps the wait going rather than ending it.
             if let Ok(devices) = self.enumerate(vendor_id, product_id)
                 && !devices.iter().any(|device| path.matches(&device.path))
             {
@@ -106,9 +105,8 @@ pub trait DfuTransport {
                 if device.alt_settings.iter().any(|alt| alt == alt_setting) {
                     return Ok(device);
                 }
-                // The board is on the port but showing something else. Which alt-settings it
-                // shows is the whole diagnosis: the ROM's own set means it restarted instead of
-                // booting what was just written.
+                // On the port but showing something else. Which alt-settings it shows is the diagnosis: the ROM's
+                // own set means it restarted instead of booting what was just written.
                 if last_seen.as_deref() != Some(device.alt_settings.as_slice()) {
                     tracing::info!(
                         wanted = alt_setting,
@@ -299,14 +297,10 @@ impl DfuTransport for RusbTransport {
                         continue;
                     }
 
-                    // The DFU functional descriptor describes the *interface*, and the spec places
-                    // exactly one of them after that interface's alt-setting descriptors. libusb
-                    // hands trailing bytes to whichever alt-setting they follow, so on a device
-                    // with several alt-settings only the last one carries it — the T3 board puts
-                    // it on `SocId`, leaving `bootloader` with an empty `extra()`. Searching only
-                    // the matched alt-setting therefore fails on hardware that is entirely
-                    // conformant, which is why the whole interface is searched, and then the
-                    // configuration for devices that hoist it up there.
+                    // The DFU functional descriptor describes the *interface*, and the spec places exactly one after
+                    // that interface's alt-setting descriptors. libusb attaches trailing bytes to whichever
+                    // alt-setting they follow, so on the T3 board only `SocId` carries it and `bootloader` has an
+                    // empty `extra()`. The whole interface is therefore searched, then the configuration.
                     let transfer_size = functional_transfer_size(alt.extra())
                         .or_else(|| {
                             interface

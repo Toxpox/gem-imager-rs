@@ -60,9 +60,8 @@ fn test_public_flash_with_temp_file() {
     assert_eq!(written_bytes.len(), FILE_LEN);
     assert_eq!(written_bytes, expected_bytes.into_vec());
 
-    // 6. The write must have run to completion and a verify pass must have happened. A flash that
-    //    never reported `Verifying` wrote unverified data, which is the state this phase exists to
-    //    make impossible.
+    // 6. The write must have run to completion with a verify pass. A flash that never reported
+    //    `Verifying` wrote unverified data, which is what this phase exists to prevent.
     let updates: Vec<Status> = rx.try_iter().collect();
     assert!(
         updates

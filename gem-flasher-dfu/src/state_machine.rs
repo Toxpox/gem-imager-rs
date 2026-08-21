@@ -60,8 +60,7 @@ pub fn flash_with_transport<T: DfuTransport>(
     cancel: Option<&CancellationToken>,
 ) -> Result<FlashReport> {
     validate_plan(&inputs)?;
-    // Still summed, and still refused on overflow: a plan whose sizes cannot be added up is a plan
-    // whose stages cannot be held to a byte count.
+    // Still summed and refused on overflow: sizes that cannot be added give stages with no byte count.
     inputs.iter().try_fold(0_u64, |sum, input| {
         let size = input
             .stage
@@ -138,12 +137,9 @@ pub fn flash_with_transport<T: DfuTransport>(
 
         let terminal_evidence = match &input.stage.kind {
             DfuStageKind::BootArtifact { next_alt_setting } => {
-                // The final zero-length `DNLOAD` only *requests* the end of the transfer. Per DFU
-                // 1.1 the device leaves dfuDNLOAD-SYNC for dfuMANIFEST-SYNC when the host polls
-                // `GET_STATUS`, and manifestation is where the TI ROM acts on the artifact it just
-                // received. Skipping the poll leaves the ROM parked mid-transaction: it never
-                // treats the image as complete, never boots it, and the wait below then times out
-                // no matter what else the host sends.
+                // The final zero-length `DNLOAD` only *requests* the end of the transfer. Per DFU 1.1 the device
+                // leaves dfuDNLOAD-SYNC for dfuMANIFEST-SYNC when the host polls `GET_STATUS`, and manifestation
+                // is where the TI ROM acts. Skipping the poll parks the ROM mid-transaction and the wait times out.
                 if connected {
                     let manifest = wait_for_boot_manifest(transport)?;
                     tracing::info!(
@@ -152,28 +148,19 @@ pub fn flash_with_transport<T: DfuTransport>(
                         "boot artifact manifested"
                     );
                     match manifest {
-                        // Still on the bus after manifestation means the device is not going to
-                        // leave on its own. The TI ROM does (it jumps straight into the artifact,
-                        // which is why it reports `Disconnected`), but U-Boot's DFU gadget sits in
-                        // its download loop until the host lets go, and only then boots what it
-                        // was given — this is exactly why the documented flow drives it with
-                        // `dfu-util -R`. dfuMANIFEST-WAIT-RESET additionally *requires* the reset
-                        // per DFU 1.1, so both endings are handled the same way.
+                        // Still on the bus after manifestation means the device will not leave on its own. The TI ROM
+                        // does, but U-Boot's DFU gadget sits in its download loop until the host lets go -- which is why
+                        // the documented flow uses `dfu-util -R`. dfuMANIFEST-WAIT-RESET requires the reset anyway.
                         BootManifest::Idle | BootManifest::WaitReset => {
-                            // `dfu-util -R` is DETACH *then* reset, and the order is not cosmetic.
-                            // U-Boot's gadget leaves its download loop from the detach trigger the
-                            // DETACH request sets; a bare bus reset only restarts the gadget, so
-                            // the board stays in DFU, never boots the artifact, and the next stage
-                            // writes into the instance that was supposed to have left.
+                            // `dfu-util -R` is DETACH *then* reset, and the order is not cosmetic: U-Boot's gadget leaves its
+                            // download loop on the DETACH trigger, while a bare bus reset only restarts it -- leaving the
+                            // board in DFU and letting the next stage write into the instance that should have gone.
                             detach_before_reset(transport, &input.stage.artifact_name);
                             tolerate_reset_disconnect(transport.reset())?;
-                            // The reset invalidates the handle, so releasing is best effort; the
-                            // session is dropped either way.
+                            // The reset invalidates the handle, so releasing is best effort.
                             let _ = transport.release();
-                            // Without this the next lookup can match the instance that is on its
-                            // way out: the R5 SPL publishes `tispl.bin` and `u-boot.img` at the
-                            // same time, so the alt-setting alone cannot tell the departing stage
-                            // from the one that replaces it.
+                            // Without this the next lookup can match the departing instance: the R5 SPL publishes `tispl.bin`
+                            // and `u-boot.img` at the same time, so the alt-setting alone cannot tell the two apart.
                             if !transport.wait_for_port_clear(
                                 vendor_id,
                                 product_id,
@@ -212,9 +199,8 @@ pub fn flash_with_transport<T: DfuTransport>(
                 DfuTerminalEvidence::NextAltEnumerated(next_alt_setting.clone())
             }
             DfuStageKind::RawEmmc => {
-                // Once the ZLP has started U-Boot's eMMC flush, cancellation is deliberately not
-                // checked: interrupting the manifest transaction is not a safe cancellation point.
-                // This is also the longest phase with nothing to count, so it is named loudly.
+                // Once the ZLP has started U-Boot's eMMC flush, cancellation is deliberately not checked: the
+                // manifest transaction is not a safe cancellation point. It is also the longest silent phase.
                 report(&mut progress, DfuProgress::Finalizing);
                 let evidence = wait_for_manifest(transport)?;
                 transport
@@ -222,8 +208,7 @@ pub fn flash_with_transport<T: DfuTransport>(
                     .map_err(|source| Error::FinalDetach {
                         source: Box::new(source),
                     })?;
-                // A successful DETACH request may make release observe NO_DEVICE. The request
-                // itself is the required evidence; only reset-style disconnect is accepted here.
+                // A successful DETACH may make release observe NO_DEVICE; only reset-style disconnect is accepted.
                 tolerate_reset_disconnect(transport.release())?;
                 evidence
             }
@@ -381,9 +366,8 @@ fn stream_stage<T: DfuTransport>(
             });
         }
 
-        // Each stage reports its own fraction. The raw image dwarfs the three boot artifacts, so
-        // folding them into one bar would make the first 3 % of the work occupy three quarters of
-        // the visible motion and the remaining 97 % look like a hang.
+        // Each stage reports its own fraction. The raw image dwarfs the boot artifacts, so one shared bar
+        // would spend three quarters of its motion on the first 3 % of the work.
         let fraction = sent as f32 / expected_size as f32;
         report(
             progress,

@@ -5,14 +5,10 @@ use crate::constants::DEFAULT_CONFIG;
 use super::*;
 use gem_config::Config;
 
-// Every fixture board below declares `Flasher::SdCard`, and `Db::add_config_internal` drops
-// devices that `crate::helpers::flasher_supported` rejects. That function only accepts `SdCard`
-// when the `sd` feature is on, and `sd` is not in this crate's default set, so a bare
-// `cargo test --workspace` builds a binary in which no board can ever be inserted.
-//
-// Board-dependent tests therefore carry `#[cfg_attr(not(feature = "sd"), ignore = ...)]`: they
-// stay listed and compiled in every configuration, and run in the one the shipped binary is
-// actually built with (`make` passes `--features sd,dfu`; see the `test-gui` target).
+// `Db::add_config_internal` drops devices that `crate::helpers::flasher_supported` rejects, and
+// that only accepts `SdCard` when the `sd` feature is on -- which is not in this crate's default
+// set. Board-dependent tests therefore carry `#[cfg_attr(not(feature = "sd"), ignore = ...)]`: they
+// stay compiled everywhere and run under the shipped feature set (`make` passes `--features sd,dfu`).
 
 /// This test verifies that database initialization correctly loads
 /// remote configuration URLs from DEFAULT_CONFIG.
@@ -82,7 +78,6 @@ fn add_config_inserts_new_remote_configs() {
 
     let initial_count = initial_urls.len();
 
-    // Create a minimal config with only remote_configs
     let new_config = Config {
         imager: gem_config::config::Imager {
             remote_configs: vec![
@@ -204,7 +199,6 @@ fn add_config_inserts_device_into_board_list() {
 
     let initial_count = initial_boards.len();
 
-    // Create minimal device
     let device = gem_config::config::Device {
         name: "Test Board".to_string(),
         tags: std::collections::HashSet::from(["test-board".to_string()]),
@@ -270,7 +264,6 @@ fn add_config_updates_existing_device_with_same_name() {
 
     db.init().expect("DB initialization should succeed");
 
-    // Insert initial device
     let device_v1 = gem_config::config::Device {
         name: "Test Board".to_string(),
         tags: std::collections::HashSet::from(["test-board".to_string()]),
@@ -296,7 +289,6 @@ fn add_config_updates_existing_device_with_same_name() {
     )
     .expect("First add_config should succeed");
 
-    // Get inserted board id
     let boards = db
         .board_list("")
         .expect("Fetching board list should succeed");
@@ -346,7 +338,6 @@ fn add_config_updates_existing_device_with_same_name() {
         "Board with same name should be updated, not duplicated"
     );
 
-    // Fetch full board details
     let updated_board = db
         .board_by_id(board_id)
         .expect("Fetching board by id should succeed");
@@ -1062,11 +1053,8 @@ fn duplicate_remote_sublist_resolve_does_not_duplicate_os_items() {
     )
     .expect("first resolve should succeed");
 
-    // Second resolve (duplicate call). This used to be asserted as an error, which pinned the
-    // behaviour the image upsert exists to remove: a repeated image aborted the whole merge
-    // transaction and took the board list with it. Surviving the repeat is the point, so the
-    // guarantee is now that the call succeeds *and* still leaves exactly one image — which is
-    // what this test is named for.
+    // Second resolve. This used to be asserted as an error, pinning the behaviour the image upsert
+    // exists to remove; surviving the repeat with exactly one image is the point.
     db.os_remote_sublist_resolve(
         sublist_id,
         &[gem_config::config::OsListItem::Image(child_image)],

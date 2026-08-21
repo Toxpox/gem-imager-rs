@@ -64,9 +64,8 @@ fn ensure_location_authorized() -> Result<(), HostWifiError> {
                 operation: Operation::ReadSsid,
             })
         }
-        // Nothing came back at all. Either the main run loop never ran (so the request was never
-        // dispatched), or macOS is ignoring an app it will not authorize — an unsigned bundle, or
-        // one launched as a bare binary rather than from a .app.
+        // Nothing came back: either the main run loop never ran, or macOS is ignoring an app it will
+        // not authorize -- an unsigned bundle, or one launched as a bare binary rather than a .app.
         None => {
             tracing::warn!(
                 "Wi-Fi autofill blocked: CoreLocation never reported an authorization status. \
@@ -97,8 +96,7 @@ fn classify_security(security: CWSecurity) -> SecurityKind {
         | CWSecurity::WPA3Enterprise
         // Dynamic WEP is 802.1X-based, so it belongs with the enterprise schemes.
         | CWSecurity::DynamicWEP => SecurityKind::Enterprise,
-        // Static WEP is secured but carries no WPA-family passphrase the image can use. It must not
-        // be reported as Open, which would tell the user no password is needed.
+        // Static WEP is secured but carries no WPA-family passphrase; Open would mislead the user.
         CWSecurity::WEP => SecurityKind::UnsupportedSecurity,
         _ => SecurityKind::Unknown,
     }
@@ -113,8 +111,7 @@ pub(crate) fn detect_current_wifi() -> Result<DetectedWifi, HostWifiError> {
         let client = CWWiFiClient::sharedWiFiClient();
         let interface = client.interface().ok_or(HostWifiError::NoWifiDevice)?;
 
-        // `ssid()` returns nil when not associated or when the SSID is not representable; a nil here
-        // after authorization means "not connected".
+        // `ssid()` is nil when not associated, which after authorization means not connected.
         let ssid = match interface.ssid() {
             Some(ns) => DetectedSsid::Utf8(ns.to_string()),
             None => {
@@ -161,14 +158,12 @@ fn outcome_for_status(status: OSStatus) -> PasswordOutcome {
     // Matched with guards rather than bare patterns: a lowercase constant used directly as a match
     // pattern would silently become a catch-all binding if the import ever broke.
     match status {
-        // No AirPort item for this SSID: the network may have been joined on another device, or the
-        // item may live in a keychain this app cannot see.
+        // No AirPort item: joined on another device, or in a keychain this app cannot see.
         s if s == errSecItemNotFound => PasswordOutcome::NotStored,
         s if s == errSecUserCanceled => PasswordOutcome::UserCancelled,
         // Deny, or a failed authentication. Kept distinct from Cancel: they mean different things.
         s if s == errSecAuthFailed => PasswordOutcome::UserDenied,
-        // A prompt was required but could not be shown: a locked keychain or a non-interactive
-        // session. Not a decision by the user, so it is reported separately.
+        // A prompt was required but could not be shown (locked keychain, non-interactive), not a user decision.
         s if s == errSecInteractionNotAllowed => PasswordOutcome::PermissionDenied,
         // An unsigned or wrongly-entitled build (§6.3).
         s if s == errSecMissingEntitlement => PasswordOutcome::PermissionDenied,
@@ -180,8 +175,7 @@ pub(crate) fn read_saved_password(network: &NetworkRef) -> Result<PasswordOutcom
     let NetworkRefInner::MacOs { ssid } = &network.0 else {
         return Err(HostWifiError::UnsupportedPlatform);
     };
-    // Discovery stores an empty SSID when the name was not representable as text; there is nothing
-    // to look up in that case.
+    // Discovery stores an empty SSID for a name that is not representable; nothing to look up.
     if ssid.is_empty() {
         return Ok(PasswordOutcome::NotStored);
     }
@@ -207,8 +201,7 @@ fn read_system_keychain_password(ssid: &str) -> Result<PasswordOutcome, HostWifi
             return Ok(outcome_for_status(status));
         }
 
-        // The out parameter is `AutoreleasingUnsafeMutablePointer`, so the string comes back +0 and
-        // must be retained rather than taken over with `from_raw`.
+        // The out parameter is `AutoreleasingUnsafeMutablePointer`, so the string comes back +0 and must be retained.
         // SAFETY: the pointer is null or a valid autoreleased NSString.
         let Some(password) = (unsafe { objc2::rc::Retained::retain(password) }) else {
             return Ok(PasswordOutcome::NotStored);
@@ -257,8 +250,7 @@ mod tests {
 
     #[test]
     fn static_wep_is_unsupported_and_dynamic_wep_is_enterprise() {
-        // Static WEP is secured but carries nothing the image can use; calling it Open would tell
-        // the user no password is needed for a secured network.
+        // Calling static WEP Open would claim a secured network needs no password.
         assert_eq!(
             classify_security(CWSecurity::WEP),
             SecurityKind::UnsupportedSecurity
@@ -297,8 +289,7 @@ mod tests {
             outcome_for_status(errSecUserCanceled),
             outcome_for_status(errSecAuthFailed)
         );
-        // Success is never routed through here, and an unmapped status is reported as unavailable
-        // rather than being mistaken for a result.
+        // An unmapped status is reported as unavailable rather than mistaken for a result.
         assert_eq!(outcome_for_status(-1), PasswordOutcome::Unavailable);
         assert_eq!(
             outcome_for_status(errSecSuccess),
@@ -337,8 +328,7 @@ mod tests {
 
     #[test]
     fn an_unrepresentable_ssid_reports_nothing_stored_without_querying() {
-        // Discovery leaves the SSID empty for a non-UTF-8 name; there is nothing to match on, and
-        // no Keychain call should be attempted.
+        // An empty SSID (a non-UTF-8 name) has nothing to match on, so no Keychain call is made.
         let empty = NetworkRef(NetworkRefInner::MacOs {
             ssid: String::new(),
         });

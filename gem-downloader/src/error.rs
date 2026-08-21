@@ -160,8 +160,7 @@ impl DownloadError {
 impl From<DownloadError> for io::Error {
     fn from(value: DownloadError) -> Self {
         let kind = match &value {
-            // Integrity mismatches keep `InvalidInput`: that is the kind the pre-existing
-            // hash-mismatch contract returned and callers already match on it.
+            // Integrity mismatches keep `InvalidInput`, the kind the hash-mismatch contract already returned.
             DownloadError::InvalidUrl(_)
             | DownloadError::InsecureUrl { .. }
             | DownloadError::ArchiveSizeMismatch { .. }

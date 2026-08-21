@@ -24,9 +24,8 @@ impl ParitionType {
     where
         T: Write + Seek + Read + std::fmt::Debug,
     {
-        // Partition detection reads from wherever the stream happens to be, so start from the top.
-        // Without this, opening the partition a second time — which the read-back pass does —
-        // reads whatever follows the previous access and reports a corrupt partition table.
+        // Partition detection reads from wherever the stream is, so start from the top: without this the
+        // read-back pass reads whatever follows and reports a corrupt partition table.
         dst.rewind()?;
         let part_table = PartitionTable::detect_partition_table(&mut dst)?;
         dst.rewind()?;
@@ -74,16 +73,15 @@ enum PartitionTable {
 
 impl PartitionTable {
     fn detect_partition_table(mut reader: impl Read) -> Result<PartitionTable> {
-        // Read first 1024 bytes (enough for MBR + GPT header)
+        // Enough for MBR + GPT header.
         let mut buf = [0u8; 1024];
         reader.read_exact(&mut buf)?;
 
-        // Check GPT signature at LBA1 (offset 512)
+        // GPT signature at LBA1.
         if &buf[512..520] == b"EFI PART" {
             return Ok(PartitionTable::Gpt);
         }
 
-        // Check MBR boot signature
         if buf[510] == 0x55 && buf[511] == 0xAA {
             return Ok(PartitionTable::Mbr);
         }
@@ -207,8 +205,7 @@ impl ParitionType {
                     .map_err(|_| Error::CustomizationReadBackMismatch { file: path.clone() })?
                     .read_to_end(&mut got)?;
 
-                // A plain inequality, not a diff: the buffer can hold a password hash, so nothing
-                // about its contents may reach an error message or a log line.
+                // A plain inequality, not a diff: the buffer can hold a password hash.
                 if got.as_slice() != want.as_ref() {
                     return Err(Error::CustomizationReadBackMismatch { file: path.clone() });
                 }

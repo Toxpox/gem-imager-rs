@@ -91,8 +91,7 @@ fn writer_task(
     while let Ok((buf, count)) = buf_rx.recv() {
         let chunk = &buf.as_slice()[..count];
 
-        // `write_all` is what turns a short write into an error instead of silently dropping the
-        // tail; it is never correct to relax this to `write`.
+        // `write_all` turns a short write into an error; relaxing it to `write` would drop the tail.
         sd.write_all(chunk)?;
         hasher.update(chunk);
 
@@ -105,9 +104,8 @@ fn writer_task(
 
     sd.flush()?;
 
-    // The reader pads the final chunk up to the 512-byte alignment, so the writer can legitimately
-    // overshoot — but never undershoot. Fewer bytes than the image declares means the stream ended
-    // early, which used to be reported as a successful flash.
+    // The reader pads the final chunk to 512-byte alignment, so the writer may overshoot but never
+    // undershoot. Fewer bytes than the image declares means the stream ended early.
     if pos < img_size {
         return Err(crate::Error::ShortWrite {
             expected: img_size,
@@ -157,7 +155,6 @@ fn write_sd(
     let (tx2, rx2) = std::sync::mpsc::sync_channel(NUM_BUFFERS);
     let global_start = Instant::now();
 
-    // Starting buffers
     for _ in 0..NUM_BUFFERS {
         tx1.send(Box::new(DirectIoBuffer::new())).unwrap();
     }
@@ -169,9 +166,8 @@ fn write_sd(
         let write_res = writer_task(img_size, sd, chan, rx2, tx1, cancel);
         tracing::info!("Total Time taken: {:?}", global_start.elapsed());
 
-        // The reader's error is reported first because it is the root cause: a decoder that fails
-        // its integrity gate closes the channel, which the writer would otherwise surface only as
-        // the downstream `ShortWrite`.
+        // The reader's error is reported first because it is the root cause: a decoder that fails its
+        // integrity gate closes the channel, which the writer would surface only as `ShortWrite`.
         handle.join().unwrap()?;
         write_res
     })
@@ -231,9 +227,8 @@ fn guard_target(path: &std::path::Path) -> Result<Option<u64>> {
     let dev = crate::devices(false).into_iter().find(|d| d.path == path);
 
     if dev.is_none() {
-        // Enumeration can legitimately miss a device (permissions, exotic transports). Not finding
-        // it is not evidence that it is safe, but refusing here would block real hardware, so the
-        // gap is logged rather than turned into a failure.
+        // Enumeration can legitimately miss a device (permissions, exotic transports). That is not
+        // evidence it is safe, but refusing would block real hardware, so the gap is only logged.
         tracing::warn!(
             "Destination {} is not in the drive list; capacity and system-disk checks skipped",
             path.display()
@@ -256,8 +251,7 @@ fn evaluate_target(dev: Option<&crate::Device>) -> Result<Option<u64>> {
         });
     }
 
-    // A zero size means the platform backend did not report one; treat that as unknown rather than
-    // as "too small for everything".
+    // A zero size means the backend reported none; treat that as unknown, not as too small.
     Ok(Some(dev.size).filter(|s| *s > 0))
 }
 
@@ -335,8 +329,7 @@ where
     tracing::info!("Resolving Image");
     let (img, img_size) = img()?;
 
-    // Checked before the first write rather than discovered at the end: a card that runs out
-    // halfway is an unbootable card either way, but only one of the two wastes an hour first.
+    // Checked before the first write: a card that runs out halfway wastes an hour first.
     if let Some(available) = capacity
         && img_size > available
     {
@@ -375,8 +368,7 @@ where
     tracing::info!("Publishing and verifying the partition layout");
     sd.publish_layout()?;
 
-    // Everything is durable by this point, so a device that refuses to eject (still mounted, busy)
-    // is a convenience problem rather than a data problem.
+    // Everything is durable by now, so a refused eject is a convenience problem, not a data one.
     tracing::info!("Ejecting SD Card");
     if let Err(e) = sd.eject() {
         tracing::warn!("Failed to eject the destination: {e}");

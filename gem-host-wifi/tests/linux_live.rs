@@ -32,8 +32,7 @@ fn detects_the_current_network_on_this_host() {
             println!("security: {:?}", wifi.security);
             println!("country: {:?}", wifi.country);
 
-            // The security type should have been classified to something concrete on a real
-            // connection; Unknown is allowed but noted.
+            // Should be concrete on a real connection; Unknown is allowed but noted.
             assert!(matches!(
                 wifi.security,
                 SecurityKind::Open
@@ -43,8 +42,7 @@ fn detects_the_current_network_on_this_host() {
                     | SecurityKind::Unknown
             ));
 
-            // Password retrieval against the live secret agent. The outcome is printed, never the
-            // password itself.
+            // Live secret-agent retrieval. The outcome is printed, never the password.
             let outcome = gem_host_wifi::read_saved_password(&wifi.network).unwrap();
             println!("password outcome: {outcome:?}");
 

@@ -334,15 +334,13 @@ mod tests {
         // 64 < len is out of range even for a hex-looking value.
         assert!(!is_usable_wifi_credential(&"a".repeat(65)));
 
-        // A multi-byte passphrase is measured in bytes, matching the serializer: this is 8
-        // characters but 12 bytes, so it sits inside the range by bytes, not by character count.
+        // Measured in bytes like the serializer: 8 characters but 12 bytes, so inside the range.
         let turkish = "şifreçğü";
         assert_eq!(turkish.chars().count(), 8);
         assert_eq!(turkish.len(), 12);
         assert!(is_usable_wifi_credential(turkish));
 
-        // The boundary is in bytes, not characters, in both directions: a 7-character multi-byte
-        // value is long enough because it is 12 bytes, while 7 ASCII characters is not.
+        // The boundary is in bytes both ways: 7 multi-byte characters is 12 bytes and passes, 7 ASCII does not.
         assert!(is_usable_wifi_credential("çğüöşia"));
         assert!(!is_usable_wifi_credential("abcdefg"));
     }

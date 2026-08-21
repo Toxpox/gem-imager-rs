@@ -152,9 +152,8 @@ fn large_extracted_sizes_survive_the_signed_integer_boundary() {
 
 #[test]
 fn the_same_url_may_legitimately_appear_under_more_than_one_group() {
-    // The live catalog lists the four Ubuntu images twice: once at the top level and once inside
-    // the "Ubuntu Images" sub-list. Both are real, selectable listings, so the store must not
-    // collapse them — an image is identified by (url, group), not by url alone.
+    // The live catalog lists the four Ubuntu images twice, at the top level and inside "Ubuntu
+    // Images". Both are real listings, so an image is identified by (url, group), not url alone.
     let catalog = live_catalog(ProductScope::T3AndBeagleY);
 
     let mut urls: Vec<&str> = catalog.images.iter().map(|i| i.url.as_str()).collect();

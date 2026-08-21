@@ -25,10 +25,7 @@ use objc2_foundation::{
     NSURLVolumeNameKey, NSVolumeEnumerationOptions, ns_string,
 };
 
-// UTILS
-
-// Cached CFString for CFDictionary lookups.
-// Use thread-local storage since CFString is not Sync.
+// Cached CFString for CFDictionary lookups, thread-local because CFString is not Sync.
 thread_local! {
     static IO_BUNDLE_RESOURCE_FILE: CFRetained<CFString> = CFString::from_static_str("IOBundleResourceFile");
 }
@@ -126,8 +123,7 @@ impl CFDictionaryExt for CFDictionary {
     }
 }
 
-// Extension trait for *const c_char to convert to a Rust String.
-// Provides to_string() which returns Option<String> (None for null pointers).
+// Converts a *const c_char to Option<String>, None for a null pointer.
 trait CCharPtrExt {
     fn to_string(self) -> Option<String>;
 }
@@ -141,8 +137,6 @@ impl CCharPtrExt for *const c_char {
         }
     }
 }
-
-// DISKLIST
 
 unsafe extern "C-unwind" fn append_disk(disk: NonNull<DADisk>, context: *mut c_void) {
     if context.is_null() {
@@ -233,8 +227,6 @@ impl DiskList {
     }
 }
 
-// DRIVELIST
-
 trait DeviceDescriptorFromDiskDescription {
     fn from_disk_description(disk_bsd_name: String, disk_description: &CFDictionary) -> Self;
 }
@@ -263,7 +255,6 @@ impl DeviceDescriptorFromDiskDescription for DeviceDescriptor {
 
         let mut device = DeviceDescriptor::default();
 
-        // Determine partition table type
         if let Some(media_content) =
             disk_description.get_string(unsafe { kDADiskDescriptionMediaContentKey })
         {
@@ -290,11 +281,8 @@ impl DeviceDescriptorFromDiskDescription for DeviceDescriptor {
 
         device.error = None;
 
-        // NOTE: Not sure if kDADiskDescriptionMediaBlockSizeKey returns
-        // the physical or logical block size since both values are equal
-        // on my machine
-        //
-        // The can be checked with the following command:
+        // NOTE: kDADiskDescriptionMediaBlockSizeKey may be the physical or the logical size; the two are
+        // equal on the machine this was written on. Compare with:
         //      diskutil info / | grep "Block Size"
         if let Some(bs) = block_size {
             let block_size_value = bs.unsignedIntValue();
@@ -320,7 +308,7 @@ impl DeviceDescriptorFromDiskDescription for DeviceDescriptor {
 
         device.is_removable = is_removable || is_ejectable;
 
-        // Check if it's an SD card by examining the media icon
+        // The media icon is what identifies an SD card here.
         device.is_card = disk_description
             .get_cfdict(unsafe { kDADiskDescriptionMediaIconKey })
             .and_then(|media_icon_dict| {
@@ -329,9 +317,8 @@ impl DeviceDescriptorFromDiskDescription for DeviceDescriptor {
             .map(|icon| icon.to_string() == "SD.icns")
             .unwrap_or(false);
 
-        // NOTE: Not convinced that these bus types should result
-        // in device.is_scsi = true, it is rather "not usb or sd drive" bool
-        // But the old implementation was like this so kept it this way
+        // NOTE: these bus types really mean "not a USB or SD drive" rather than SCSI. Kept as the old
+        // implementation had it.
         device.is_scsi = device_protocol
             .as_ref()
             .map(|device| scsi_type_matches(device))
@@ -353,7 +340,7 @@ pub(crate) fn drive_list() -> crate::Result<Vec<DeviceDescriptor>> {
     let mut device_map: HashMap<String, usize> = HashMap::with_capacity(disk_list.disks.len());
 
     for disk_bsd_name in &disk_list.disks {
-        // Use Rust string check instead of NSPredicate regex for better performance
+        // A Rust string check rather than an NSPredicate regex, for performance.
         if is_partition_name(&disk_bsd_name) {
             continue;
         }
@@ -407,13 +394,11 @@ pub(crate) fn drive_list() -> crate::Result<Vec<DeviceDescriptor>> {
             continue;
         };
 
-        // Safely extract disk name from partition name (e.g., "disk0s1" -> "disk0")
-        // Uses strip_prefix to avoid panics on unexpected BSD names
+        // `strip_prefix` rather than slicing: an unexpected BSD name must not panic ("disk0s1" -> "disk0").
         let disk_bsdname = if let Some(rest) = partition_bsdname.strip_prefix("disk") {
             let disk_num_len = rest.find('s').unwrap_or(rest.len());
             format!("disk{}", &rest[..disk_num_len])
         } else {
-            // Fallback: use the whole name if it doesn't match expected pattern
             partition_bsdname.clone()
         };
 

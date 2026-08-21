@@ -66,8 +66,7 @@ fn platform_err(operation: Operation) -> impl Fn(zbus::Error) -> HostWifiError {
         }
         _ => HostWifiError::PlatformApi {
             operation,
-            // D-Bus errors do not carry a numeric OS code; 0 keeps the error data-free (§12.3)
-            // while the variant and operation already say what failed.
+            // D-Bus errors carry no numeric OS code; 0 keeps the error data-free (§12.3).
             code: 0,
         },
     }
@@ -298,8 +297,8 @@ pub(crate) fn detect_current_wifi() -> Result<DetectedWifi, HostWifiError> {
             });
             (network, security)
         }
-        // Connected to an AP but with no saved profile object (rare): keep the SSID, and mark the
-        // network with the null path so a later password request cleanly reports NotStored.
+        // Associated but with no saved profile object (rare): keep the SSID, and use the null path so a
+        // later password request cleanly reports NotStored.
         None => (
             NetworkRef(NetworkRefInner::NetworkManager {
                 connection_path: "/".to_owned(),
@@ -349,8 +348,7 @@ fn classify_secrets_error(error: &zbus::Error) -> Result<PasswordOutcome, HostWi
         "org.freedesktop.NetworkManager.Settings.Connection.SettingNotFound" => {
             PasswordOutcome::NotRequired
         }
-        // No secret agent answered: common under confinement, on a headless session, or when the
-        // agent that owns the secret belongs to a different user session (§8.7).
+        // No secret agent answered: common under confinement, headless, or across user sessions (§8.7).
         "org.freedesktop.NetworkManager.AgentManager.NoSecrets" => PasswordOutcome::NotStored,
         "org.freedesktop.NetworkManager.AgentManager.UserCanceled" => {
             PasswordOutcome::UserCancelled
@@ -383,8 +381,7 @@ fn psk_from_secrets(secrets: &HashMap<String, HashMap<String, OwnedValue>>) -> P
         return PasswordOutcome::Unavailable;
     };
 
-    // A value that cannot satisfy the T3 serializer is reported as unusable rather than pushed into
-    // the form to fail there (§3.1).
+    // An unusable value is reported as such rather than pushed into the form to fail there (§3.1).
     if !crate::is_usable_wifi_credential(&psk) {
         return PasswordOutcome::Unavailable;
     }
@@ -405,8 +402,7 @@ pub(crate) fn read_saved_password(network: &NetworkRef) -> Result<PasswordOutcom
     let settings_path = OwnedObjectPath::try_from(connection_path.as_str())
         .map_err(|_| HostWifiError::MalformedProfile)?;
 
-    // Re-check the security type against the live profile rather than trusting a possibly stale
-    // value from discovery: the user may have changed the network in between.
+    // Re-checked against the live profile rather than trusting a possibly stale discovery value.
     let settings = get_settings(&conn, &settings_path)?;
     let security = security_from_settings(&settings);
     match security {
@@ -414,13 +410,11 @@ pub(crate) fn read_saved_password(network: &NetworkRef) -> Result<PasswordOutcom
         SecurityKind::Enterprise | SecurityKind::UnsupportedSecurity => {
             return Ok(PasswordOutcome::UnsupportedSecurity);
         }
-        // Unknown still gets a lookup: the flags and the reply are more informative than a
-        // key-mgmt string we did not recognise.
+        // Unknown still gets a lookup: the flags and the reply beat an unrecognised key-mgmt string.
         SecurityKind::Personal | SecurityKind::Unknown => {}
     }
 
-    // The flags are in the *non-secret* settings, so this costs nothing extra and can answer
-    // "not-saved" / "not-required" without a secrets round trip at all (§8.3).
+    // The flags live in the non-secret settings, so not-saved/not-required costs no round trip (§8.3).
     if let Some(flags) = settings
         .get(SECURITY_SETTING)
         .and_then(|s| s.get(PSK_FLAGS_FIELD))
@@ -500,8 +494,7 @@ mod tests {
     #[test]
     fn key_mgmt_none_is_wep_with_a_security_block_and_open_without_one() {
         // NetworkManager writes key-mgmt=none for *static WEP*; a genuinely open network has no
-        // 802-11-wireless-security setting at all. Calling WEP "open" would tell the user no
-        // password is needed for a secured network.
+        // security setting at all. Calling WEP open would claim a secured network needs no password.
         assert_eq!(
             classify_key_mgmt("none", true),
             SecurityKind::UnsupportedSecurity

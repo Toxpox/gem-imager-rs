@@ -392,8 +392,7 @@ fn the_live_catalog_reaches_the_front_end_model_with_both_product_boards() {
         "the product surface is exactly these two boards"
     );
 
-    // The catalog also publishes a tagless "No filtering" pseudo-device. It must not become a
-    // selectable board.
+    // The tagless "No filtering" pseudo-device must not become a selectable board.
     assert!(
         config.imager.devices.iter().all(|d| !d.tags.is_empty()),
         "a tagless pseudo-device must never reach the board list"
@@ -411,8 +410,7 @@ fn the_live_catalog_reaches_the_front_end_model_with_both_product_boards() {
         .iter()
         .flat_map(|d| d.tags.iter().map(String::as_str))
         .collect();
-    // The bridge rebuilds the catalog's distribution/release wrappers, so the images sit at the
-    // leaves of a tree rather than in one flat list.
+    // The bridge rebuilds the catalog's distribution/release wrappers, so images sit at tree leaves.
     for img in leaf_images(&config.os_list) {
         assert!(
             img.devices.iter().any(|d| board_tags.contains(d.as_str())),

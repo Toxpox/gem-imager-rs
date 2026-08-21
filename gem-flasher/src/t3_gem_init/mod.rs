@@ -460,8 +460,7 @@ fn escape_for_keyfile(value: &str) -> DerivedSecret {
                 out.push_str(r"\\");
                 leading_whitespace = false;
             }
-            // A tab is whitespace, so the leading run continues. Escaping a non-leading one is
-            // unnecessary but harmless: the reader decodes `\t` back to a tab either way.
+            // A tab is whitespace, so the leading run continues; escaping a non-leading one is harmless.
             '\t' => out.push_str(r"\t"),
             ' ' if leading_whitespace => out.push_str(r"\s"),
             _ => {
@@ -543,8 +542,7 @@ mod tests {
         assert!(out.contains("wificountry='TR'\n"));
         assert!(out.contains("timezone='Europe/Istanbul'\n"));
         assert!(out.contains("keyboardlayout='tr'\n"));
-        // The passphrase reaches the card verbatim: WPA3 needs it, and the consumer scrubs the
-        // line after first boot. See `wifi_key`.
+        // Verbatim on purpose: WPA3 needs it, and the consumer scrubs the line after first boot.
         assert!(out.contains("wifipasswd='parola1234'\n"));
     }
 
@@ -605,11 +603,9 @@ mod tests {
                 "wificountry"
             ]
         );
-        // It survives as *data*: the SSID reads back exactly as typed, metacharacters and all,
-        // once the key-file layer the consumer feeds it to has been decoded too.
+        // Survives as *data*: the SSID reads back exactly as typed once the key-file layer is decoded.
         assert_eq!(parse_like_keyfile(&parsed[2].1), payload);
-        // And `EVIL` is not a variable the file defines — the literal text is inside the SSID
-        // value, which is the whole point of quoting it.
+        // `EVIL` is not a variable the file defines: the literal text sits inside the SSID value.
         assert!(!keys.contains(&"EVIL"));
     }
 
@@ -742,8 +738,7 @@ mod tests {
         assert!(Ssid::parse(&"a".repeat(32)).is_ok());
         assert!(Ssid::parse(&"a".repeat(33)).is_err());
         assert!(Ssid::parse("").is_err());
-        // 16 two-byte characters is exactly the limit; 17 is over it even though it is shorter to
-        // read.
+        // 16 two-byte characters is exactly the limit; 17 is over it even though it reads shorter.
         assert!(Ssid::parse(&"ç".repeat(16)).is_ok());
         assert!(Ssid::parse(&"ç".repeat(17)).is_err());
     }

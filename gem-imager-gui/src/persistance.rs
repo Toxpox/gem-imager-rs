@@ -238,9 +238,8 @@ impl T3GemInitCustomization {
             .with_keyboard_layout(keymap)
             .with_vnc(vnc);
 
-        // Serializing is the only way to find out whether the password lengths are acceptable, and
-        // it is cheap enough to use as the validity check. The result is dropped: the bytes it
-        // holds are secret, and the flash builds them again when it needs them.
+        // Serializing is the only way to learn whether the password lengths are acceptable, and it is
+        // cheap enough to use as the check. The result is dropped: its bytes are secret.
         config.serialize()?;
 
         Ok(config)
@@ -564,8 +563,7 @@ mod tests {
 
     #[test]
     fn generic_sd_passwords_never_reach_the_config_file() {
-        // The whole point of moving these fields to `Secret` with `#[serde(skip)]`: a saved
-        // config.json must not carry the account or Wi-Fi password, only the non-secret fields.
+        // The point of `Secret` + `#[serde(skip)]`: no account or Wi-Fi password in a saved config.json.
         let mut gui = GuiConfiguration::default();
         gui.update_sd_customization({
             let mut sd = SdCustomization::default();
@@ -611,8 +609,7 @@ mod tests {
 
     #[test]
     fn generic_sd_customization_debug_redacts_passwords() {
-        // A `Debug` render of the customization state (logged, panicked, or snapshotted) must not
-        // print either password (`instruction.md` §10.3).
+        // A `Debug` render of the customization state must not print either password (`instruction.md` 10.3).
         let sysconf = SdSysconfCustomization::default()
             .update_user(Some(SdCustomizationUser::new(
                 "beagle".into(),

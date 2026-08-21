@@ -222,8 +222,7 @@ pub(crate) fn system_language() -> Option<gem_i18n::Lang> {
     static SYSTEM_LANGUAGE: LazyLock<Option<gem_i18n::Lang>> = LazyLock::new(|| {
         let prefs = whoami::lang_prefs().ok()?;
 
-        // `message_langs` is ordered by preference, so the first supported entry wins: a user
-        // whose list is [de, tr, en] gets Turkish rather than English.
+        // `message_langs` is preference-ordered, so [de, tr, en] yields Turkish rather than English.
         prefs
             .message_langs()
             .find_map(|lang| gem_i18n::Lang::from_code(&lang.to_string()))
@@ -403,8 +402,7 @@ impl RemoteImage {
 
     fn into_image_fn(self) -> impl FnOnce() -> io::Result<(OsImage, u64)> {
         let extract_size = self.extract_size;
-        // Captured before `self` is consumed; the gate is the same whether the archive comes from
-        // the cache or straight off the wire.
+        // Captured before `self` is consumed; the gate is the same for cache and network.
         let gate = self.extract_gate();
         self.open(
             move |p| Ok((OsImage::from_path(p, gate)?, extract_size)),
@@ -482,10 +480,8 @@ pub(crate) async fn flash(
     chan: mpsc::SyncSender<DownloadFlashingStatus>,
     cancel_sync: gem_helper::cancel::CancellationToken,
 ) -> anyhow::Result<()> {
-    // A destination that is listed but unopenable fails here, before anything is downloaded or
-    // written. The sentence is deliberately phrased with the words `localized_flash_error` keys on,
-    // so this refusal reaches the user through the same single localization path as a failure that
-    // happens deeper in the backend.
+    // A listed but unopenable destination fails here, before anything is downloaded or written. The
+    // wording keys on `localized_flash_error`, so refusals and deep failures share one path.
     if let Some((title, _)) = dst.unavailable_reason() {
         return Err(match title {
             gem_i18n::Msg::DfuPermissionTitle => anyhow::anyhow!(
@@ -497,15 +493,12 @@ pub(crate) async fn flash(
         });
     }
 
-    // Held for the whole write, including the DFU re-enumeration gaps where the host is idle and
-    // therefore most likely to suspend.
+    // Held for the whole write, including the idle DFU re-enumeration gaps.
     let _awake = crate::keep_awake::KeepAwake::acquire();
 
     match (img, customization, dst) {
-        // The DFU path is two writes, not one. First the extracted, customized and read-back
-        // verified image is materialised into a staging file — the same SD writer, pointed at a
-        // file, so `config.ini` lands in the FAT partition exactly as it does on a card. Only then
-        // is that file streamed to the board behind the manifest-verified boot chain.
+        // DFU is two writes. The extracted, customized and verified image is first materialised into a
+        // staging file by the SD writer, so `config.ini` lands in FAT exactly as it does on a card.
         #[cfg(all(feature = "dfu", feature = "sd"))]
         (BoardImage::Image { img, .. }, customization, Destination::T3Dfu(target)) => {
             let identifier = target.identifier().into_owned();
@@ -515,8 +508,7 @@ pub(crate) async fn flash(
             tokio::task::spawn_blocking(move || {
                 // Before the first byte is downloaded, not after.
                 let staging = crate::staging::StagingImage::create(estimate)?;
-                // The cache path commonly contains the account name. It adds no operational value
-                // here and must not accompany a staging image that may contain user secrets.
+                // The cache path commonly holds the account name and must not accompany a secret-bearing image.
                 tracing::info!("Staging the customized image in the private application cache");
 
                 gem_flasher::sd::Flasher::with_file_dest(
@@ -526,10 +518,8 @@ pub(crate) async fn flash(
                 )
                 .flash(Some(chan.clone()), Some(cancel_sync.clone()))?;
 
-                // The staging file is handed to the DFU stage as a file, not as a stream: it is
-                // already the finished image — written and read back against the catalog's
-                // extracted digest by the call above — so it is hashed where it lies instead of
-                // being copied a second time into scratch storage.
+                // Handed to the DFU stage as a file, not a stream: it is already the finished image, verified
+                // above, so it is hashed where it lies instead of being copied into scratch storage again.
                 gem_flasher::dfu::Flasher::from_staging_file(
                     staging.path(),
                     &identifier,
@@ -540,9 +530,8 @@ pub(crate) async fn flash(
                 // `staging` is dropped here — on success, on error and on cancellation alike.
             })
             .await
-            // A panic on the blocking worker used to reach `unwrap()` and take the surrounding
-            // task with it, which left the screen frozen on its last phase with nothing written
-            // anywhere. Turning it into an error means the user sees a failure they can report.
+            // A panic on the blocking worker used to reach `unwrap()` and freeze the screen on its last phase
+            // with nothing written. As an error the user at least sees a failure they can report.
             .unwrap_or_else(|join_error| {
                 Err(anyhow::anyhow!(
                     "the DFU write ended unexpectedly: {join_error}"
@@ -618,8 +607,7 @@ impl Destination {
             return Some(item.size());
         }
 
-        // A DFU device exposes no capacity before the transfer starts: the eMMC size is known to
-        // the bootloader that has not been loaded yet. A guess would be worse than nothing.
+        // A DFU device exposes no capacity before transfer, and a guess would be worse than nothing.
         None
     }
 
@@ -678,8 +666,7 @@ impl Destination {
             ],
             #[cfg(feature = "dfu")]
             Self::T3Dfu(t) => vec![
-                // `bus:physical-port-path:vendor:product` — what distinguishes two boards plugged
-                // into the same host.
+                // `bus:physical-port-path:vendor:product` distinguishes two boards on the same host.
                 ("USB Port", t.identifier().into_owned()),
                 ("Target", "Onboard eMMC (DFU)".to_owned()),
             ],
@@ -730,9 +717,8 @@ pub(crate) fn destinations(methods: WriteMethods, filter: bool) -> Vec<Destinati
         );
     }
 
-    // Both kinds share one screen on purpose: a T3 with a card inserted and a T3 in DFU mode are
-    // two destinations for the same image, and hiding one behind a mode switch is how a user ends
-    // up writing to the wrong one.
+    // One screen on purpose: a T3 with a card and a T3 in DFU mode are two destinations for the same
+    // image, and hiding one behind a mode switch is how a user writes to the wrong one.
     #[cfg(feature = "dfu")]
     if methods.dfu {
         out.extend(
@@ -843,8 +829,7 @@ impl FlashingCustomization {
     pub(crate) fn reset(&mut self) {
         match self {
             Self::LinuxSdSysconfig(_) => *self = Self::LinuxSdSysconfig(Default::default()),
-            // Resetting must clear the secrets too, so the whole buffer is replaced rather than
-            // having its non-secret fields cleared one by one.
+            // The whole buffer is replaced rather than cleared field by field, so the secrets go too.
             Self::T3GemInit { desktop, .. } => {
                 *self = Self::T3GemInit {
                     config: Default::default(),
@@ -920,8 +905,7 @@ impl FlashingCustomization {
             FlashingCustomization::LinuxSdSysconfig(sd_customization) => {
                 sd_customization.validate_user()
             }
-            // The T3 screen is valid exactly when the file it describes can be produced, so this
-            // asks the serializer instead of duplicating its rules.
+            // Valid exactly when the file can be produced, so ask the serializer instead of restating its rules.
             FlashingCustomization::T3GemInit { config, desktop } => config.build(*desktop).is_ok(),
             _ => true,
         }
@@ -1219,8 +1203,7 @@ impl<'a> DestinationItem<'a> {
     pub(crate) fn subtitle(&self, lang: gem_i18n::Lang) -> Option<String> {
         match self {
             DestinationItem::SaveToFile(_) => None,
-            // A board that is present but unopenable says so on the row itself, so the user does
-            // not have to start a write to discover it.
+            // Said on the row itself, so the user need not start a write to discover it.
             DestinationItem::Destination(d) if let Some((title, _)) = d.unavailable_reason() => {
                 Some(lang.text(title).to_owned())
             }
@@ -1284,9 +1267,8 @@ pub(crate) async fn fetch_remote_config(
 
     let raw: gem_config::t3::RawT3Catalog = downloader.download_json_no_cache(url.clone()).await?;
 
-    // Product scope: T3-GEM-O1 and BeagleY-AI, and nothing else. The catalog also publishes a
-    // tagless "No filtering" pseudo-device, which carries neither board tag and is therefore out
-    // of scope by construction rather than by a name check.
+    // Scope is T3-GEM-O1 and BeagleY-AI. The catalog's tagless "No filtering" pseudo-device carries
+    // neither board tag, so it falls out by construction rather than by a name check.
     let parsed = gem_config::t3::validate_catalog(
         raw,
         gem_config::t3::ProductScope::T3AndBeagleY,
@@ -1294,8 +1276,7 @@ pub(crate) async fn fetch_remote_config(
     )
     .map_err(|e| std::io::Error::other(format!("T3 catalog rejected: {e}")))?;
 
-    // Every dropped or downgraded entry carries a JSON path. Surfacing them is what keeps a
-    // shrinking catalog visible instead of looking like a normal, smaller list.
+    // Every diagnostic carries a JSON path; surfacing them keeps a shrinking catalog visible.
     for diagnostic in &parsed.diagnostics {
         tracing::warn!("T3 catalog: {diagnostic}");
     }
@@ -1309,8 +1290,7 @@ pub(crate) async fn fetch_remote_config(
 
     let config = gem_config::t3::catalog_to_config(&parsed.catalog);
     tracing::info!(
-        // Not `os_list.len()`: the bridge nests images under distribution/release sub-lists, so the
-        // entry count is no longer the image count.
+        // Not `os_list.len()`: the bridge nests images under sub-lists, so entries are not images.
         "T3 catalog: {} board(s) and {} image(s) in scope",
         config.imager.devices.len(),
         config.image_count()
@@ -1416,8 +1396,7 @@ mod tests {
 
     #[test]
     fn flasher_supported_matches_enabled_features() {
-        // const fn whose arms are feature-gated; compare against cfg! so the
-        // assertion holds under any feature set the suite is compiled with.
+        // Feature-gated const fn, so compare against cfg! to hold under any feature set.
         assert_eq!(
             flasher_supported(config::Flasher::SdCard),
             cfg!(feature = "sd")
@@ -1546,13 +1525,9 @@ mod tests {
         let details = img.details();
         assert!(details.iter().any(|(k, _)| *k == "Path"));
         assert!(details.iter().any(|(k, v)| *k == "Size" && v == "10"));
-        // A local file carries no catalog metadata, so the format cannot be derived from it. For an
-        // SD target the user picks one instead (see `board_image_update_init_format_on_image`),
-        // which is why both BeagleBoard formats are offered rather than none.
-        //
-        // The T3 GemInit formats are deliberately absent: writing `config.ini` onto an arbitrary
-        // local image would be guessing that the image is a T3 one, and a first-boot file the image
-        // does not consume is the failure this whole phase exists to avoid.
+        // A local file carries no catalog metadata, so for an SD target the user picks the format instead
+        // (see `board_image_update_init_format_on_image`). The T3 GemInit formats are deliberately absent:
+        // writing `config.ini` onto an arbitrary image would be guessing that the image is a T3 one.
         assert_eq!(
             img.supported_init_formats(),
             &[config::InitFormat::Sysconf, config::InitFormat::CloudInit]
@@ -1693,8 +1668,7 @@ mod tests {
         )
         .into_iter()
         .next() else {
-            // No board attached to the machine running the suite; the SD-shaped case above already
-            // covers the logic, and asserting on absent hardware would be a false negative.
+            // No board attached in CI; the SD-shaped case above already covers the logic.
             return;
         };
 

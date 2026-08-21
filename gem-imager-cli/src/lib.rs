@@ -38,7 +38,6 @@ fn flash(target: TargetCommands, quite: bool) {
                 let mut last_state = DownloadFlashingStatus::Preparing;
                 let mut stage = 1;
 
-                // Setting initial stage as Preparing
                 term.write_line(&stage_msg(DownloadFlashingStatus::Preparing, stage))
                     .unwrap();
 
@@ -49,7 +48,7 @@ fn flash(target: TargetCommands, quite: bool) {
                     }
 
                     match (progress, last_state) {
-                        // Take care when just progress needs to be updated
+                        // Only the progress value moved, so the existing bar is updated in place.
                         (
                             DownloadFlashingStatus::DownloadingProgress(p),
                             DownloadFlashingStatus::DownloadingProgress(_),
@@ -98,9 +97,8 @@ fn flash(target: TargetCommands, quite: bool) {
                             temp_bar.set_position((p * 100.0) as u64);
                             last_bar = Some(temp_bar);
                         }
-                        // Print stage when entering a new stage without progress. The three DFU
-                        // phases with nothing to count belong here rather than on a bar that would
-                        // have to invent a position for them.
+                        // A new stage with nothing to count prints instead of drawing a bar; the three DFU phases with no
+                        // measurable progress belong here rather than on a bar that would have to invent a position.
                         (DownloadFlashingStatus::Customizing, _)
                         | (DownloadFlashingStatus::ResolvingBootArtifacts, _)
                         | (DownloadFlashingStatus::Reconnecting, _)

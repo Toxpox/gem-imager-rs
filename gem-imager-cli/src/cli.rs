@@ -360,8 +360,7 @@ mod tests {
 
     #[test]
     fn sd_boot_update_is_no_longer_a_subcommand() {
-        // The boot-archive path was removed with `SdCardBootfs`; the old
-        // invocation must fail to parse rather than silently do something else.
+        // The boot-archive path went away with `SdCardBootfs`; the old invocation must fail to parse.
         assert!(
             Opt::try_parse_from([
                 "gem-imager-cli",

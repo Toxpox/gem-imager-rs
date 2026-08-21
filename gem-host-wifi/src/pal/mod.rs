@@ -11,9 +11,8 @@ mod macos_location;
 #[cfg(target_os = "windows")]
 mod windows;
 
-// The Windows profile XML parser holds no Windows types, so it is also compiled under `test` on
-// every platform: that way its fixture matrix (§7.5) runs in the ordinary test suite instead of
-// only on a Windows host.
+// The Windows profile XML parser holds no Windows types, so it also compiles under `test` on
+// every platform: its fixture matrix (§7.5) runs in the ordinary suite, not only on Windows.
 #[cfg(any(target_os = "windows", test))]
 pub(crate) mod wlan_profile;
 

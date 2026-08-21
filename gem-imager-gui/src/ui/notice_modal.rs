@@ -34,9 +34,8 @@ pub(crate) fn wrap<'a>(
         return page;
     };
 
-    // No `.style(..)` on the svg widget. Setting `svg::Style::color` makes resvg flood-fill the
-    // rendered pixmap with one colour, collapsing every switch, digit and frame line into a single
-    // indistinguishable blob. The iced 0.14 default of `{ color: None }` is what these need.
+    // No `.style(..)`: setting `svg::Style::color` makes resvg flood-fill the pixmap with one colour,
+    // collapsing every switch, digit and frame line into a blob. iced 0.14's `{ color: None }` is right.
     let illustration = widget::container(
         widget::svg(notice.illustration)
             .width(iced::Fill)

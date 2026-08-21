@@ -8,14 +8,7 @@ use zip::write::SimpleFileOptions;
 
 #[test]
 fn detects_uncompressed_image_and_reads_contents() {
-    // This is the most fundamental behavior test for OsImage:
-    //
-    // - verifies that non-compressed files fall back to the
-    //   `Uncompressed` variant
-    // - verifies that reported size matches actual file size
-    // - verifies that `Read` delegation works correctly
-    //
-    // If this fails, even the simplest `.img` files would break.
+    // Non-compressed files fall back to `Uncompressed`, with size and `Read` delegation intact.
 
     let data = b"plain raw image data";
 
@@ -35,19 +28,9 @@ fn detects_uncompressed_image_and_reads_contents() {
 
 #[test]
 fn detects_xz_compressed_image_and_reports_uncompressed_size() {
-    // This test validates the entire XZ detection path:
-    //
-    // - verifies that XZ magic bytes are detected correctly
-    // - verifies that the decoder is constructed successfully
-    // - verifies that `liblzma::uncompressed_size()` is used properly
-    // - verifies that the internal rewind after probing works
-    // - verifies that reads return decompressed contents instead of raw bytes
-    //
-    // The rewind verification is especially important here:
-    // `OsImageCompression::new()` consumes bytes while probing magic,
-    // and `from_path()` probes again to determine uncompressed size.
-    // If either rewind is missing, reads would begin from the wrong offset
-    // or decompression could fail entirely.
+    // The XZ path end to end: magic detection, decoder construction, `liblzma::uncompressed_size()`,
+    // and the rewind after probing. `OsImageCompression::new()` and `from_path()` each consume bytes
+    // while probing, so a missing rewind would read from the wrong offset.
 
     let original = b"this is the uncompressed payload";
 
@@ -69,23 +52,9 @@ fn detects_xz_compressed_image_and_reports_uncompressed_size() {
 
 #[test]
 fn detects_zip_compressed_image_and_reads_first_entry_contents() {
-    // This test validates ZIP handling behavior:
-    //
-    // - verifies ZIP magic byte detection
-    // - verifies that `stream_zip_entries_throwing_caution_to_the_wind()`
-    //   successfully creates a streaming reader
-    // - verifies that reported size comes from the ZIP entry metadata
-    // - verifies that reads transparently decompress ZIP contents
-    //
-    // ZIP handling is structurally different from XZ:
-    // unlike XZ, the uncompressed size is not probed from the stream itself,
-    // but instead comes from ZIP metadata (`entry().uncompressed_size`).
-    //
-    // This test protects against:
-    // - broken ZIP magic matching
-    // - incorrect entry selection
-    // - metadata regressions
-    // - accidentally returning compressed bytes instead of decompressed data
+    // The ZIP path: magic detection, the streaming reader, and transparent decompression. Unlike XZ,
+    // the uncompressed size comes from the entry metadata (`entry().uncompressed_size`) rather than
+    // being probed from the stream.
 
     let original = b"zip payload contents";
 
@@ -119,20 +88,9 @@ fn detects_zip_compressed_image_and_reads_first_entry_contents() {
 
 #[test]
 fn rejects_empty_file_during_format_detection() {
-    // This test verifies behavior for completely empty inputs.
-    //
-    // `OsImageCompression::new()` always attempts to read 6 bytes
-    // for magic detection. An empty file therefore cannot possibly
-    // contain a valid header and must fail immediately.
-    //
-    // This protects against:
-    // - accidentally treating empty files as valid raw images
-    // - silent short-read bugs during magic probing
-    // - regressions where partial header reads become ignored
-    //
-    // The exact error kind is intentionally *not* asserted here,
-    // because different readers/platforms may surface slightly
-    // different IO errors (`UnexpectedEof` is the common case).
+    // `OsImageCompression::new()` always reads 6 bytes for magic detection, so an empty file cannot
+    // hold a valid header and must fail immediately rather than pass as a raw image.
+    // The error kind is not asserted: readers and platforms differ (`UnexpectedEof` is typical).
 
     let file = tempfile::NamedTempFile::new().unwrap();
 
@@ -142,21 +100,9 @@ fn rejects_empty_file_during_format_detection() {
 
 #[test]
 fn rejects_truncated_xz_header() {
-    // This test verifies behavior for files that *look* like XZ
-    // based on magic bytes, but do not contain a valid XZ stream.
-    //
-    // This is important because format detection is optimistic:
-    // once the magic matches, the code immediately constructs an
-    // XZ decoder.
-    //
-    // Without this test, a regression could accidentally:
-    // - accept corrupt/truncated compressed images
-    // - delay failures until much later during flashing
-    // - report incorrect image sizes
-    //
-    // The test intentionally provides:
-    // - a correct XZ magic header
-    // - but no valid XZ payload afterwards
+    // Detection is optimistic: once the magic matches, an XZ decoder is constructed immediately. A
+    // correct header with no valid payload must therefore fail here rather than during flashing,
+    // and must not be reported with a plausible size.
 
     // Valid XZ magic bytes followed by garbage/truncated payload.
     let fake_xz = [0xfd, b'7', b'z', b'X', b'Z', 0x00, 0x01, 0x02, 0x03];
@@ -165,8 +111,7 @@ fn rejects_truncated_xz_header() {
     file.write_all(&fake_xz).unwrap();
     file.flush().unwrap();
 
-    // Construction itself may succeed because decoding is lazy.
-    // The important part is that actual usage must fail.
+    // Construction may succeed because decoding is lazy; actual usage must fail.
     let result = OsImage::from_path(file.path(), ExtractGate::LocalFile);
 
     match result {
@@ -179,8 +124,7 @@ fn rejects_truncated_xz_header() {
             );
         }
         Err(_) => {
-            // Also acceptable:
-            // some decoder versions/platforms fail eagerly.
+            // Also acceptable: some decoders fail eagerly.
         }
     }
 }
@@ -188,18 +132,8 @@ fn rejects_truncated_xz_header() {
 #[tokio::test]
 #[cfg(feature = "piped_image")]
 async fn file_stream_uncompressed_image_reads_contents() {
-    // This test validates that `OsImage::from_piped()` behaves the same
-    // as `from_path()` for plain uncompressed images.
-    //
-    // This is important because the piped/streamed code path uses a
-    // completely different backing source (`FileStream`) while still
-    // relying on the exact same compression detection logic.
-    //
-    // The test protects against:
-    // - stream rewind bugs during magic probing
-    // - FileStream-specific read issues
-    // - accidental divergence between path and stream behavior
-    // - regressions in uncompressed fallback handling
+    // `from_piped()` must behave like `from_path()`: a different backing source (`FileStream`) with
+    // the same detection logic, so stream rewind and the uncompressed fallback are both exercised.
 
     let data = b"plain raw image data";
 
@@ -233,21 +167,8 @@ async fn file_stream_uncompressed_image_reads_contents() {
 #[tokio::test]
 #[cfg(feature = "piped_image")]
 async fn file_stream_xz_image_reports_uncompressed_size_and_reads_contents() {
-    // This test validates streamed XZ handling.
-    //
-    // XZ is particularly important here because detection requires:
-    // - reading magic bytes
-    // - rewinding the stream afterwards
-    // - performing decompression lazily during reads
-    //
-    // Stream-backed readers are historically more fragile than regular
-    // files because seek/replay semantics are often emulated.
-    //
-    // This protects against:
-    // - broken rewind support in FileStream
-    // - decoder initialization issues
-    // - partial/deferred decompression failures
-    // - mismatched streamed vs file-backed behavior
+    // Streamed XZ. Stream-backed readers emulate seek/replay, so the rewind after magic probing and
+    // the lazy decompression are the parts most likely to diverge from the file-backed path.
 
     let original = b"this is the uncompressed payload";
     let compressed = liblzma::encode_all(original.as_slice(), 6).unwrap();
@@ -282,16 +203,8 @@ async fn file_stream_xz_image_reports_uncompressed_size_and_reads_contents() {
 #[tokio::test]
 #[cfg(feature = "piped_image")]
 async fn file_stream_zip_image_reads_first_entry_contents() {
-    // This test validates ZIP handling over FileStream-backed input.
-    //
-    // ZIP streaming is especially valuable to test because ZIP readers
-    // often assume normal filesystem semantics internally.
-    //
-    // This protects against:
-    // - incompatibilities between ZIP streaming and FileStream
-    // - incorrect incremental reads
-    // - broken ZIP entry parsing over streamed input
-    // - regressions where only file-backed ZIPs work correctly
+    // Streamed ZIP. ZIP readers often assume filesystem semantics, so entry parsing and incremental
+    // reads over `FileStream` are what this covers.
 
     let original = b"zip payload contents";
 
@@ -333,10 +246,8 @@ async fn file_stream_zip_image_reads_first_entry_contents() {
 }
 
 // ---------------------------------------------------------------------------
-// Extracted-side integrity gates (`instruction.md` §8.1, test matrix §8.4)
-//
-// These drive the gate through the real decoder rather than the verifier's unit tests, so they
-// also prove the gate is wired into `Read` for every code path the front-ends use.
+// Extracted-side integrity gates (`instruction.md` §8.1, test matrix §8.4). Driven through the
+// real decoder, so they also prove the gate is wired into `Read` for every front-end path.
 // ---------------------------------------------------------------------------
 
 fn sha256_of(data: &[u8]) -> [u8; 32] {

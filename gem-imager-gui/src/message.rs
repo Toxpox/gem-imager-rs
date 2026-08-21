@@ -67,9 +67,7 @@ pub(crate) enum GemImagerMessage {
     FlashCancel,
     FlashFail(String),
 
-    // Reset to start from beginning.
     Restart,
-    // Retry flashing
     Retry,
 
     /// Open URL in browser
@@ -280,7 +278,6 @@ pub(crate) fn update(state: &mut GemImager, message: GemImagerMessage) -> Task<G
             });
 
             let tail_tasks = match state {
-                // If we are in ChooseBoard page, update the board list
                 GemImager::ChooseBoard(inner) => Task::batch([
                     inner.common.fetch_board_images(),
                     inner.refresh_board_list(),
@@ -303,14 +300,13 @@ pub(crate) fn update(state: &mut GemImager, message: GemImagerMessage) -> Task<G
                 _ => state.common().fetch_board_images(),
             };
 
-            // We want fetch board images to run after the config has been added
+            // Board images must be fetched after the config has been added.
             return db_task.chain(tail_tasks);
         }
         GemImagerMessage::ResolveRemoteSubitemItem { item, target } => {
             let db = state.common().db.clone();
             let tail = match &state {
                 GemImager::ChooseOs(inner) => Task::batch([
-                    // Fetch all children remote subitems.
                     inner.resolve_remote_sublists(inner.selected_board.id, Some(target)),
                     inner.refresh_image_list(),
                     state.refresh_image_icons(inner.selected_board.id),
@@ -350,8 +346,7 @@ pub(crate) fn update(state: &mut GemImager, message: GemImagerMessage) -> Task<G
             if let GemImager::ChooseDest(inner) = state
                 && x != inner.destinations
             {
-                // A card that was pulled, or a board that left DFU mode, must not stay selected
-                // behind an enabled NEXT button.
+                // A pulled card or a board that left DFU mode must not stay selected behind an enabled NEXT.
                 inner.selected_dest =
                     helpers::keep_selected_destination(inner.selected_dest.take(), &x);
                 // Once a real DFU target shows up the notice is not just stale, it is in the way:
@@ -397,8 +392,7 @@ pub(crate) fn update(state: &mut GemImager, message: GemImagerMessage) -> Task<G
                 inner.dfu_notice = true;
             }
         }
-        // Unlike its neighbours this does not panic on an unexpected screen: a dismissal can race
-        // a screen transition, and losing that race is not a bug worth aborting over.
+        // Unlike its neighbours this does not panic: a dismissal can race a screen transition.
         GemImagerMessage::DismissNotice => match state {
             GemImager::ChooseDest(inner) => inner.dfu_notice = false,
             GemImager::FlashingSuccess(inner) => inner.notice_dismissed = true,
@@ -550,7 +544,7 @@ pub(crate) fn update(state: &mut GemImager, message: GemImagerMessage) -> Task<G
                 OverlayData::Flashing(flashing_state) => flashing_state.progress_update(x),
                 _ => panic!("Unexpected message"),
             },
-            // Debug build can be slow.
+            // Debug builds can be slow enough to deliver progress after the screen moved on.
             _ => {}
         },
         GemImagerMessage::FlashStart | GemImagerMessage::Retry => {
@@ -666,8 +660,7 @@ pub(crate) fn update(state: &mut GemImager, message: GemImagerMessage) -> Task<G
 fn localized_flash_error(lang: gem_i18n::Lang, technical: &str) -> String {
     let lower = technical.to_ascii_lowercase();
 
-    // The staging image is written before the board is touched, so its failure has to read as a
-    // host-disk problem rather than as a flashing problem.
+    // Staging is written before the board is touched, so it reads as a host-disk problem.
     if lower.contains("staging") {
         return format!(
             "{}\n\n{}",
@@ -676,12 +669,9 @@ fn localized_flash_error(lang: gem_i18n::Lang, technical: &str) -> String {
         );
     }
 
-    // DFU failures are matched before the generic ones. "Permission denied" on a DFU device and on
-    // an SD card need different answers — a udev rule for the USB device versus for the block
-    // device — and the Windows driver case has no SD equivalent at all. Falling through to the
-    // shared wording would send the user to fix the wrong thing.
-    // Not every DFU failure names DFU: the alt-setting and boot-manifest errors are phrased in the
-    // protocol's own terms, and they are the two that most need their own answer.
+    // DFU failures are matched before the generic ones. "Permission denied" needs a udev rule for the
+    // USB device rather than the block device, and the Windows driver case has no SD equivalent. The
+    // alt-setting and boot-manifest errors never name DFU, and they are the two that most need it.
     let ambiguous_dfu =
         lower.contains("devices match") && lower.contains("choose one physical port");
     if ambiguous_dfu
@@ -694,8 +684,7 @@ fn localized_flash_error(lang: gem_i18n::Lang, technical: &str) -> String {
         || lower.contains("raw emmc")
     {
         let dfu_pair = if ambiguous_dfu {
-            // Two boards on one host: refusing to guess is the safe behaviour, and the message has
-            // to say that nothing was written.
+            // Two boards on one host: refusing to guess is safe, but the message must say nothing was written.
             Some((
                 gem_i18n::Msg::DfuAmbiguousTitle,
                 gem_i18n::Msg::DfuAmbiguousBody,
@@ -715,8 +704,7 @@ fn localized_flash_error(lang: gem_i18n::Lang, technical: &str) -> String {
             || lower.contains("disconnected before dfuidle")
             || lower.contains("final dfu detach")
         {
-            // All raw bytes have been handed to the board. Failure from the ZLP onwards is a
-            // finalization failure, not a reconnect timeout or a mid-stream transfer failure.
+            // All raw bytes are handed over, so failure from the ZLP on is a finalization failure.
             Some((
                 gem_i18n::Msg::DfuFinalizeFailedTitle,
                 gem_i18n::Msg::DfuFinalizeFailedBody,
@@ -744,16 +732,14 @@ fn localized_flash_error(lang: gem_i18n::Lang, technical: &str) -> String {
                 gem_i18n::Msg::DfuPermissionBody,
             ))
         } else if lower.contains("timed out") || lower.contains("disconnected before") {
-            // Checked before the alt-setting branch: the reconnect timeout also names an
-            // alt-setting ("timed out waiting for alt-setting `tispl.bin`"), but the board coming
-            // back late is a different problem from the board being in the wrong mode.
+            // Checked before the alt-setting branch: the reconnect timeout also names an alt-setting, but a
+            // board coming back late is a different problem from a board in the wrong mode.
             Some((
                 gem_i18n::Msg::DfuReconnectTimeoutTitle,
                 gem_i18n::Msg::DfuReconnectTimeoutBody,
             ))
         } else if lower.contains("alt-setting") {
-            // The board is attached but not in the mode this stage needs, so the switch position
-            // is the thing to check — not the cable, and not the driver.
+            // The board is attached but in the wrong mode, so the switches are the thing to check.
             Some((
                 gem_i18n::Msg::DfuSwitchToBootModeTitle,
                 gem_i18n::Msg::DfuSwitchToBootModeBody,
