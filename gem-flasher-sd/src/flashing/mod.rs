@@ -227,12 +227,14 @@ fn guard_target(path: &std::path::Path) -> Result<Option<u64>> {
     let dev = crate::devices(false).into_iter().find(|d| d.path == path);
 
     if dev.is_none() {
-        // Enumeration can legitimately miss a device (permissions, exotic transports). That is not
-        // evidence it is safe, but refusing would block real hardware, so the gap is only logged.
-        tracing::warn!(
-            "Destination {} is not in the drive list; capacity and system-disk checks skipped",
-            path.display()
-        );
+        // Enumeration missing the device is not evidence that writing to it is safe. The write path
+        // is about to hand the path to `Clear-Disk` on Windows and to a raw `O_DIRECT` handle
+        // elsewhere, so an unrecognised target skips both the system-disk and the capacity gate.
+        // The format path already refuses this case (`helpers::destination_size`); refusing here
+        // too keeps one policy across the crate.
+        return Err(crate::Error::UnknownDestination {
+            path: path.display().to_string().into_boxed_str(),
+        });
     }
 
     evaluate_target(dev.as_ref())

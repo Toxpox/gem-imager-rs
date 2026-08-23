@@ -784,6 +784,11 @@ fn localized_flash_error(lang: gem_i18n::Lang, technical: &str) -> String {
             gem_i18n::Msg::DestinationTooSmallTitle,
             gem_i18n::Msg::DestinationTooSmallBody,
         )
+    } else if lower.contains("not a recognised removable device") {
+        (
+            gem_i18n::Msg::UnknownDestinationTitle,
+            gem_i18n::Msg::UnknownDestinationBody,
+        )
     } else if lower.contains("disconnected")
         || lower.contains("device removed")
         || lower.contains("no such device")
@@ -969,6 +974,30 @@ mod i18n_tests {
         assert!(tr.contains("karta dokunulmadı"));
         // The raw byte counts belong in the log, not on the finish screen.
         assert!(!en.contains("4352000000"));
+    }
+
+    /// A destination the drive list no longer knows about is now refused outright rather than
+    /// written to unchecked. That refusal has to arrive as its own "reconnect the card" advice,
+    /// not as the generic "check the logs" ending, which the user cannot act on.
+    #[test]
+    fn an_unrecognised_destination_asks_the_user_to_reconnect_the_card() {
+        let technical = "Refusing to write to \"/dev/sdb\": it is not a recognised removable \
+                         device. Reconnect the card and try again.";
+
+        let en = localized_flash_error(Lang::En, technical);
+        let tr = localized_flash_error(Lang::Tr, technical);
+
+        assert!(en.contains("Reconnect the card"), "{en}");
+        assert!(tr.contains("Kartı yeniden takın"), "{tr}");
+        assert!(!en.contains("Logs"), "{en}");
+        // It must not be confused with the system-disk refusal or the too-small card.
+        assert_ne!(
+            en,
+            localized_flash_error(
+                Lang::En,
+                "Refusing to write: it is reported as a system disk."
+            )
+        );
     }
 
     #[test]

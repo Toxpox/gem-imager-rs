@@ -216,7 +216,25 @@ mod target_guard {
     #[test]
     fn an_unknown_capacity_does_not_block_the_flash() {
         assert_eq!(evaluate_target(Some(&device(false, 0))).unwrap(), None);
-        assert_eq!(evaluate_target(None).unwrap(), None);
+    }
+
+    /// A path the drive list does not know about skips both gates above, so it is refused rather
+    /// than warned about. The format path (`helpers::destination_size`) has always behaved this
+    /// way; the write path used to fail open, which let an arbitrary `Destination::SdCard` reach
+    /// a raw handle (and `Clear-Disk` on Windows) unchecked.
+    #[test]
+    fn a_target_missing_from_the_drive_list_is_refused() {
+        let err = guard_target(std::path::Path::new(
+            "/dev/gem-nonexistent-target-for-tests",
+        ))
+        .expect_err("an unenumerated destination must not be accepted");
+
+        match err {
+            crate::Error::UnknownDestination { path } => {
+                assert!(path.contains("gem-nonexistent-target-for-tests"), "{path}");
+            }
+            other => panic!("expected UnknownDestination, got {other:?}"),
+        }
     }
 }
 
