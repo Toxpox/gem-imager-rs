@@ -67,7 +67,10 @@ build() {
 
 check() {
 	cd "$_pkgname"
-	make test-gui
+	# Same flags as build(): testing the default feature set would exercise the vendored
+	# sqlite/xz/TLS instead of the system ones that are actually packaged, and would hit the
+	# network for crates prepare() never fetched, which fails in a clean chroot.
+	make test-gui SYSTEM_DEPS=1 NOTIFY_RUST=0 OFFLINE=1
 }
 
 package() {

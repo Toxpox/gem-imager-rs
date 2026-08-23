@@ -60,7 +60,10 @@ build() {
 
 check() {
 	cd "$_pkgname"
-	make test-cli
+	# Same flags as build(): testing the default feature set would exercise the vendored
+	# xz/TLS instead of the system ones that are actually packaged, and would hit the network
+	# for crates prepare() never fetched, which fails in a clean chroot.
+	make test-cli SYSTEM_DEPS=1 OFFLINE=1
 }
 
 package() {
