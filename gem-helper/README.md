@@ -1,6 +1,6 @@
 # gem-helper
 
-Common helper utilities used across the BeagleBoard imaging tools.
+Common helper utilities used across the T3 Gemstone imaging tools.
 
 This crate is a small shared library that provides:
 

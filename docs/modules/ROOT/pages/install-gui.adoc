@@ -1,10 +1,10 @@
-= Install BeagleBoard Imaging Utility (GUI)
+= Install T3 Gemstone Imager (GUI)
 
 :base-download-url: https://github.com/Toxpox/gem-imager-rs/releases/download/{page-component-version}
 :gui-url-prefix: {base-download-url}/gem-imager-gui_{page-component-version}
-:macos-url-prefix: {base-download-url}/BeagleBoard.Imaging.Utility_{page-component-version}
+:macos-url-prefix: {base-download-url}/T3.Gemstone.Imager_{page-component-version}
 
-This page explains how to install the graphical version of the BeagleBoard Imaging Utility.  
+This page explains how to install the graphical version of the T3 Gemstone Imager.  
 Most users should choose one of the prebuilt options listed below.
 
 == Recommended Downloads
@@ -25,10 +25,14 @@ Choose the option that best matches your operating system.
 | Drag-and-drop install into the Applications folder.
 | {macos-url-prefix}_aarch64.dmg[aarch64], {macos-url-prefix}_x64.dmg[x86_64]
 
-.3+| Linux
+.4+| Linux
+| AUR
+| Arch Linux and derivatives. Builds from the `main` branch and installs the `udev` rule.
+| https://aur.archlinux.org/packages/gem-imager-gui-git[gem-imager-gui-git]
+
 | Flatpak
-| Recommended for most Linux users. Sandboxed, automatic updates.
-| https://flathub.org/en/apps/org.beagleboard.imagingutility[Flathub]
+| Build from source with `make package-gui-flatpak`. Not yet published on Flathub.
+| https://github.com/Toxpox/gem-imager-rs[Source]
 
 | Snap
 | Recommended for distros that do not support Flatpak. Sandboxed, automatic updates.
@@ -62,13 +66,13 @@ On Windows:
 * Some antivirus or endpoint security software may temporarily flag disk-writing tools.
 
 These prompts are expected and required for the imaging process. Always ensure you downloaded the
-installer from an official BeagleBoard source.
+installer from an official T3 Gemstone source.
 ====
 
 === macOS
 
 . Open the downloaded application or disk image.
-. Drag *BeagleBoard Imaging Utility* into the *Applications* folder.
+. Drag *T3 Gemstone Imager* into the *Applications* folder.
 . Launch it from *Applications* or Spotlight.
 
 [NOTE]
@@ -79,14 +83,14 @@ Granting this access is required to write images to SD cards.
 
 === Linux
 
-==== Flatpak (Recommended)
+==== Flatpak
 
-Flatpak provides a sandboxed installation and automatic updates via Flathub.
+The Flatpak build (app id `org.t3gemstone.imager`) is not published on Flathub yet, so it has to
+be built from a checkout of this repository:
 
 [source,shell]
 ----
-flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
-flatpak install flathub org.beagleboard.imagingutility
+make package-gui-flatpak
 ----
 
 ==== Snap
@@ -100,29 +104,12 @@ snap install gem-imager
 
 [NOTE]
 ====
-Out of the box, this installation only supports flashing SD cards. Steps to enable serial flashing
-are provided below. 
+The snap package supports flashing SD cards only.
 
-*I2C* (BeagleConnect Zepto) and *hidraw* (MSP430) based flashing is not supported due to limitations
-of snap format.
+USB (DFU) flashing to the board's onboard eMMC is *not* available from the snap: strict
+confinement gives the application no access to raw USB devices. Use the `.deb`, `.rpm` or
+AppImage build if you need to write to eMMC.
 ====
-
-===== Enable Serial Flashing (e.g. BeagleConnect Freedom)
-
-If you need to flash firmware to boards over a serial connection, you will need to enable 
-experimental hotplug support and connect the serial port interface. Run the following commands:
-
-[source,shell]
-----
-# Enable hotplug support
-snap set system experimental.hotplug=true
-
-# Restart the Snap daemon to apply changes
-systemctl restart snapd
-
-# Connect the serial port interface
-snap connect gem-imager:serial-port
-----
 
 ==== AppImage
 
@@ -134,22 +121,42 @@ chmod +x gem-imager-*.AppImage
 ./gem-imager-*.AppImage
 ----
 
-==== Enable Serial Flashing Support (Optional)
+==== AUR (Arch Linux)
 
-If you are using Linux and need to flash firmware to boards over a serial connection (such as the
-BeagleConnect Freedom), your system will require a custom `udev` rule to access the serial interface
-without root privileges. 
+On Arch Linux and its derivatives the package can be built from the AUR with any helper:
 
-This step is **not** required if you are only flashing SD cards or USB storage.
+[source,shell]
+----
+paru -S gem-imager-gui-git   # or: yay -S gem-imager-gui-git
+----
+
+The command line tool is packaged separately as `gem-imager-cli-git`.
+
+[NOTE]
+====
+These are `-git` packages: they build the current state of the `main` branch rather than a
+tagged release, so a rebuild is what upgrades them.
+
+The GUI package installs the `udev` rule needed for USB (DFU) flashing, so the manual step
+below can be skipped.
+====
+
+==== Enable USB (DFU) Flashing Support (Optional)
+
+If you are using Linux and need to write to the board's onboard eMMC over USB, your system will
+require a custom `udev` rule to access the DFU interface without root privileges.
+
+This step is **not** required if you are only flashing SD cards or USB storage. The `.deb`,
+`.rpm` and AUR packages install this rule for you.
 
 . Create a new `udev` rules file:
 +
 [source,shell]
 ----
-sudo nano /etc/udev/rules.d/99-beagleboard-imager.rules
+sudo nano /etc/udev/rules.d/10-t3gemstone.rules
 ----
 
-. Add the following lines to grant user-level access to serial devices:
+. Add the following lines to grant user-level access to the board in DFU mode:
 +
 [source,text]
 ----

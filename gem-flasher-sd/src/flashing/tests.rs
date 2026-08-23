@@ -216,7 +216,25 @@ mod target_guard {
     #[test]
     fn an_unknown_capacity_does_not_block_the_flash() {
         assert_eq!(evaluate_target(Some(&device(false, 0))).unwrap(), None);
-        assert_eq!(evaluate_target(None).unwrap(), None);
+    }
+
+    /// A path the drive list does not know about skips both gates above, so it is refused rather
+    /// than warned about. The format path (`helpers::destination_size`) has always behaved this
+    /// way; the write path used to fail open, which let an arbitrary `Destination::SdCard` reach
+    /// a raw handle (and `Clear-Disk` on Windows) unchecked.
+    #[test]
+    fn a_target_missing_from_the_drive_list_is_refused() {
+        let err = guard_target(std::path::Path::new(
+            "/dev/gem-nonexistent-target-for-tests",
+        ))
+        .expect_err("an unenumerated destination must not be accepted");
+
+        match err {
+            crate::Error::UnknownDestination { path } => {
+                assert!(path.contains("gem-nonexistent-target-for-tests"), "{path}");
+            }
+            other => panic!("expected UnknownDestination, got {other:?}"),
+        }
     }
 }
 
@@ -241,6 +259,113 @@ mod mock_card {
         let mut card = crate::helpers::SdCardWrapper::new(card);
         card.hide_layout(Some(capacity)).unwrap();
         card
+    }
+
+    /// The first 512 bytes of the card, i.e. the MBR the user's existing installation lives behind.
+    ///
+    /// Read through an independent handle cloned before the card is moved into the flasher: the
+    /// backing temp file is unlinked when `MockSd` drops, so a path-based read would race the
+    /// flash rather than observe it.
+    fn layout_block(f: &std::fs::File) -> Vec<u8> {
+        use std::io::Read;
+        let mut f = f.try_clone().unwrap();
+        f.rewind().unwrap();
+        let mut buf = vec![0u8; 512];
+        f.read_exact(&mut buf).unwrap();
+        buf
+    }
+
+    /// A flash that never gets past image resolution must leave the card exactly as it was.
+    ///
+    /// The destructive `hide_layout` used to run in `flash` before `flash_internal` had resolved
+    /// the image, so a download failure or an integrity-gate rejection destroyed the partition
+    /// table of a card the tool then refused to write. Asserting on the returned error alone does
+    /// not catch that, so this reads the MBR back off the card.
+    #[test]
+    fn a_failed_image_resolve_leaves_the_partition_table_intact() {
+        let card = MockSd::new();
+        let probe = card.as_file().try_clone().unwrap();
+        let before = layout_block(&probe);
+        assert_eq!(&before[510..512], &[0x55, 0xAA], "fixture has no MBR");
+
+        let err = flash_internal(
+            || -> std::io::Result<(Cursor<Box<[u8]>>, u64)> {
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "archive sha256 mismatch",
+                ))
+            },
+            crate::helpers::SdCardWrapper::new(card),
+            None,
+            None,
+            no_customizations(),
+            None,
+        )
+        .expect_err("a failing resolver must fail the flash");
+
+        assert!(matches!(err, crate::Error::IoError { .. }), "got {err:?}");
+        assert_eq!(
+            layout_block(&probe),
+            before,
+            "the card's partition table was destroyed by a flash that never wrote an image"
+        );
+    }
+
+    /// Same contract for the user pressing cancel: nothing irreversible before the first
+    /// cancellation point.
+    #[test]
+    fn a_cancelled_flash_leaves_the_partition_table_intact() {
+        let card = MockSd::new();
+        let probe = card.as_file().try_clone().unwrap();
+        let before = layout_block(&probe);
+
+        let image: Box<[u8]> = std::fs::read(card.path()).unwrap().into_boxed_slice();
+        let img_size = image.len() as u64;
+
+        let token = CancellationToken::default();
+        drop(token.drop_guard());
+
+        let err = flash_internal(
+            move || Ok((Cursor::new(image), img_size)),
+            crate::helpers::SdCardWrapper::new(card),
+            None,
+            None,
+            no_customizations(),
+            Some(token),
+        )
+        .expect_err("a pre-cancelled flash must abort");
+
+        assert!(matches!(err, crate::Error::Aborted), "got {err:?}");
+        assert_eq!(
+            layout_block(&probe),
+            before,
+            "the card's partition table was destroyed by a cancelled flash"
+        );
+    }
+
+    /// The capacity gate is also an abort-without-damage point.
+    #[test]
+    fn an_oversized_image_leaves_the_partition_table_intact() {
+        let card = MockSd::new();
+        let probe = card.as_file().try_clone().unwrap();
+        let before = layout_block(&probe);
+        let capacity = card.as_file().metadata().unwrap().len();
+
+        let err = flash_internal(
+            move || Ok((Cursor::new(Box::<[u8]>::from(vec![0u8; 16])), capacity * 2)),
+            crate::helpers::SdCardWrapper::new(card),
+            Some(capacity),
+            None,
+            no_customizations(),
+            None,
+        )
+        .expect_err("an image larger than the card must be refused");
+
+        assert!(
+            matches!(err, crate::Error::InsufficientCapacity { .. }),
+            "got {err:?}"
+        );
+        assert_eq!(layout_block(&probe), before);
     }
 
     fn boot_file(name: &str, data: &[u8]) -> std::iter::Once<Customization<Content>> {

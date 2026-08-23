@@ -1,7 +1,7 @@
 # Introduction
 
 This crate provides common abstractions over the different flashers to be used by applications
-such as BeagleBoard Imaging Utility. It also provides traits to add more flashers which behave
+such as T3 Gemstone Imager. It also provides traits to add more flashers which behave
 similiar to the pre-defined ones
 
 # Usage

@@ -227,12 +227,14 @@ fn guard_target(path: &std::path::Path) -> Result<Option<u64>> {
     let dev = crate::devices(false).into_iter().find(|d| d.path == path);
 
     if dev.is_none() {
-        // Enumeration can legitimately miss a device (permissions, exotic transports). That is not
-        // evidence it is safe, but refusing would block real hardware, so the gap is only logged.
-        tracing::warn!(
-            "Destination {} is not in the drive list; capacity and system-disk checks skipped",
-            path.display()
-        );
+        // Enumeration missing the device is not evidence that writing to it is safe. The write path
+        // is about to hand the path to `Clear-Disk` on Windows and to a raw `O_DIRECT` handle
+        // elsewhere, so an unrecognised target skips both the system-disk and the capacity gate.
+        // The format path already refuses this case (`helpers::destination_size`); refusing here
+        // too keeps one policy across the crate.
+        return Err(crate::Error::UnknownDestination {
+            path: path.display().to_string().into_boxed_str(),
+        });
     }
 
     evaluate_target(dev.as_ref())
@@ -305,9 +307,7 @@ where
         crate::Destination::SdCard(path) => {
             let capacity = guard_target(&path)?;
             let sd = crate::pal::open(&path)?;
-            let mut sd = crate::helpers::SdCardWrapper::new(sd);
-            sd.hide_layout(capacity)
-                .map_err(|source| crate::Error::SyncFailed { source })?;
+            let sd = crate::helpers::SdCardWrapper::new(sd);
             flash_internal(img, sd, capacity, chan, customizations, cancel)
         }
     }
@@ -342,6 +342,12 @@ where
     let chan = chan.as_ref();
     chan_send(chan, Status::Preparing);
     check_cancel(cancel.as_ref())?;
+
+    // Everything above this line can still fail without touching the destination: image resolution
+    // (which is where a download and its integrity gates run), the capacity check, and the first
+    // cancellation point. Wiping the existing partition table is irreversible, so it happens only
+    // once the flash is actually committed to writing.
+    sd.hide_existing_layout(capacity)?;
 
     tracing::info!("Writing to SD Card");
     let outcome = write_sd(img, img_size, &mut sd, chan, cancel.clone())?;

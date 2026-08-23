@@ -60,7 +60,7 @@ pub enum Commands {
 
 #[derive(Subcommand, Debug)]
 pub enum TargetCommands {
-    /// Flash an SD card with customizable settings for BeagleBoard devices.
+    /// Flash an SD card with customizable settings for T3 Gemstone devices.
     Sd {
         /// Local path to image file. Can be compressed (xz) or extracted file
         img: Box<Path>,
@@ -69,7 +69,7 @@ pub enum TargetCommands {
         dst: PathBuf,
 
         #[arg(long)]
-        /// Set a custom hostname for the device (e.g., "beaglebone").
+        /// Set a custom hostname for the device (e.g., "gemstone").
         hostname: Option<Box<str>>,
 
         #[arg(long)]
@@ -202,6 +202,27 @@ mod tests {
             },
             other => panic!("expected Flash, got {other:?}"),
         }
+    }
+
+    /// `--help` is the CLI's public identity. Descriptions and value hints live in doc comments,
+    /// so upstream's product name and example hostnames survived the rebrand here long after the
+    /// packaging surfaces were fixed, and no test looked at rendered help text.
+    #[test]
+    fn no_help_text_advertises_the_upstream_product() {
+        fn assert_clean(cmd: &clap::Command) {
+            let rendered = cmd.clone().render_long_help().to_string();
+            assert!(
+                !rendered.to_lowercase().contains("beagle"),
+                "`{}` help still refers to the upstream product:\n{rendered}",
+                cmd.get_name()
+            );
+
+            for sub in cmd.get_subcommands() {
+                assert_clean(sub);
+            }
+        }
+
+        assert_clean(&Opt::command());
     }
 
     #[test]

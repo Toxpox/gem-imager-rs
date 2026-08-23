@@ -235,6 +235,11 @@ catalog! {
         en: "The destination disappeared while writing. The card is now in an unknown state — write it again from the beginning before using it.",
         tr: "Hedef, yazma sırasında kayboldu. Kart artık bilinmeyen bir durumda — kullanmadan önce baştan yeniden yazın."
     },
+    UnknownDestinationTitle { en: "This card is no longer recognised", tr: "Bu kart artık tanınmıyor" },
+    UnknownDestinationBody {
+        en: "The selected destination is no longer among the detected removable devices, so it cannot be checked before writing. Reconnect the card, let it appear in the list again, and retry.",
+        tr: "Seçilen hedef, algılanan çıkarılabilir aygıtlar arasında değil; bu yüzden yazmadan önce denetlenemiyor. Kartı yeniden takın, listede tekrar görünmesini bekleyin ve yeniden deneyin."
+    },
 
     // ---- Catalog freshness (`instruction.md` §11.2) -------------------------------------
     CatalogOfflineTitle { en: "Showing a saved image list", tr: "Kayıtlı imaj listesi gösteriliyor" },

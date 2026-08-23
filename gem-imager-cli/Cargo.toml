@@ -1,6 +1,6 @@
 [package]
 name = "gem-imager-cli"
-description = "A streamlined tool for creating, flashing, and managing OS images for BeagleBoard devices."
+description = "A streamlined tool for creating, flashing, and managing OS images for T3 Gemstone devices."
 version.workspace = true
 authors.workspace = true
 edition.workspace = true

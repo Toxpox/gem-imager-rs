@@ -1,0 +1,7 @@
+# makepkg builds in place, leaving a bare mirror, a working clone, an extracted src/ and a
+# staged pkg/ next to the PKGBUILD. Only the PKGBUILD and its generated .SRCINFO are authored.
+src/
+pkg/
+*.pkg.tar.zst
+gem-imager-cli/
+gem-imager-gui/

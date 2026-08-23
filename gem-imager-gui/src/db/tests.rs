@@ -1301,3 +1301,62 @@ fn an_untagged_board_reports_no_tags() {
         row.tags
     );
 }
+
+/// The copy button next to a board exists so the entry can be pasted back into a catalog. It
+/// serialized `db::Board`, which is the GUI's row type: it carries the SQLite rowid and omits the
+/// fields a catalog entry needs, so the clipboard payload could not round-trip.
+#[test]
+#[cfg_attr(
+    not(feature = "sd"),
+    ignore = "needs `sd`: fixture boards use Flasher::SdCard"
+)]
+fn copied_board_json_round_trips_as_a_catalog_entry() {
+    let device = gem_config::config::Device {
+        name: "Test Board".to_string(),
+        tags: std::collections::HashSet::from(["test-board".to_string()]),
+        icon: None,
+        description: "A board".to_string(),
+        flasher: gem_config::config::Flasher::SdCard,
+        emmc_dfu: false,
+        documentation: None,
+        instructions: None,
+        specification: vec![],
+        oshw: None,
+    };
+
+    let db = Db::new().expect("Failed to create DB");
+    db.init().expect("DB initialization should succeed");
+
+    let mut imager = gem_config::config::Imager::default();
+    imager.devices.push(device);
+    db.add_config(
+        Config {
+            imager,
+            os_list: vec![],
+        },
+        None,
+    )
+    .expect("add_config should succeed");
+
+    let board_id = db
+        .board_list("")
+        .expect("board list")
+        .iter()
+        .find(|b| b.name == "Test Board")
+        .expect("inserted board exists")
+        .id;
+    let board = db.board_by_id(board_id).expect("board by id");
+
+    // Exactly what the copy button puts on the clipboard.
+    let entry = gem_config::config::Device::from(&board);
+    let json = serde_json::to_string_pretty(&entry).expect("board serializes");
+
+    let value: serde_json::Value = serde_json::from_str(&json).expect("valid json");
+    assert!(
+        value.get("id").is_none(),
+        "the SQLite rowid leaks into the clipboard and is meaningless outside this database:\n{json}"
+    );
+
+    serde_json::from_str::<gem_config::config::Device>(&json)
+        .expect("copied JSON should deserialize as a catalog device entry");
+}

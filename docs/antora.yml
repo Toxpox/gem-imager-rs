@@ -8,5 +8,5 @@ asciidoc:
   attributes:
     description: >
       Offers an easy-to-use GUI and a powerful CLI to download, configure, and 
-      safely flash OS images for BeagleBoard hardware, with cross-platform 
+      safely flash OS images for T3 Gemstone hardware, with cross-platform 
       support on Linux, Windows, and macOS.

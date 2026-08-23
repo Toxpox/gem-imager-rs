@@ -1,6 +1,6 @@
 //! Library to flash SD cards with OS images. Powers SD card flashing in [T3 Gemstone Imager].
 //!
-//! Also allows optional extra [Customization] for BeagleBoard images.
+//! Also allows optional extra [Customization] for images that declare an init format.
 //!
 //! # Platform Support
 //!
@@ -112,6 +112,16 @@ pub enum Error {
 
     #[error("Refusing to write to \"{name}\": it is reported as a system disk.")]
     SystemDisk { name: Box<str> },
+
+    /// The destination was not among the enumerated devices.
+    ///
+    /// Treated as a refusal rather than a warning: an unrecognised path bypasses both the
+    /// system-disk and the capacity gate, and the very next step opens it for raw writing.
+    #[error(
+        "Refusing to write to \"{path}\": it is not a recognised removable device. Reconnect the \
+         card and try again."
+    )]
+    UnknownDestination { path: Box<str> },
 
     /// Buffers could not be made durable. Never downgraded to a warning: an unsynced tail is
     /// indistinguishable from a successful flash until the board fails to boot.

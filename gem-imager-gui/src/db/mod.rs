@@ -72,6 +72,26 @@ pub(crate) struct Board {
     pub(crate) instructions: Option<String>,
 }
 
+impl From<&Board> for config::Device {
+    /// The copy button exists so a board can be pasted back into a catalog, which means the
+    /// payload has to be a catalog entry rather than this crate's row type. `Board` is a superset
+    /// apart from `id`, the SQLite rowid, which is meaningless outside this database.
+    fn from(value: &Board) -> Self {
+        Self {
+            name: value.name.clone(),
+            tags: value.tags.iter().cloned().collect(),
+            icon: value.icon.clone(),
+            description: value.description.clone(),
+            flasher: value.flasher,
+            emmc_dfu: value.emmc_dfu,
+            documentation: value.documentation.clone(),
+            instructions: value.instructions.clone(),
+            specification: value.specification.clone(),
+            oshw: value.oshw.clone(),
+        }
+    }
+}
+
 impl Board {
     fn from_row(value: &rusqlite::Row<'_>) -> rusqlite::Result<Self> {
         let spec: Vec<u8> = value.get("specification")?;

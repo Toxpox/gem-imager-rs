@@ -7,7 +7,7 @@ authors.workspace = true
 repository.workspace = true
 license.workspace = true
 readme = "README.md"
-keywords = ["flasher", "beagle", "sd-card"]
+keywords = ["flasher", "t3gemstone", "sd-card"]
 categories = ["development-tools", "embedded", "filesystem", "os"]
 
 [dependencies]

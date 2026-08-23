@@ -135,27 +135,34 @@ pub(crate) fn update(state: &mut GemImager, message: GemImagerMessage) -> Task<G
             );
         }
         GemImagerMessage::UpdateBoardList(boards) => {
-            // Update board list only if still on that page
+            // Update board list only if still on that page.
+            //
+            // These arrive from a `Task` that queries the database off-thread, so the user can
+            // have navigated away before the answer comes back. A late result is stale, not a
+            // programming error: drop it, exactly as `UpdateOsList` and `Destinations` already do.
             match state {
                 GemImager::ChooseBoard(x) => {
                     x.boards = boards;
                 }
-                GemImager::AppInfo(overlay_state) => match &mut overlay_state.page {
-                    OverlayData::ChooseBoard(x) => x.boards = boards,
-                    _ => panic!("Unexpected message"),
-                },
-                _ => panic!("Unexpected message"),
+                GemImager::AppInfo(overlay_state) => {
+                    if let OverlayData::ChooseBoard(x) = &mut overlay_state.page {
+                        x.boards = boards;
+                    }
+                }
+                _ => {}
             }
         }
         GemImagerMessage::SelectBoard(b) => match state {
             GemImager::ChooseBoard(inner) => {
                 inner.selected_board = Some(b);
             }
-            GemImager::AppInfo(overlay_state) => match &mut overlay_state.page {
-                OverlayData::ChooseBoard(inner) => inner.selected_board = Some(b),
-                _ => panic!("Unexpected message"),
-            },
-            _ => panic!("Unexpected message"),
+            GemImager::AppInfo(overlay_state) => {
+                if let OverlayData::ChooseBoard(inner) = &mut overlay_state.page {
+                    inner.selected_board = Some(b);
+                }
+            }
+            // Late result for a page the user already left.
+            _ => {}
         },
         GemImagerMessage::UpdateOsList((imgs, pos)) => {
             match state {
@@ -223,8 +230,8 @@ pub(crate) fn update(state: &mut GemImager, message: GemImagerMessage) -> Task<G
                     helpers::BoardImage::remote(image, flasher, inner.common.downloader.clone()),
                 ));
             }
-            GemImager::AppInfo(overlay_state) => match &mut overlay_state.page {
-                OverlayData::ChooseOs(inner) => {
+            GemImager::AppInfo(overlay_state) => {
+                if let OverlayData::ChooseOs(inner) = &mut overlay_state.page {
                     inner.selected_image = Some((
                         helpers::OsImageId::OsImage(image.id),
                         helpers::BoardImage::remote(
@@ -234,16 +241,17 @@ pub(crate) fn update(state: &mut GemImager, message: GemImagerMessage) -> Task<G
                         ),
                     ));
                 }
-                _ => panic!("Unexpected message"),
-            },
-            _ => panic!("Unexpected message"),
+            }
+            // Late `os_image_by_id` result for a page the user already left.
+            _ => {}
         },
-        GemImagerMessage::SelectLocalOs(image) => match state {
-            GemImager::ChooseOs(inner) => {
+        // The file dialog runs as its own task and the user can leave the page while it is open,
+        // so a pick that lands elsewhere is discarded rather than fatal.
+        GemImagerMessage::SelectLocalOs(image) => {
+            if let GemImager::ChooseOs(inner) = state {
                 inner.selected_image = Some((helpers::OsImageId::Local(image.flasher()), image))
             }
-            _ => panic!("Unexpected message"),
-        },
+        }
         GemImagerMessage::OpenUrl(x) => {
             return Task::future(async move {
                 let res = webbrowser::open(x.as_str());
@@ -784,6 +792,11 @@ fn localized_flash_error(lang: gem_i18n::Lang, technical: &str) -> String {
             gem_i18n::Msg::DestinationTooSmallTitle,
             gem_i18n::Msg::DestinationTooSmallBody,
         )
+    } else if lower.contains("not a recognised removable device") {
+        (
+            gem_i18n::Msg::UnknownDestinationTitle,
+            gem_i18n::Msg::UnknownDestinationBody,
+        )
     } else if lower.contains("disconnected")
         || lower.contains("device removed")
         || lower.contains("no such device")
@@ -969,6 +982,30 @@ mod i18n_tests {
         assert!(tr.contains("karta dokunulmadı"));
         // The raw byte counts belong in the log, not on the finish screen.
         assert!(!en.contains("4352000000"));
+    }
+
+    /// A destination the drive list no longer knows about is now refused outright rather than
+    /// written to unchecked. That refusal has to arrive as its own "reconnect the card" advice,
+    /// not as the generic "check the logs" ending, which the user cannot act on.
+    #[test]
+    fn an_unrecognised_destination_asks_the_user_to_reconnect_the_card() {
+        let technical = "Refusing to write to \"/dev/sdb\": it is not a recognised removable \
+                         device. Reconnect the card and try again.";
+
+        let en = localized_flash_error(Lang::En, technical);
+        let tr = localized_flash_error(Lang::Tr, technical);
+
+        assert!(en.contains("Reconnect the card"), "{en}");
+        assert!(tr.contains("Kartı yeniden takın"), "{tr}");
+        assert!(!en.contains("Logs"), "{en}");
+        // It must not be confused with the system-disk refusal or the too-small card.
+        assert_ne!(
+            en,
+            localized_flash_error(
+                Lang::En,
+                "Refusing to write: it is reported as a system disk."
+            )
+        );
     }
 
     #[test]

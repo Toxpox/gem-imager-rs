@@ -161,9 +161,9 @@ ifneq (${VERSION}, ${_CARGO_TOML_VERSION})
 endif
 
 _check_common:
-	$(_CARGO_CHECK) --all-targets --all-features --workspace \
+	$(_CARGO_CHECK) --all-targets --all-features --workspace ${_RUST_ARGS_BASE} \
 		--exclude gem-flasher --exclude gem-imager-gui --exclude gem-imager-cli
-	$(_CARGO_CHECK) --all-targets -p gem-flasher -F dfu,static,piped_image,sd
+	$(_CARGO_CHECK) --all-targets -p gem-flasher ${_RUST_ARGS_BASE} -F dfu,static,piped_image,sd
 
 _check_cli:
 	$(_CARGO_CHECK) --all-targets -p gem-imager-cli ${_RUST_ARGS_CLI}

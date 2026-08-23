@@ -459,7 +459,7 @@ fn linux_sd_card_common<'a>(
     col = match config.hostname.as_ref() {
         Some(hostname) => col.push(element_with_element(
             toggle.into(),
-            widget::text_input("beagle", hostname)
+            widget::text_input("gemstone", hostname)
                 .on_input(move |inp| {
                     GemImagerMessage::UpdateFlashConfig(wrap(
                         config.clone().update_hostname(Some(inp)),

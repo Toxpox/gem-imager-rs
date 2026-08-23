@@ -1,4 +1,4 @@
-= Packaging Instructions for BeagleBoard Imaging Utility
+= Packaging Instructions for T3 Gemstone Imager
 
 == Task system
 

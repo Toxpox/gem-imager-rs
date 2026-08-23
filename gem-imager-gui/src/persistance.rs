@@ -355,6 +355,10 @@ impl SdSysconfCustomization {
     }
 }
 
+/// Used when the host username is unavailable or itself unusable. Matches the placeholder shown
+/// in the hostname field so the suggested identity is consistent across the form.
+pub(crate) const DEFAULT_USERNAME: &str = "gemstone";
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct SdCustomizationUser {
     pub(crate) username: String,
@@ -382,14 +386,25 @@ impl SdCustomizationUser {
         self
     }
 
+    /// An empty name is as unusable as `root`: the account is written to the image but cannot be
+    /// logged in to. This is reachable without the user ever touching the field, because the
+    /// default falls back to whatever `whoami::username()` returns.
     pub(crate) fn validate_username(&self) -> bool {
-        self.username != "root"
+        !self.username.trim().is_empty() && self.username != "root"
     }
 }
 
 impl Default for SdCustomizationUser {
     fn default() -> Self {
-        Self::new(whoami::username().unwrap_or_default(), Secret::default())
+        // `whoami::username()` fails on a stripped container or an unmapped uid. Falling back to
+        // the empty string put a name the validator now rejects into the form, so prefer a usable
+        // placeholder over one the user has to notice and correct.
+        let username = whoami::username()
+            .ok()
+            .filter(|x| !x.trim().is_empty() && x != "root")
+            .unwrap_or_else(|| DEFAULT_USERNAME.to_string());
+
+        Self::new(username, Secret::default())
     }
 }
 
@@ -422,6 +437,27 @@ mod tests {
     fn sd_user_validate_rejects_root() {
         assert!(!SdCustomizationUser::new("root".into(), "pw").validate_username());
         assert!(SdCustomizationUser::new("beagle".into(), "pw").validate_username());
+    }
+
+    /// `whoami::username()` fails on a stripped container or an unmapped uid, and the fallback
+    /// was `unwrap_or_default()`. Since the only rule was "not root", the empty string passed
+    /// validation and got written to the image as a nameless account, which cannot be logged in
+    /// to. Refusing it keeps the NEXT button disabled until the user supplies a name.
+    #[test]
+    fn sd_user_validate_rejects_an_empty_username() {
+        assert!(!SdCustomizationUser::new(String::new(), "pw").validate_username());
+        assert!(!SdCustomizationUser::new("   ".into(), "pw").validate_username());
+    }
+
+    /// The default is what a user who never touches the field flashes, so it has to be a name the
+    /// validator accepts rather than whatever `whoami` happened to return.
+    #[test]
+    fn sd_user_default_username_is_valid() {
+        assert!(
+            SdCustomizationUser::default().validate_username(),
+            "default username {:?} would be written to the image as-is",
+            SdCustomizationUser::default().username
+        );
     }
 
     #[test]
