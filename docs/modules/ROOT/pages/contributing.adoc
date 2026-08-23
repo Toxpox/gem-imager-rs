@@ -116,7 +116,7 @@ To indicate agreement, add the following line to your commit message:
 
 [source,text]
 ----
-Signed-off-by: Ayush Singh <ayush@beagleboard.org>
+Signed-off-by: Toxpox <toxpox@outlook.com>
 ----
 
 Use a known identity—anonymous contributions are not accepted.

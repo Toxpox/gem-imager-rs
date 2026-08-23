@@ -1,4 +1,4 @@
-//! Helper utilities for the BeagleBoard imager.
+//! Helper utilities for the T3 Gemstone imager.
 //!
 //! This crate provides common functionality used across the imager components,
 //! including file streaming and resolvable image types.

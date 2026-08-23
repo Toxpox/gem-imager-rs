@@ -1,6 +1,6 @@
-= BeagleBoard Imaging Utility docs
+= T3 Gemstone Imager docs
 
-Documentation for BeagleBoard Imaging Utility.
+Documentation for T3 Gemstone Imager.
 
 == How to build docs
 

@@ -1,13 +1,13 @@
 [package]
 name = "gem-flasher"
-description = "Library providing flashing capabilities for BeagleBoard.org boards"
+description = "Library providing flashing capabilities for T3 Gemstone boards"
 version = "0.1.0"
 authors.workspace = true
 edition.workspace = true
 repository.workspace = true
 license.workspace = true
 readme = "README.md"
-keywords = ["beagle", "flasher"]
+keywords = ["t3gemstone", "flasher"]
 categories = ["development-tools", "embedded", "hardware-support"]
 
 [dependencies]

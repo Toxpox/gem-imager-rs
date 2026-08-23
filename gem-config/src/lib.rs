@@ -1,9 +1,10 @@
 //! # Introduction
 //!
-//! BeagleBoard.org maintains a json file with the list of all board images which can be used by
-//! applications (like BeagleBoard Imaging Utility) to get a list of latest images for each board.
+//! T3 Gemstone publishes a json catalog listing every board image, which the imager reads to get
+//! the latest images for each board. See [`t3`] for that schema and its strict validator.
 //!
-//! This crate provides abstractions to parse and generate distros.json file.
+//! [`config`] additionally parses the upstream BeagleBoard.org `distros.json` schema this project
+//! was derived from; [`t3::bridge`] adapts the T3 catalog onto it.
 
 pub mod config;
 pub mod t3;

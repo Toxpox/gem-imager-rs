@@ -2,8 +2,9 @@
 # If rules fail to reload automatically, you can refresh udev rules
 # with the command "udevadm control --reload"
 
-# BeagleConnect Freedom
-SUBSYSTEM=="tty", ATTRS{product}=="BeagleConnect", ATTRS{manufacturer}=="BeagleBoard.org", MODE="0660", TAG+="uaccess"
-
-# BeagleConnect Freedom MSP430
-SUBSYSTEM=="hidraw", ATTRS{idVendor}=="2047", ATTRS{idProduct}=="0200", MODE="0660", TAG+="uaccess"
+# T3-GEM-O1 in DFU / USB boot mode (TI AM62x ROM, 0451:6165).
+#
+# Without this, opening the DFU interface as a normal user fails with EACCES and the
+# application can only report "Permission denied for the board" (gem_i18n::Msg::DfuPermissionBody),
+# which points the user at exactly this file.
+SUBSYSTEM=="usb", ATTR{idVendor}=="0451", ATTR{idProduct}=="6165", MODE="0660", TAG+="uaccess"
