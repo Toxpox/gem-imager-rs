@@ -135,27 +135,34 @@ pub(crate) fn update(state: &mut GemImager, message: GemImagerMessage) -> Task<G
             );
         }
         GemImagerMessage::UpdateBoardList(boards) => {
-            // Update board list only if still on that page
+            // Update board list only if still on that page.
+            //
+            // These arrive from a `Task` that queries the database off-thread, so the user can
+            // have navigated away before the answer comes back. A late result is stale, not a
+            // programming error: drop it, exactly as `UpdateOsList` and `Destinations` already do.
             match state {
                 GemImager::ChooseBoard(x) => {
                     x.boards = boards;
                 }
-                GemImager::AppInfo(overlay_state) => match &mut overlay_state.page {
-                    OverlayData::ChooseBoard(x) => x.boards = boards,
-                    _ => panic!("Unexpected message"),
-                },
-                _ => panic!("Unexpected message"),
+                GemImager::AppInfo(overlay_state) => {
+                    if let OverlayData::ChooseBoard(x) = &mut overlay_state.page {
+                        x.boards = boards;
+                    }
+                }
+                _ => {}
             }
         }
         GemImagerMessage::SelectBoard(b) => match state {
             GemImager::ChooseBoard(inner) => {
                 inner.selected_board = Some(b);
             }
-            GemImager::AppInfo(overlay_state) => match &mut overlay_state.page {
-                OverlayData::ChooseBoard(inner) => inner.selected_board = Some(b),
-                _ => panic!("Unexpected message"),
-            },
-            _ => panic!("Unexpected message"),
+            GemImager::AppInfo(overlay_state) => {
+                if let OverlayData::ChooseBoard(inner) = &mut overlay_state.page {
+                    inner.selected_board = Some(b);
+                }
+            }
+            // Late result for a page the user already left.
+            _ => {}
         },
         GemImagerMessage::UpdateOsList((imgs, pos)) => {
             match state {
@@ -223,8 +230,8 @@ pub(crate) fn update(state: &mut GemImager, message: GemImagerMessage) -> Task<G
                     helpers::BoardImage::remote(image, flasher, inner.common.downloader.clone()),
                 ));
             }
-            GemImager::AppInfo(overlay_state) => match &mut overlay_state.page {
-                OverlayData::ChooseOs(inner) => {
+            GemImager::AppInfo(overlay_state) => {
+                if let OverlayData::ChooseOs(inner) = &mut overlay_state.page {
                     inner.selected_image = Some((
                         helpers::OsImageId::OsImage(image.id),
                         helpers::BoardImage::remote(
@@ -234,15 +241,17 @@ pub(crate) fn update(state: &mut GemImager, message: GemImagerMessage) -> Task<G
                         ),
                     ));
                 }
-                _ => panic!("Unexpected message"),
-            },
-            _ => panic!("Unexpected message"),
+            }
+            // Late `os_image_by_id` result for a page the user already left.
+            _ => {}
         },
         GemImagerMessage::SelectLocalOs(image) => match state {
             GemImager::ChooseOs(inner) => {
                 inner.selected_image = Some((helpers::OsImageId::Local(image.flasher()), image))
             }
-            _ => panic!("Unexpected message"),
+            // The file dialog runs as its own task and the user can leave the page while it is
+            // open, so a pick that lands elsewhere is discarded rather than fatal.
+            _ => {}
         },
         GemImagerMessage::OpenUrl(x) => {
             return Task::future(async move {
