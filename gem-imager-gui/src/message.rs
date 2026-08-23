@@ -245,14 +245,13 @@ pub(crate) fn update(state: &mut GemImager, message: GemImagerMessage) -> Task<G
             // Late `os_image_by_id` result for a page the user already left.
             _ => {}
         },
-        GemImagerMessage::SelectLocalOs(image) => match state {
-            GemImager::ChooseOs(inner) => {
+        // The file dialog runs as its own task and the user can leave the page while it is open,
+        // so a pick that lands elsewhere is discarded rather than fatal.
+        GemImagerMessage::SelectLocalOs(image) => {
+            if let GemImager::ChooseOs(inner) = state {
                 inner.selected_image = Some((helpers::OsImageId::Local(image.flasher()), image))
             }
-            // The file dialog runs as its own task and the user can leave the page while it is
-            // open, so a pick that lands elsewhere is discarded rather than fatal.
-            _ => {}
-        },
+        }
         GemImagerMessage::OpenUrl(x) => {
             return Task::future(async move {
                 let res = webbrowser::open(x.as_str());
