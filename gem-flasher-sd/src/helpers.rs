@@ -48,6 +48,15 @@ pub(crate) trait PublishLayout {
     fn publish_layout(&mut self) -> crate::Result<()> {
         Ok(())
     }
+
+    /// Destroy any pre-existing partition metadata on the destination.
+    ///
+    /// This is the first irreversible act of a flash, so it is exposed on the trait rather than
+    /// called at open time: the caller can then place it after every check that is still able to
+    /// abort without touching the user's card. Plain files have no layout to hide.
+    fn hide_existing_layout(&mut self, _capacity: Option<u64>) -> crate::Result<()> {
+        Ok(())
+    }
 }
 
 impl Commit for std::fs::File {
@@ -68,6 +77,10 @@ impl<T: Commit + ?Sized> Commit for &mut T {
 impl<T: PublishLayout + ?Sized> PublishLayout for &mut T {
     fn publish_layout(&mut self) -> crate::Result<()> {
         (**self).publish_layout()
+    }
+
+    fn hide_existing_layout(&mut self, capacity: Option<u64>) -> crate::Result<()> {
+        (**self).hide_existing_layout(capacity)
     }
 }
 
@@ -314,6 +327,10 @@ where
     fn publish_layout(&mut self) -> crate::Result<()> {
         self.f.publish_layout()
     }
+
+    fn hide_existing_layout(&mut self, capacity: Option<u64>) -> crate::Result<()> {
+        self.f.hide_existing_layout(capacity)
+    }
 }
 
 #[repr(align(4096))]
@@ -451,6 +468,11 @@ where
 
         self.pos = u64::try_from(BLOCK_SIZE).unwrap();
         Ok(())
+    }
+
+    fn hide_existing_layout(&mut self, capacity: Option<u64>) -> crate::Result<()> {
+        self.hide_layout(capacity)
+            .map_err(|source| crate::Error::SyncFailed { source })
     }
 }
 

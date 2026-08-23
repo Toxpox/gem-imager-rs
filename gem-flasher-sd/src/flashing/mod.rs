@@ -305,9 +305,7 @@ where
         crate::Destination::SdCard(path) => {
             let capacity = guard_target(&path)?;
             let sd = crate::pal::open(&path)?;
-            let mut sd = crate::helpers::SdCardWrapper::new(sd);
-            sd.hide_layout(capacity)
-                .map_err(|source| crate::Error::SyncFailed { source })?;
+            let sd = crate::helpers::SdCardWrapper::new(sd);
             flash_internal(img, sd, capacity, chan, customizations, cancel)
         }
     }
@@ -342,6 +340,12 @@ where
     let chan = chan.as_ref();
     chan_send(chan, Status::Preparing);
     check_cancel(cancel.as_ref())?;
+
+    // Everything above this line can still fail without touching the destination: image resolution
+    // (which is where a download and its integrity gates run), the capacity check, and the first
+    // cancellation point. Wiping the existing partition table is irreversible, so it happens only
+    // once the flash is actually committed to writing.
+    sd.hide_existing_layout(capacity)?;
 
     tracing::info!("Writing to SD Card");
     let outcome = write_sd(img, img_size, &mut sd, chan, cancel.clone())?;
