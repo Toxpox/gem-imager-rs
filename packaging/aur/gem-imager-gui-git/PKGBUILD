@@ -1,0 +1,83 @@
+# Maintainer: Toxpox <toxpox@outlook.com>
+# When handing this package over, move the line above to `# Contributor:` and put
+# the new maintainer on top; see packaging/aur/README.md for the AUR-side transfer.
+
+_pkgname=gem-imager-gui
+pkgname=$_pkgname-git
+pkgver=0.9.0.r1932.g6b7f688
+pkgrel=1
+pkgdesc="Graphical tool to write T3 Gemstone OS images to SD cards and onboard eMMC"
+arch=('x86_64' 'aarch64')
+url="https://github.com/Toxpox/gem-imager-rs"
+license=('MIT')
+# Directly linked (verified with `ldd`) plus the display libraries winit/wgpu dlopen at runtime,
+# which `ldd` cannot see and which are therefore easy to miss.
+depends=(
+	'xz' 'systemd-libs' 'libusb' 'sqlite' 'openssl' 'zlib-ng-compat' 'zstd' 'brotli'
+	'wayland' 'libxkbcommon' 'libxkbcommon-x11' 'libx11' 'libglvnd'
+)
+# wgpu prefers Vulkan and falls back to GL, so the loader is a real improvement but not required.
+optdepends=('vulkan-icd-loader: hardware accelerated rendering via Vulkan')
+makedepends=('git' 'git-lfs' 'rust' 'make' 'pkgconf' 'clang' 'desktop-file-utils')
+provides=("$_pkgname=$pkgver")
+conflicts=("$_pkgname")
+# aws-lc-sys builds C code whose symbols get dropped when makepkg's global `-flto` is applied
+# (CachyOS enables LTO by default), producing undefined `aws_lc_*` symbols at link time.
+options=('!lto')
+source=("$_pkgname::git+$url.git#branch=main")
+sha256sums=('SKIP')
+
+_target() {
+	case "$CARCH" in
+		x86_64) echo 'x86_64-unknown-linux-gnu' ;;
+		aarch64) echo 'aarch64-unknown-linux-gnu' ;;
+	esac
+}
+
+# `-git` packages derive the version from the checkout so pacman can order rebuilds; the
+# workspace version supplies the base and the commit count/hash makes each build newer.
+pkgver() {
+	cd "$_pkgname"
+	local ver
+	ver=$(sed -n '/^\[workspace.package\]/,/^\[/p' Cargo.toml | sed -n 's/^version = "\(.*\)"/\1/p' | head -1)
+	printf '%s.r%s.g%s' "$ver" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+}
+
+prepare() {
+	cd "$_pkgname"
+	# Icons and board photos are stored in Git LFS, and makepkg's git source only fetches the
+	# pointer files. Without this the build embeds text stubs and the GUI cannot decode them.
+	# The working clone has no LFS filters configured, so `lfs pull` would skip checkout
+	# entirely; `origin` is makepkg's local bare mirror and holds no LFS data either, so the
+	# objects have to come from the upstream endpoint.
+	git lfs install --local
+	git -c "lfs.url=$url.git/info/lfs" lfs pull origin
+	# `--locked` in the Makefile requires the lockfile to already describe every dependency,
+	# so fetch here where makepkg still allows network access.
+	cargo fetch --locked --manifest-path gem-imager-gui/Cargo.toml --target "$(_target)"
+}
+
+build() {
+	cd "$_pkgname"
+	# SYSTEM_DEPS=1 swaps the vendored copies of sqlite/xz/TLS for the distro ones, which is
+	# what a repository package must do so security updates arrive through pacman.
+	# NOTIFY_RUST=0 keeps notifications on the XDG portal instead of a second dbus stack.
+	make build-gui TARGET="$(_target)" SYSTEM_DEPS=1 NOTIFY_RUST=0 OFFLINE=1
+}
+
+check() {
+	cd "$_pkgname"
+	make test-gui
+}
+
+package() {
+	cd "$_pkgname"
+	# Packaged rules belong under /usr/lib; /etc/udev/rules.d is reserved for local overrides,
+	# and writing there from a package would silently shadow the admin's own files.
+	make install-gui \
+		DESTDIR="$pkgdir" \
+		PREFIX=/usr \
+		TARGET="$(_target)" \
+		UDEV_RULESDIR=/usr/lib/udev/rules.d
+	install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

@@ -25,7 +25,11 @@ Choose the option that best matches your operating system.
 | Drag-and-drop install into the Applications folder.
 | {macos-url-prefix}_aarch64.dmg[aarch64], {macos-url-prefix}_x64.dmg[x86_64]
 
-.3+| Linux
+.4+| Linux
+| AUR
+| Arch Linux and derivatives. Builds from the `main` branch and installs the `udev` rule.
+| https://aur.archlinux.org/packages/gem-imager-gui-git[gem-imager-gui-git]
+
 | Flatpak
 | Build from source with `make package-gui-flatpak`. Not yet published on Flathub.
 | https://github.com/Toxpox/gem-imager-rs[Source]
@@ -117,13 +121,33 @@ chmod +x gem-imager-*.AppImage
 ./gem-imager-*.AppImage
 ----
 
+==== AUR (Arch Linux)
+
+On Arch Linux and its derivatives the package can be built from the AUR with any helper:
+
+[source,shell]
+----
+paru -S gem-imager-gui-git   # or: yay -S gem-imager-gui-git
+----
+
+The command line tool is packaged separately as `gem-imager-cli-git`.
+
+[NOTE]
+====
+These are `-git` packages: they build the current state of the `main` branch rather than a
+tagged release, so a rebuild is what upgrades them.
+
+The GUI package installs the `udev` rule needed for USB (DFU) flashing, so the manual step
+below can be skipped.
+====
+
 ==== Enable USB (DFU) Flashing Support (Optional)
 
 If you are using Linux and need to write to the board's onboard eMMC over USB, your system will
 require a custom `udev` rule to access the DFU interface without root privileges.
 
-This step is **not** required if you are only flashing SD cards or USB storage. The `.deb` and
-`.rpm` packages install this rule for you.
+This step is **not** required if you are only flashing SD cards or USB storage. The `.deb`,
+`.rpm` and AUR packages install this rule for you.
 
 . Create a new `udev` rules file:
 +

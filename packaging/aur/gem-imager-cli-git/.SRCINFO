@@ -1,0 +1,24 @@
+pkgbase = gem-imager-cli-git
+	pkgdesc = Command line tool to write T3 Gemstone OS images to SD cards and onboard eMMC
+	pkgver = 0.9.0.r1932.g6b7f688
+	pkgrel = 1
+	url = https://github.com/Toxpox/gem-imager-rs
+	arch = x86_64
+	arch = aarch64
+	license = MIT
+	makedepends = git
+	makedepends = git-lfs
+	makedepends = rust
+	makedepends = make
+	makedepends = pkgconf
+	makedepends = clang
+	depends = xz
+	depends = systemd-libs
+	depends = libusb
+	provides = gem-imager-cli=0.9.0.r1932.g6b7f688
+	conflicts = gem-imager-cli
+	options = !lto
+	source = gem-imager-cli::git+https://github.com/Toxpox/gem-imager-rs.git#branch=main
+	sha256sums = SKIP
+
+pkgname = gem-imager-cli-git

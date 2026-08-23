@@ -1,0 +1,70 @@
+# Maintainer: Toxpox <toxpox@outlook.com>
+# When handing this package over, move the line above to `# Contributor:` and put
+# the new maintainer on top; see packaging/aur/README.md for the AUR-side transfer.
+
+_pkgname=gem-imager-cli
+pkgname=$_pkgname-git
+pkgver=0.9.0.r1932.g6b7f688
+pkgrel=1
+pkgdesc="Command line tool to write T3 Gemstone OS images to SD cards and onboard eMMC"
+arch=('x86_64' 'aarch64')
+url="https://github.com/Toxpox/gem-imager-rs"
+license=('MIT')
+# liblzma/libudev/libusb are linked directly by the release binary; verified with `ldd`.
+depends=('xz' 'systemd-libs' 'libusb')
+makedepends=('git' 'git-lfs' 'rust' 'make' 'pkgconf' 'clang')
+provides=("$_pkgname=$pkgver")
+conflicts=("$_pkgname")
+# aws-lc-sys builds C code whose symbols get dropped when makepkg's global `-flto` is applied
+# (CachyOS enables LTO by default), producing undefined `aws_lc_*` symbols at link time.
+options=('!lto')
+source=("$_pkgname::git+$url.git#branch=main")
+sha256sums=('SKIP')
+
+_target() {
+	case "$CARCH" in
+		x86_64) echo 'x86_64-unknown-linux-gnu' ;;
+		aarch64) echo 'aarch64-unknown-linux-gnu' ;;
+	esac
+}
+
+# `-git` packages derive the version from the checkout so pacman can order rebuilds; the
+# workspace version supplies the base and the commit count/hash makes each build newer.
+pkgver() {
+	cd "$_pkgname"
+	local ver
+	ver=$(sed -n '/^\[workspace.package\]/,/^\[/p' Cargo.toml | sed -n 's/^version = "\(.*\)"/\1/p' | head -1)
+	printf '%s.r%s.g%s' "$ver" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+}
+
+prepare() {
+	cd "$_pkgname"
+	# Bundled binary assets are stored in Git LFS, and makepkg's git source only fetches the
+	# pointer files, so a build without this would embed text stubs instead.
+	# The working clone has no LFS filters configured, so `lfs pull` would skip checkout
+	# entirely; `origin` is makepkg's local bare mirror and holds no LFS data either, so the
+	# objects have to come from the upstream endpoint.
+	git lfs install --local
+	git -c "lfs.url=$url.git/info/lfs" lfs pull origin
+	# `--locked` in the Makefile requires the lockfile to already describe every dependency,
+	# so fetch here where makepkg still allows network access.
+	cargo fetch --locked --manifest-path gem-imager-cli/Cargo.toml --target "$(_target)"
+}
+
+build() {
+	cd "$_pkgname"
+	# SYSTEM_DEPS=1 swaps the vendored copies of xz/sqlite/TLS for the distro ones, which is
+	# what a repository package must do so security updates arrive through pacman.
+	make build-cli TARGET="$(_target)" SYSTEM_DEPS=1 OFFLINE=1
+}
+
+check() {
+	cd "$_pkgname"
+	make test-cli
+}
+
+package() {
+	cd "$_pkgname"
+	make install-cli DESTDIR="$pkgdir" PREFIX=/usr TARGET="$(_target)"
+	install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

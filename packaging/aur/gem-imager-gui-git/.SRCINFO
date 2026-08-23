@@ -1,0 +1,36 @@
+pkgbase = gem-imager-gui-git
+	pkgdesc = Graphical tool to write T3 Gemstone OS images to SD cards and onboard eMMC
+	pkgver = 0.9.0.r1932.g6b7f688
+	pkgrel = 1
+	url = https://github.com/Toxpox/gem-imager-rs
+	arch = x86_64
+	arch = aarch64
+	license = MIT
+	makedepends = git
+	makedepends = git-lfs
+	makedepends = rust
+	makedepends = make
+	makedepends = pkgconf
+	makedepends = clang
+	makedepends = desktop-file-utils
+	depends = xz
+	depends = systemd-libs
+	depends = libusb
+	depends = sqlite
+	depends = openssl
+	depends = zlib-ng-compat
+	depends = zstd
+	depends = brotli
+	depends = wayland
+	depends = libxkbcommon
+	depends = libxkbcommon-x11
+	depends = libx11
+	depends = libglvnd
+	optdepends = vulkan-icd-loader: hardware accelerated rendering via Vulkan
+	provides = gem-imager-gui=0.9.0.r1932.g6b7f688
+	conflicts = gem-imager-gui
+	options = !lto
+	source = gem-imager-gui::git+https://github.com/Toxpox/gem-imager-rs.git#branch=main
+	sha256sums = SKIP
+
+pkgname = gem-imager-gui-git
