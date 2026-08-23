@@ -17,7 +17,9 @@ fn packages() -> Vec<(String, String, String)> {
     let mut found: Vec<_> = std::fs::read_dir(aur_dir())
         .expect("packaging/aur exists")
         .map(|e| e.expect("readable entry").path())
-        .filter(|p| p.is_dir())
+        // makepkg leaves src/, pkg/ and working clones next to the authored packages (see
+        // packaging/aur/.gitignore), so a dir only counts as a package if it has a PKGBUILD.
+        .filter(|p| p.is_dir() && p.join("PKGBUILD").is_file())
         .map(|dir| {
             let name = dir
                 .file_name()

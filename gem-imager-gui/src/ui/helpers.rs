@@ -268,7 +268,7 @@ pub(crate) fn board_view_pane<'a>(
     // Copy a catalog entry, not the row this screen was rendered from.
     let entry = gem_config::config::Device::from(dev);
     let copy_btn = copy_btn(COPY_ICON.clone()).on_press_with(move || {
-        let json = serde_json::to_string_pretty(&entry).expect("Invalid image");
+        let json = serde_json::to_string_pretty(&entry).expect("device catalog entry serialises");
         GemImagerMessage::CopyToClipboard(json)
     });
 
