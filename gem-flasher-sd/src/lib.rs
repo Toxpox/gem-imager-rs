@@ -1,6 +1,6 @@
 //! Library to flash SD cards with OS images. Powers SD card flashing in [T3 Gemstone Imager].
 //!
-//! Also allows optional extra [Customization] for BeagleBoard images.
+//! Also allows optional extra [Customization] for images that declare an init format.
 //!
 //! # Platform Support
 //!
