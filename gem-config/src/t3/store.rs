@@ -126,14 +126,8 @@ impl HttpValidators {
 #[derive(Debug)]
 pub enum StoreError {
     Sqlite(rusqlite::Error),
-    FutureSchema {
-        found: u32,
-        supported: u32,
-    },
-    Corrupt {
-        table: &'static str,
-        reason: String,
-    },
+    FutureSchema { found: u32, supported: u32 },
+    Corrupt { table: &'static str, reason: String },
 }
 
 impl fmt::Display for StoreError {

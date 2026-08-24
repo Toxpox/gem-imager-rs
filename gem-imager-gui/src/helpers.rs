@@ -588,7 +588,6 @@ pub(crate) async fn flash(
                     Some(cancel_sync),
                 )?
                 .flash(Some(chan))
-
             })
             .await
             .unwrap_or_else(|join_error| {

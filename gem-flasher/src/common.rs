@@ -11,10 +11,7 @@ pub enum DownloadFlashingStatus {
     ResolvingBootArtifacts,
     ChecksummingImage(f32),
     Reconnecting,
-    BootStage {
-        stage: u8,
-        progress: f32,
-    },
+    BootStage { stage: u8, progress: f32 },
     RawWrite(f32),
     Finalizing,
 }

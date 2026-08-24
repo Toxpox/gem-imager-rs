@@ -5,9 +5,7 @@ pub struct Sha256([u8; Sha256::LEN]);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Sha256ParseError {
-    Length {
-        actual: usize,
-    },
+    Length { actual: usize },
     NotHex,
 }
 

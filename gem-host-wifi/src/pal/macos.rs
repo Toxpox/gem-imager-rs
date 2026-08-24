@@ -76,12 +76,10 @@ pub(crate) fn detect_current_wifi() -> Result<DetectedWifi, HostWifiError> {
 
         let ssid = match interface.ssid() {
             Some(ns) => DetectedSsid::Utf8(ns.to_string()),
-            None => {
-                match interface.ssidData() {
-                    Some(data) => DetectedSsid::from_bytes(&data.to_vec()),
-                    None => return Err(HostWifiError::NotConnected),
-                }
-            }
+            None => match interface.ssidData() {
+                Some(data) => DetectedSsid::from_bytes(&data.to_vec()),
+                None => return Err(HostWifiError::NotConnected),
+            },
         };
 
         let security = classify_security(interface.security());

@@ -14,15 +14,10 @@ pub enum DownloadError {
     InvalidUrl(String),
 
     #[error("refusing to fetch {url}: only https is allowed")]
-    InsecureUrl {
-        url: String,
-    },
+    InsecureUrl { url: String },
 
     #[error("{url} answered with HTTP {status}")]
-    HttpStatus {
-        url: String,
-        status: u16,
-    },
+    HttpStatus { url: String, status: u16 },
 
     #[error("{url}: {refusal}")]
     Redirect {
@@ -31,16 +26,10 @@ pub enum DownloadError {
     },
 
     #[error("transport failure for {url}: {source}")]
-    Transport {
-        url: String,
-        source: reqwest::Error,
-    },
+    Transport { url: String, source: reqwest::Error },
 
     #[error("{url} sent more than the {limit} byte cap allows")]
-    BodyTooLarge {
-        url: String,
-        limit: u64,
-    },
+    BodyTooLarge { url: String, limit: u64 },
 
     #[error("{url} delivered {actual} bytes but the catalog declares {expected}")]
     ArchiveSizeMismatch {
@@ -64,10 +53,7 @@ pub enum DownloadError {
     },
 
     #[error("{context}: {source}")]
-    Io {
-        context: String,
-        source: io::Error,
-    },
+    Io { context: String, source: io::Error },
 }
 
 impl DownloadError {

@@ -106,19 +106,17 @@ pub(crate) fn update(state: &mut GemImager, message: GemImagerMessage) -> Task<G
                 GemImagerMessage::SelectBoard,
             );
         }
-        GemImagerMessage::UpdateBoardList(boards) => {
-            match state {
-                GemImager::ChooseBoard(x) => {
+        GemImagerMessage::UpdateBoardList(boards) => match state {
+            GemImager::ChooseBoard(x) => {
+                x.boards = boards;
+            }
+            GemImager::AppInfo(overlay_state) => {
+                if let OverlayData::ChooseBoard(x) = &mut overlay_state.page {
                     x.boards = boards;
                 }
-                GemImager::AppInfo(overlay_state) => {
-                    if let OverlayData::ChooseBoard(x) = &mut overlay_state.page {
-                        x.boards = boards;
-                    }
-                }
-                _ => {}
             }
-        }
+            _ => {}
+        },
         GemImagerMessage::SelectBoard(b) => match state {
             GemImager::ChooseBoard(inner) => {
                 inner.selected_board = Some(b);

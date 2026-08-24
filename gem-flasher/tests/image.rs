@@ -1,6 +1,5 @@
 #![cfg(feature = "sd")]
 
-
 use std::io::Read;
 
 use gem_flasher::LocalImage;

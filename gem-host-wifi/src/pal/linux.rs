@@ -37,10 +37,7 @@ fn platform_err(operation: Operation) -> impl Fn(zbus::Error) -> HostWifiError {
         {
             HostWifiError::PermissionDenied { operation }
         }
-        _ => HostWifiError::PlatformApi {
-            operation,
-            code: 0,
-        },
+        _ => HostWifiError::PlatformApi { operation, code: 0 },
     }
 }
 

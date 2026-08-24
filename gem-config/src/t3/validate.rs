@@ -46,12 +46,8 @@ pub struct T3CatalogParse {
 #[derive(Debug)]
 pub enum T3CatalogError {
     Json(serde_json::Error),
-    NoBoards {
-        rejected: usize,
-    },
-    NoUsableImages {
-        rejected: usize,
-    },
+    NoBoards { rejected: usize },
+    NoUsableImages { rejected: usize },
 }
 
 impl fmt::Display for T3CatalogError {

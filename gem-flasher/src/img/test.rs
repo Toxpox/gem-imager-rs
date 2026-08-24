@@ -8,7 +8,6 @@ use zip::write::SimpleFileOptions;
 
 #[test]
 fn detects_uncompressed_image_and_reads_contents() {
-
     let data = b"plain raw image data";
 
     let mut file = NamedTempFile::new().unwrap();
@@ -27,7 +26,6 @@ fn detects_uncompressed_image_and_reads_contents() {
 
 #[test]
 fn detects_xz_compressed_image_and_reports_uncompressed_size() {
-
     let original = b"this is the uncompressed payload";
 
     let compressed = liblzma::encode_all(original.as_slice(), 6).unwrap();
@@ -48,7 +46,6 @@ fn detects_xz_compressed_image_and_reports_uncompressed_size() {
 
 #[test]
 fn detects_zip_compressed_image_and_reads_first_entry_contents() {
-
     let original = b"zip payload contents";
 
     let mut zip_data = Cursor::new(Vec::<u8>::new());
@@ -81,7 +78,6 @@ fn detects_zip_compressed_image_and_reads_first_entry_contents() {
 
 #[test]
 fn rejects_empty_file_during_format_detection() {
-
     let file = tempfile::NamedTempFile::new().unwrap();
 
     let res = OsImage::from_path(file.path(), ExtractGate::LocalFile);
@@ -90,7 +86,6 @@ fn rejects_empty_file_during_format_detection() {
 
 #[test]
 fn rejects_truncated_xz_header() {
-
     let fake_xz = [0xfd, b'7', b'z', b'X', b'Z', 0x00, 0x01, 0x02, 0x03];
 
     let mut file = tempfile::NamedTempFile::new().unwrap();
@@ -108,15 +103,13 @@ fn rejects_truncated_xz_header() {
                 "truncated XZ stream unexpectedly succeeded"
             );
         }
-        Err(_) => {
-        }
+        Err(_) => {}
     }
 }
 
 #[tokio::test]
 #[cfg(feature = "piped_image")]
 async fn file_stream_uncompressed_image_reads_contents() {
-
     let data = b"plain raw image data";
 
     let (mut writer, reader) = gem_helper::file_stream::file_stream().unwrap();
@@ -149,7 +142,6 @@ async fn file_stream_uncompressed_image_reads_contents() {
 #[tokio::test]
 #[cfg(feature = "piped_image")]
 async fn file_stream_xz_image_reports_uncompressed_size_and_reads_contents() {
-
     let original = b"this is the uncompressed payload";
     let compressed = liblzma::encode_all(original.as_slice(), 6).unwrap();
 
@@ -183,7 +175,6 @@ async fn file_stream_xz_image_reports_uncompressed_size_and_reads_contents() {
 #[tokio::test]
 #[cfg(feature = "piped_image")]
 async fn file_stream_zip_image_reads_first_entry_contents() {
-
     let original = b"zip payload contents";
 
     let mut zip_data = Cursor::new(Vec::<u8>::new());
@@ -222,7 +213,6 @@ async fn file_stream_zip_image_reads_first_entry_contents() {
     .await
     .unwrap()
 }
-
 
 fn sha256_of(data: &[u8]) -> [u8; 32] {
     use sha2::Digest as _;

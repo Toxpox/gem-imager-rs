@@ -5,7 +5,6 @@ use crate::constants::DEFAULT_CONFIG;
 use super::*;
 use gem_config::Config;
 
-
 #[test]
 fn init_loads_all_default_remote_configs() {
     let db = Db::new().expect("Failed to create DB");

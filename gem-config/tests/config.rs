@@ -1,6 +1,5 @@
 #![cfg(feature = "store")]
 
-
 use gem_config::config::{Config, Flasher, InitFormat, OsListItem};
 
 const OS_IMAGE_JSON: &str = r#"{
@@ -210,7 +209,6 @@ fn sqlite_invalid_discriminant_errors() {
         "an out-of-range discriminant must fail FromSql for InitFormat"
     );
 }
-
 
 #[test]
 fn the_extracted_digest_is_carried_when_the_catalog_publishes_it() {

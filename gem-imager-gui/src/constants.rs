@@ -59,7 +59,6 @@ pub(crate) const FONT_NORMAL_BYTES: &[u8] =
     include_bytes!("../assets/fonts/Nunito-Regular-subset.ttf");
 pub(crate) const FONT_BOLD_BYTES: &[u8] = include_bytes!("../assets/fonts/Nunito-Bold-subset.ttf");
 
-
 pub(crate) const GEMSTONE_ROSE: iced::Color = color!(0xd1, 0x5d, 0x7d);
 pub(crate) const GEMSTONE_NAVY: iced::Color = color!(0x18, 0x22, 0x4f);
 pub(crate) const GEMSTONE_NAVY_CARD: iced::Color = color!(0x23, 0x2e, 0x63);

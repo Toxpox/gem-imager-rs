@@ -1,6 +1,5 @@
 #![cfg(feature = "mock_sd")]
 
-
 use std::io::{Cursor, Read};
 
 use gem_flasher_sd::mock_sd::MockSd;

@@ -42,10 +42,7 @@ impl VerifiedBootManifest {
 pub enum BootManifestError {
     Malformed(String),
     MissingArtifact(String),
-    InvalidHash {
-        artifact: String,
-        reason: String,
-    },
+    InvalidHash { artifact: String, reason: String },
     ConflictingArtifact(String),
 }
 

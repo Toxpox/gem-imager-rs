@@ -7,14 +7,20 @@ pub enum DriverState {
     #[default]
     NoDevice,
     ReadyWinUsb,
-    ReadyExternal { service: String },
+    ReadyExternal {
+        service: String,
+    },
     NeedsInstall,
     DriverConflict {
         service: Option<String>,
         problem_code: u32,
     },
-    MultipleCandidates { count: usize },
-    ProbeFailed { win32_error: u32 },
+    MultipleCandidates {
+        count: usize,
+    },
+    ProbeFailed {
+        win32_error: u32,
+    },
     Unsupported,
 }
 

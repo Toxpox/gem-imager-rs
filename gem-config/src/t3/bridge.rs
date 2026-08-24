@@ -509,7 +509,6 @@ mod tests {
         );
     }
 
-
     const HASH_ARCHIVE: &str = "668a83c94264c17e9e549284b50ec1f9ec1c0a1d171ede3a92797a458eabc198";
     const HASH_EXTRACTED: &str = "33afbc809f8c39c4a7472c49e26f7c5ac507c5b1d97df05c42ec83e97e1f6e51";
 
