@@ -10,11 +10,11 @@ pkgdesc="Graphical tool to write T3 Gemstone OS images to SD cards and onboard e
 arch=('x86_64' 'aarch64')
 url="https://github.com/Toxpox/gem-imager-rs"
 license=('MIT')
-# Directly linked (verified with `ldd`) plus the display libraries winit/wgpu dlopen at runtime,
-# which `ldd` cannot see and which are therefore easy to miss.
+# Directly linked (verified with `ldd`) plus the display, cursor and input libraries winit/wgpu
+# dlopen at runtime, which `ldd` cannot see and which are therefore easy to miss.
 depends=(
-	'xz' 'systemd-libs' 'libusb' 'sqlite' 'openssl' 'zlib-ng-compat' 'zstd' 'brotli'
-	'wayland' 'libxkbcommon' 'libxkbcommon-x11' 'libx11' 'libglvnd'
+	'xz' 'systemd-libs' 'libusb' 'sqlite' 'openssl' 'zlib' 'zstd' 'brotli'
+	'wayland' 'libxkbcommon' 'libxkbcommon-x11' 'libx11' 'libxcursor' 'libxi' 'libglvnd'
 )
 # wgpu prefers Vulkan and falls back to GL, so the loader is a real improvement but not required.
 optdepends=('vulkan-icd-loader: hardware accelerated rendering via Vulkan')

@@ -18,13 +18,15 @@ pkgbase = gem-imager-gui-git
 	depends = libusb
 	depends = sqlite
 	depends = openssl
-	depends = zlib-ng-compat
+	depends = zlib
 	depends = zstd
 	depends = brotli
 	depends = wayland
 	depends = libxkbcommon
 	depends = libxkbcommon-x11
 	depends = libx11
+	depends = libxcursor
+	depends = libxi
 	depends = libglvnd
 	optdepends = vulkan-icd-loader: hardware accelerated rendering via Vulkan
 	provides = gem-imager-gui=0.9.0.r1932.g6b7f688

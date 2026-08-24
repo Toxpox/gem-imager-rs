@@ -162,3 +162,30 @@ fn every_pkgbuild_points_at_the_workspace_repository() {
         );
     }
 }
+
+/// Winit's X11 backend opens these after process start, so neither `ldd` nor ELF `NEEDED` catches
+/// their absence. The generic `zlib` dependency is equally deliberate: naming one replacement
+/// implementation forces pacman to remove the standard provider system-wide.
+#[test]
+fn gui_pkgbuild_declares_its_dlopened_x11_libraries_without_forcing_a_zlib_provider() {
+    let (_, pkgbuild, srcinfo) = packages()
+        .into_iter()
+        .find(|(name, _, _)| name == "gem-imager-gui-git")
+        .expect("GUI AUR package exists");
+
+    for dependency in ["libxcursor", "libxi", "zlib"] {
+        assert!(
+            pkgbuild.contains(&format!("'{dependency}'")),
+            "GUI PKGBUILD is missing runtime dependency {dependency}"
+        );
+        assert!(
+            srcinfo
+                .lines()
+                .any(|line| line.trim() == format!("depends = {dependency}")),
+            "GUI .SRCINFO is missing runtime dependency {dependency}"
+        );
+    }
+
+    assert!(!pkgbuild.contains("zlib-ng-compat"));
+    assert!(!srcinfo.contains("depends = zlib-ng-compat"));
+}
