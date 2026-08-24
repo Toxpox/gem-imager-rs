@@ -23,6 +23,8 @@ jobs:
       run: make setup-debian-deps
     - name: Select rust toolchain
       run: rustup toolchain install stable --profile minimal
+    - name: Add rustfmt
+      run: rustup component add rustfmt
     - name: Use caching
       uses: Swatinem/rust-cache@v2
     - name: Run checks

@@ -3,18 +3,12 @@ use std::io::{self, Write};
 use gem_helper::cancel::CancellationToken;
 use std::sync::mpsc;
 
-/// Best-effort progress report. A full or closed channel must never fail a flash.
 pub(crate) fn chan_send<T>(chan: Option<&mpsc::SyncSender<T>>, msg: T) {
     if let Some(c) = chan {
         let _ = c.try_send(msg);
     }
 }
 
-/// Fraction of `img_size` reached, clamped to `1.0`.
-///
-/// The last chunk read from the image is padded up to the 512-byte alignment the device wants, so
-/// `pos` can legitimately overshoot `img_size` by up to 511 bytes. Reporting `1.02` would make the
-/// GUI's ETA extrapolation produce a negative duration.
 pub(crate) fn progress(pos: u64, img_size: u64) -> f32 {
     if img_size == 0 {
         return 1.0;
@@ -33,27 +27,15 @@ pub(crate) fn check_cancel(tkn: Option<&CancellationToken>) -> crate::Result<()>
     }
 }
 
-/// Make every byte written so far durable on the physical device.
-///
-/// Split out of [`Eject`] because the read-back verification has to run *between* the write and the
-/// eject: reading back through our own dirty buffers would only prove the buffers agree with
-/// themselves. A failure here is a flashing failure, never a warning — an unwritten tail is exactly
-/// the case where the user pulls the card and gets a board that will not boot.
 pub(crate) trait Commit {
     fn commit(&mut self) -> io::Result<()>;
 }
 
-/// Publish a partition layout that was kept hidden during raw verification and customization.
 pub(crate) trait PublishLayout {
     fn publish_layout(&mut self) -> crate::Result<()> {
         Ok(())
     }
 
-    /// Destroy any pre-existing partition metadata on the destination.
-    ///
-    /// This is the first irreversible act of a flash, so it is exposed on the trait rather than
-    /// called at open time: the caller can then place it after every check that is still able to
-    /// abort without touching the user's card. Plain files have no layout to hide.
     fn hide_existing_layout(&mut self, _capacity: Option<u64>) -> crate::Result<()> {
         Ok(())
     }
@@ -94,7 +76,6 @@ impl Eject for std::fs::File {
     }
 }
 
-/// Resolve the destination capacity and reject a disk that the platform marks as a system disk.
 pub(crate) fn destination_size(path: &std::path::Path) -> crate::Result<u64> {
     let device = crate::devices(false)
         .into_iter()
@@ -124,7 +105,6 @@ pub(crate) fn destination_size(path: &std::path::Path) -> crate::Result<u64> {
     Ok(device.size)
 }
 
-/// Build a single FAT32 partition while its MBR remains hidden, then publish and verify it.
 pub(crate) fn format_device<D>(drive: D, disk_size: u64) -> crate::Result<()>
 where
     D: io::Read + io::Write + io::Seek + Eject + std::fmt::Debug,
@@ -203,7 +183,6 @@ where
 const BLOCK_SIZE: usize = 4096;
 
 #[derive(Debug)]
-/// Wrapper to perform aligned read/write operations.
 pub(crate) struct DeviceWrapper<F> {
     f: F,
     offset: u64,
@@ -212,17 +191,14 @@ pub(crate) struct DeviceWrapper<F> {
 }
 
 impl<F> DeviceWrapper<F> {
-    /// Start offset of current block
     const fn block_offset(&self) -> u64 {
         self.offset - self.cache_buf_offset() as u64
     }
 
-    /// Offset inside cache to start reading/writing
     const fn cache_buf_offset(&self) -> usize {
         (self.offset % BLOCK_SIZE as u64) as usize
     }
 
-    /// Number of bytes from `Self::cache_buf_offset` that can be used
     const fn cache_buf_hit_len(&self) -> usize {
         self.buf.len() - self.cache_buf_offset()
     }
@@ -241,7 +217,6 @@ where
         Ok(Self {
             f,
             offset: 0,
-            // Hack: makes reading from offset 0 work.
             cache_offset: 1,
             buf: Box::new(DirectIoBuffer::new()),
         })
@@ -355,12 +330,6 @@ impl<const N: usize> DirectIoBuffer<N> {
     }
 }
 
-/// A wrapper to support writing the first block at the end. This is required on Windows to make
-/// things work reliably.
-///
-/// Once [`Self::finish`] has run, the deferred block is on the device and the cache is retired:
-/// every later read and write goes straight to `inner`. That is what makes the post-write read-back
-/// meaningful — otherwise the first block would be compared against the very buffer it came from.
 #[derive(Debug)]
 pub(crate) struct SdCardWrapper<W> {
     inner: W,
@@ -379,7 +348,6 @@ impl<W> SdCardWrapper<W> {
         }
     }
 
-    /// Whether the deferred first block is still only in memory.
     const fn is_cached(&self, pos: usize) -> bool {
         !self.finished && pos < self.buf.len()
     }
@@ -407,11 +375,6 @@ impl<W> SdCardWrapper<W>
 where
     W: io::Write + io::Seek + Commit,
 {
-    /// Remove both primary and backup partition metadata before any payload is written.
-    ///
-    /// The aligned zero block prevents an automounter from rediscovering an old MBR/GPT layout
-    /// while the replacement image is still incomplete. Clearing the end also retires a stale GPT
-    /// backup header left by the previous contents of a larger card.
     pub(crate) fn hide_layout(&mut self, capacity: Option<u64>) -> io::Result<()> {
         if capacity.is_some_and(|size| size < BLOCK_SIZE as u64) {
             return Err(io::Error::new(
@@ -544,11 +507,6 @@ where
     }
 }
 
-/// Read exactly `buf.len()` bytes, tolerating a short device only past `required`.
-///
-/// Direct IO wants aligned, block-multiple reads, so the tail of the read-back asks for more bytes
-/// than the image actually occupies. Hitting the end of a plain file there is fine; hitting it
-/// before `required` means the device gave back less than was written to it, which is a failure.
 pub(crate) fn read_at_least(
     mut src: impl io::Read,
     buf: &mut [u8],
@@ -657,9 +615,7 @@ mod tests {
         sd.inner.rewind().unwrap();
         sd.inner.read_to_end(&mut temp_buf).unwrap();
 
-        // Everything after the cached block should already be flushed
         assert_eq!(&test_data.get_ref()[BLOCK_SIZE..], &temp_buf[BLOCK_SIZE..]);
-        // First block should still only exist in cache
         assert_eq!(
             &test_data.get_ref()[..BLOCK_SIZE],
             &sd.buf.as_slice()[..BLOCK_SIZE]
@@ -668,12 +624,10 @@ mod tests {
 
         temp_buf.clear();
 
-        // Logical reads should still see full data
         sd.rewind().unwrap();
         sd.read_to_end(&mut temp_buf).unwrap();
         assert_eq!(temp_buf.as_slice(), test_data.get_ref().as_ref());
 
-        // A payload commit must not publish the partition table.
         Commit::commit(&mut sd).unwrap();
 
         temp_buf.clear();
@@ -681,7 +635,6 @@ mod tests {
         sd.inner.read_to_end(&mut temp_buf).unwrap();
         assert!(temp_buf[..BLOCK_SIZE].iter().all(|x| *x == 0));
 
-        // The explicit final publication writes, syncs and physically reads back the cached block.
         PublishLayout::publish_layout(&mut sd).unwrap();
 
         temp_buf.clear();

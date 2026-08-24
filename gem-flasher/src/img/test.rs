@@ -8,8 +8,6 @@ use zip::write::SimpleFileOptions;
 
 #[test]
 fn detects_uncompressed_image_and_reads_contents() {
-    // Non-compressed files fall back to `Uncompressed`, with size and `Read` delegation intact.
-
     let data = b"plain raw image data";
 
     let mut file = NamedTempFile::new().unwrap();
@@ -28,10 +26,6 @@ fn detects_uncompressed_image_and_reads_contents() {
 
 #[test]
 fn detects_xz_compressed_image_and_reports_uncompressed_size() {
-    // The XZ path end to end: magic detection, decoder construction, `liblzma::uncompressed_size()`,
-    // and the rewind after probing. `OsImageCompression::new()` and `from_path()` each consume bytes
-    // while probing, so a missing rewind would read from the wrong offset.
-
     let original = b"this is the uncompressed payload";
 
     let compressed = liblzma::encode_all(original.as_slice(), 6).unwrap();
@@ -52,10 +46,6 @@ fn detects_xz_compressed_image_and_reports_uncompressed_size() {
 
 #[test]
 fn detects_zip_compressed_image_and_reads_first_entry_contents() {
-    // The ZIP path: magic detection, the streaming reader, and transparent decompression. Unlike XZ,
-    // the uncompressed size comes from the entry metadata (`entry().uncompressed_size`) rather than
-    // being probed from the stream.
-
     let original = b"zip payload contents";
 
     let mut zip_data = Cursor::new(Vec::<u8>::new());
@@ -88,10 +78,6 @@ fn detects_zip_compressed_image_and_reads_first_entry_contents() {
 
 #[test]
 fn rejects_empty_file_during_format_detection() {
-    // `OsImageCompression::new()` always reads 6 bytes for magic detection, so an empty file cannot
-    // hold a valid header and must fail immediately rather than pass as a raw image.
-    // The error kind is not asserted: readers and platforms differ (`UnexpectedEof` is typical).
-
     let file = tempfile::NamedTempFile::new().unwrap();
 
     let res = OsImage::from_path(file.path(), ExtractGate::LocalFile);
@@ -100,18 +86,12 @@ fn rejects_empty_file_during_format_detection() {
 
 #[test]
 fn rejects_truncated_xz_header() {
-    // Detection is optimistic: once the magic matches, an XZ decoder is constructed immediately. A
-    // correct header with no valid payload must therefore fail here rather than during flashing,
-    // and must not be reported with a plausible size.
-
-    // Valid XZ magic bytes followed by garbage/truncated payload.
     let fake_xz = [0xfd, b'7', b'z', b'X', b'Z', 0x00, 0x01, 0x02, 0x03];
 
     let mut file = tempfile::NamedTempFile::new().unwrap();
     file.write_all(&fake_xz).unwrap();
     file.flush().unwrap();
 
-    // Construction may succeed because decoding is lazy; actual usage must fail.
     let result = OsImage::from_path(file.path(), ExtractGate::LocalFile);
 
     match result {
@@ -123,18 +103,13 @@ fn rejects_truncated_xz_header() {
                 "truncated XZ stream unexpectedly succeeded"
             );
         }
-        Err(_) => {
-            // Also acceptable: some decoders fail eagerly.
-        }
+        Err(_) => {}
     }
 }
 
 #[tokio::test]
 #[cfg(feature = "piped_image")]
 async fn file_stream_uncompressed_image_reads_contents() {
-    // `from_piped()` must behave like `from_path()`: a different backing source (`FileStream`) with
-    // the same detection logic, so stream rewind and the uncompressed fallback are both exercised.
-
     let data = b"plain raw image data";
 
     let (mut writer, reader) = gem_helper::file_stream::file_stream().unwrap();
@@ -167,9 +142,6 @@ async fn file_stream_uncompressed_image_reads_contents() {
 #[tokio::test]
 #[cfg(feature = "piped_image")]
 async fn file_stream_xz_image_reports_uncompressed_size_and_reads_contents() {
-    // Streamed XZ. Stream-backed readers emulate seek/replay, so the rewind after magic probing and
-    // the lazy decompression are the parts most likely to diverge from the file-backed path.
-
     let original = b"this is the uncompressed payload";
     let compressed = liblzma::encode_all(original.as_slice(), 6).unwrap();
 
@@ -203,9 +175,6 @@ async fn file_stream_xz_image_reports_uncompressed_size_and_reads_contents() {
 #[tokio::test]
 #[cfg(feature = "piped_image")]
 async fn file_stream_zip_image_reads_first_entry_contents() {
-    // Streamed ZIP. ZIP readers often assume filesystem semantics, so entry parsing and incremental
-    // reads over `FileStream` are what this covers.
-
     let original = b"zip payload contents";
 
     let mut zip_data = Cursor::new(Vec::<u8>::new());
@@ -245,11 +214,6 @@ async fn file_stream_zip_image_reads_first_entry_contents() {
     .unwrap()
 }
 
-// ---------------------------------------------------------------------------
-// Extracted-side integrity gates (`instruction.md` §8.1, test matrix §8.4). Driven through the
-// real decoder, so they also prove the gate is wired into `Read` for every front-end path.
-// ---------------------------------------------------------------------------
-
 fn sha256_of(data: &[u8]) -> [u8; 32] {
     use sha2::Digest as _;
     let mut hasher = sha2::Sha256::new();
@@ -281,8 +245,6 @@ fn a_declared_gate_passes_when_the_extracted_bytes_match() {
     assert_eq!(out, payload);
 }
 
-/// The archive can be exactly what the catalog published while the *extracted* digest is wrong —
-/// a rebuilt image republished under an unchanged entry, for instance. Only this gate catches it.
 #[test]
 fn a_declared_gate_fails_when_the_extracted_sha256_differs() {
     let payload = b"the payload the catalog published";
@@ -342,8 +304,6 @@ fn a_declared_gate_fails_when_the_extracted_stream_is_longer_than_declared() {
     );
 }
 
-/// A truncated archive must be an error, never a short-but-successful write. The decoder itself
-/// reports the truncation; the point of the test is that nothing downgrades it to a warning.
 #[test]
 fn a_truncated_xz_archive_fails_to_decode() {
     let payload = vec![0x5Au8; 256 * 1024];
@@ -358,8 +318,6 @@ fn a_truncated_xz_archive_fails_to_decode() {
         sha256_of(&payload),
     ));
 
-    // The truncation is caught while probing the xz footer, before a single byte is written.
-    // Either failure point is acceptable; silently writing a short image is not.
     let result = OsImage::from_path(file.path(), gate).and_then(|mut img| {
         let mut out = Vec::new();
         img.read_to_end(&mut out)?;
@@ -369,8 +327,6 @@ fn a_truncated_xz_archive_fails_to_decode() {
     assert!(result.is_err(), "a truncated xz stream must fail");
 }
 
-/// Trailing bytes after the xz stream are refused rather than silently ignored: an image whose
-/// tail nobody accounts for is an image nobody can vouch for.
 #[test]
 fn trailing_garbage_after_an_xz_stream_is_refused() {
     let payload = b"a well formed payload";
@@ -386,7 +342,6 @@ fn trailing_garbage_after_an_xz_stream_is_refused() {
         sha256_of(payload),
     ));
 
-    // Rejected while probing the xz footer, which the garbage displaced.
     let result = OsImage::from_path(file.path(), gate).and_then(|mut img| {
         let mut out = Vec::new();
         img.read_to_end(&mut out)?;

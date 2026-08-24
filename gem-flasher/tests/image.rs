@@ -1,9 +1,5 @@
 #![cfg(feature = "sd")]
 
-//! Integration tests for the public `LocalImage` type.
-//! `OsImage` compression detection is already covered by inline tests in
-//! src/img/test.rs, but `LocalImage` had no coverage.
-
 use std::io::Read;
 
 use gem_flasher::LocalImage;
@@ -22,7 +18,6 @@ fn local_image_accessors_and_display() {
     let img = LocalImage::new(path.clone().into_boxed_path());
     assert_eq!(img.path(), path.as_path());
     assert_eq!(img.file_name(), "myimage.img");
-    // Display renders the file name.
     assert_eq!(img.to_string(), "myimage.img");
 }
 

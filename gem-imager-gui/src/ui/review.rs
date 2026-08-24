@@ -91,8 +91,6 @@ fn review_view<'a>(state: &'a CustomizeState) -> Element<'a, GemImagerMessage> {
         .columns(2),
     ];
 
-    // DFU is the only flow that needs the hardware already in a particular state, and where pulling
-    // the cable leaves the board unbootable. That belongs on the screen before the irreversible action.
     if state.selected_dest.is_dfu() {
         col = col.extend([
             widget::rule::horizontal(2).into(),
@@ -132,7 +130,6 @@ fn review_view<'a>(state: &'a CustomizeState) -> Element<'a, GemImagerMessage> {
     detail_pane(col, &state.common.scroll_id)
 }
 
-/// One instruction: what to do, then why it matters.
 fn dfu_instruction<'a>(title: &'a str, body: &'a str) -> Element<'a, GemImagerMessage> {
     widget::column![
         text(title).font(constants::FONT_BOLD),

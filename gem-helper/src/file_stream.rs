@@ -1,7 +1,3 @@
-//! A data stream with sync Read and async Write halves. Has a backing file.
-//!
-//! This is designed to be used for large data streams that cannot live in memory.
-
 use std::{
     io,
     path::{Path, PathBuf},
@@ -15,14 +11,8 @@ use tokio::io::{AsyncSeekExt, AsyncWriteExt};
 
 type SharedState = Arc<(Mutex<bool>, Condvar)>;
 
-/// Distinguishes the scratch files of concurrent [`WriterFileStream::persist`] calls that target
-/// the same final path.
 static PERSIST_NONCE: AtomicU64 = AtomicU64::new(0);
 
-/// Removes a half-written scratch file unless it was published.
-///
-/// `instruction.md` §8.2 forbids a cancelled or partial download from being reachable under the
-/// final cache name; the scratch file must not survive as litter either.
 struct ScratchFile(Option<PathBuf>);
 
 impl ScratchFile {
@@ -36,7 +26,6 @@ impl ScratchFile {
             .expect("scratch path is taken only when publishing or dropping")
     }
 
-    /// Give up ownership after a successful rename, so the file is not deleted.
     fn published(mut self) {
         self.0 = None;
     }
@@ -50,10 +39,6 @@ impl Drop for ScratchFile {
     }
 }
 
-/// Asynchronous writer half of a file-backed stream.
-///
-/// Writes data asynchronously to a temporary file. The data can be persisted
-/// to a permanent location using [`persist`](Self::persist).
 pub struct WriterFileStream {
     file: tokio::fs::File,
     writing: SharedState,
@@ -64,13 +49,6 @@ impl WriterFileStream {
         Self { file, writing }
     }
 
-    /// Publishes the written data at `path`, atomically.
-    ///
-    /// The copy goes to a scratch file next to `path` — same directory, therefore same filesystem,
-    /// so the final step is a rename and never a partial copy. The scratch file is flushed and
-    /// `fsync`ed before the rename, so a crash cannot leave `path` naming a file whose contents
-    /// were still in the page cache. If anything fails, `path` keeps whatever it held before and
-    /// the scratch file is removed (`instruction.md` §8.2).
     pub async fn persist(&mut self, path: &Path) -> io::Result<()> {
         let parent = path.parent().ok_or_else(|| {
             io::Error::new(
@@ -98,10 +76,7 @@ impl WriterFileStream {
 
             tokio::io::copy(&mut self.file, &mut f).await?;
 
-            // Causes errors if not present
             f.flush().await?;
-            // Rename only publishes the directory entry; without this the bytes themselves are
-            // not guaranteed to have reached the device.
             f.sync_all().await?;
         }
 
@@ -149,10 +124,6 @@ impl Drop for WriterFileStream {
     }
 }
 
-/// Synchronous reader half of a file-backed stream.
-///
-/// Reads data from the same temporary file as the writer. While the writer
-/// is active, reading will block until data is available or the writer closes.
 pub struct ReaderFileStream {
     file: std::fs::File,
     writing: SharedState,
@@ -184,10 +155,6 @@ impl std::io::Read for ReaderFileStream {
     }
 }
 
-// ReaderFileStream is backed by a growing file, so seeking within the written region behaves
-// normally but seeking past it waits for the writer, and SeekFrom::End is unsupported until the
-// writer is dropped -- the final length is not known before that. Afterwards it matches normal
-// file semantics.
 impl std::io::Seek for ReaderFileStream {
     fn seek(&mut self, pos: io::SeekFrom) -> io::Result<u64> {
         loop {
@@ -202,7 +169,6 @@ impl std::io::Seek for ReaderFileStream {
             let target = match pos {
                 io::SeekFrom::Start(x) => x,
                 io::SeekFrom::End(_) => {
-                    // The final length is unknown while the writer is active, so End-relative offsets cannot be resolved.
                     return Err(io::Error::new(
                         io::ErrorKind::Unsupported,
                         "Seek from end is unsupported",
@@ -223,10 +189,6 @@ impl std::io::Seek for ReaderFileStream {
     }
 }
 
-/// Creates a new file-backed stream with separate reader and writer halves.
-///
-/// Returns a tuple of (writer, reader) that share a temporary file.
-/// The writer can write asynchronously, while the reader provides synchronous access.
 pub fn file_stream() -> io::Result<(WriterFileStream, ReaderFileStream)> {
     let file = tempfile::NamedTempFile::new()?;
     let flag = Arc::new((Mutex::new(true), Condvar::new()));

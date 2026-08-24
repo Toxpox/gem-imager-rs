@@ -174,7 +174,12 @@ _check_gui:
 	
 ## housekeeping: check: Run code quality checks.
 .PHONY: check
-check: check-cli check-gui
+check: check-fmt check-cli check-gui
+
+## housekeeping: check-fmt: Verify canonical rustfmt formatting.
+.PHONY: check-fmt
+check-fmt:
+	${CARGO_PATH} fmt --all -- --check
 
 ## housekeeping: check-cli: Run code quality checks on CLI.
 .PHONY: check-cli

@@ -2,13 +2,10 @@ use std::path::PathBuf;
 
 use clap::CommandFactory;
 
-// The CLI definition is pulled in directly rather than via the crate, so the generated man pages
-// and completions match the exact command tree this build produces, feature gates included.
 #[path = "src/cli.rs"]
 mod cli;
 
 fn main() {
-    // The generated artifacts only depend on the command definition.
     println!("cargo::rerun-if-changed=src/cli.rs");
 
     let out_dir = PathBuf::from(std::env::var_os("OUT_DIR").expect("OUT_DIR set by cargo"));

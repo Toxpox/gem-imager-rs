@@ -1,24 +1,5 @@
-//! A string that never reaches a log, a `Debug` dump, a snapshot or a crash report.
-//!
-//! `instruction.md` §10.3 requires secret types to be redacted in `Debug`. That is not a style
-//! preference: the GUI derives `Debug` on its state, `tracing` renders `Debug` for structured
-//! fields, and panics print `Debug` for every value in scope. A plain `String` password would leak
-//! through all three.
-//!
-//! This lives in `gem-helper` so every crate handling a user secret shares one redacting, zeroizing
-//! implementation instead of keeping its own plain `String`.
-
 use zeroize::{Zeroize, Zeroizing};
 
-/// A user-supplied secret (account password, Wi-Fi passphrase, VNC password).
-///
-/// `Debug` prints a fixed placeholder and the buffer is wiped on drop. Equality exists because the
-/// GUI diffs its customization state between frames; it is a plain byte comparison and is **not**
-/// suitable for authentication decisions.
-///
-/// The type deliberately implements neither `Serialize` nor `Display`, so a secret cannot reach a
-/// config file or a rendered string by accident. The only ways to read the plaintext are
-/// [`Secret::expose`] and [`Secret::as_input`].
 #[derive(Clone, Default, PartialEq, Eq)]
 pub struct Secret(String);
 
@@ -27,20 +8,10 @@ impl Secret {
         Self(value.into())
     }
 
-    /// Borrow the plaintext.
-    ///
-    /// Named `expose` rather than `as_str` so every call site reads as a deliberate, greppable
-    /// exposure. Use it only where the plaintext genuinely has to leave the type — a key-derivation
-    /// step or the single serialization boundary — never for a log, label, clipboard or error.
     pub fn expose(&self) -> &str {
         &self.0
     }
 
-    /// Borrow the plaintext for a masked text field.
-    ///
-    /// A text input has to be handed the value it is editing, so this one crack in the redaction is
-    /// unavoidable. Named for that single use: the value must go straight into a `secure(true)`
-    /// widget and nowhere else.
     pub fn as_input(&self) -> &str {
         &self.0
     }
@@ -49,8 +20,6 @@ impl Secret {
         self.0.is_empty()
     }
 
-    /// Length in bytes — lets the UI show the WPA 8..63 and VNC 8-byte limits without rendering the
-    /// value itself.
     pub fn len(&self) -> usize {
         self.0.len()
     }
@@ -86,21 +55,18 @@ impl Drop for Secret {
     }
 }
 
-/// A derived secret (crypt hash, PSK hex, VNC ciphertext) that is wiped when it goes out of scope.
 pub type DerivedSecret = Zeroizing<String>;
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    /// The snapshot test from `instruction.md` §10.5: no formatting path may render the plaintext.
     #[test]
     fn debug_output_never_contains_the_plaintext() {
         let s = Secret::new("hunter2-Ağ");
         assert_eq!(format!("{s:?}"), "Secret(<redacted>)");
         assert!(!format!("{s:#?}").contains("hunter2"));
 
-        // The realistic leak is a struct that derives Debug and happens to hold one.
         #[derive(Debug)]
         struct Holder {
             #[allow(dead_code)]

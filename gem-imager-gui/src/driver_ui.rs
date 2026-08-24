@@ -1,8 +1,3 @@
-//! UI state machine for the Windows DFU driver offer.
-//!
-//! It intentionally contains no PnP mutation. The GUI can only probe and launch the fixed helper;
-//! the elevated helper repeats the trust decision before it changes the machine.
-
 use std::time::Duration;
 
 use gem_winusb::{DriverState, InstallError, InstallOutcome};
@@ -34,12 +29,6 @@ impl DfuDriverUiState {
         &self.panel
     }
 
-    /// Whether any DFU device is on the bus at all, driver or no driver.
-    ///
-    /// `NeedsInstall` means the board *is* in DFU mode but Windows has no driver bound, so
-    /// enumeration returns nothing. Telling that user to flip the switches would be telling them
-    /// to redo what they already did — and `driver_prompt` is at the same moment offering the
-    /// actual fix.
     pub(crate) fn device_present(&self) -> bool {
         !matches!(self.last_probe, DriverState::NoDevice)
     }
@@ -130,8 +119,6 @@ pub(crate) fn subscription() -> Subscription<GemImagerMessage> {
         ticks.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
         iced::futures::stream::unfold(ticks, async move |mut ticks| {
-            // Tokio's first tick fires immediately, covering a board attached before startup; later ticks
-            // cover hotplug without trusting an event payload as an install target.
             ticks.tick().await;
             let state = blocking_future(gem_winusb::probe).await;
             Some((GemImagerMessage::DfuDriverProbe(state), ticks))
@@ -172,9 +159,6 @@ mod tests {
         assert_eq!(state.panel(), &DriverPanel::Hidden);
     }
 
-    /// `NoDevice` is the only probe result that means "nothing is plugged in". Every other one —
-    /// `NeedsInstall` most of all — describes a board that *is* on the bus, which is why the
-    /// "move the switches to DFU" notice must stay shut for all of them.
     #[test]
     fn device_present_is_false_only_for_no_device() {
         let present = [

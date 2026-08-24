@@ -86,7 +86,6 @@ pub enum InstallError {
 }
 
 impl InstallError {
-    /// Stable, non-secret process status used by the consoleless helper.
     pub const fn helper_exit_code(&self) -> i32 {
         match self {
             Self::NoDevice => HELPER_EXIT_NO_DEVICE,
@@ -150,8 +149,6 @@ impl std::fmt::Display for InstallError {
 
 impl std::error::Error for InstallError {}
 
-/// Ask Windows to launch the fixed helper with `runas`, wait without opening a console, and map
-/// its fixed exit protocol. No device ID, path, INF name or driver choice crosses this boundary.
 pub fn launch_elevated_helper(
     expected_helper_sha256: &str,
 ) -> Result<InstallOutcome, InstallError> {
@@ -167,8 +164,6 @@ pub fn launch_elevated_helper(
     let helper = helper
         .canonicalize()
         .map_err(|error| InstallError::Runtime(format!("canonicalize helper: {error}")))?;
-    // Keep a read-only sharing handle open across ShellExecuteEx. This closes the hash-to-exec
-    // replacement window while still allowing the Windows loader to read the executable.
     let helper_guard = verify_helper(&helper, expected_helper_sha256)?;
 
     let verb = wide("runas");
@@ -248,8 +243,6 @@ impl Drop for ProcessHandle {
     }
 }
 
-/// Elevated helper entry point. It is intentionally argument-free at the API level and repeats
-/// the exact SetupAPI policy before libwdi is loaded.
 pub fn install_t3_rom_dfu() -> Result<InstallOutcome, InstallError> {
     match probe() {
         DriverState::NeedsInstall => {}
@@ -276,7 +269,6 @@ pub fn install_t3_rom_dfu() -> Result<InstallOutcome, InstallError> {
     let cert = CString::new("CN=T3 Gemstone AM62x ROM DFU MVP").expect("static string");
     let fallback_description = CString::new("T3 Gemstone AM62x ROM DFU").expect("static string");
 
-    // The list record is copied so a fallback description can be set without `wdi_destroy_list` freeing Rust-owned memory.
     let mut device = unsafe { *selected };
     device.next = null_mut();
     if device.desc.is_null() {
@@ -350,8 +342,6 @@ pub fn install_t3_rom_dfu() -> Result<InstallOutcome, InstallError> {
     }
 }
 
-/// Exercise the same libusb open boundary used by the DFU flasher. SetupAPI reporting WinUSB is
-/// necessary but not sufficient: this catches an unusable backend before the GUI says “ready”.
 pub fn verify_dfu_transport() -> Result<(), String> {
     let context = rusb::Context::new().map_err(|error| error.to_string())?;
     let devices = context.devices().map_err(|error| error.to_string())?;
@@ -391,8 +381,6 @@ struct StagingDirectory(PathBuf);
 
 impl StagingDirectory {
     fn create() -> Result<Self, InstallError> {
-        // The Windows directory is ACL-protected. A cryptographically unpredictable direct child
-        // of its Temp directory avoids trusting a user-creatable ProgramData parent.
         let root = windows_directory()?.join("Temp");
         let mut random = [0_u8; 16];
         // SAFETY: `random` is a writable buffer and the system-preferred provider takes no handle.
@@ -424,8 +412,6 @@ impl StagingDirectory {
 
 impl Drop for StagingDirectory {
     fn drop(&mut self) {
-        // This guard owns the exact random directory it created. Driver Store staging is complete
-        // before libwdi returns, so its temporary INF/CAT/co-installer files are no longer needed.
         let _ = std::fs::remove_dir_all(&self.0);
     }
 }
@@ -629,8 +615,6 @@ struct LibWdi {
 
 impl LibWdi {
     fn load(path: &Path) -> Result<Self, InstallError> {
-        // This process is the dedicated helper, so tightening its process-wide DLL policy cannot
-        // disrupt GUI plugins or unrelated libraries.
         // SAFETY: the flags are the documented safe-search subset.
         if unsafe { SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_SYSTEM32) } == 0 {
             // SAFETY: this immediately follows the failing Win32 call on the same thread.

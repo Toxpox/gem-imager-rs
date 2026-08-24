@@ -1,5 +1,3 @@
-//! Global GUI Messages
-
 use iced::Task;
 
 use crate::{
@@ -10,25 +8,20 @@ use crate::{
 
 #[derive(Debug, Clone)]
 pub(crate) enum GemImagerMessage {
-    /// Messages to ignore
     Null,
 
-    /// Config related options
     ExtendConfig((i64, gem_config::Config)),
     ResolveRemoteSubitemItem {
         item: Vec<gem_config::config::OsListItem>,
         target: i64,
     },
 
-    /// A new version of application is available
     UpdateAvailable(semver::Version),
 
-    /// Select a board by index. Can only be used in Board selection page.
     UpdateBoardList(Vec<crate::db::BoardListItem>),
     SelectBoardById(i64),
     SelectBoard(crate::db::Board),
 
-    /// ChooseOs Page
     UpdateOsList((Vec<helpers::OsImageItem>, Option<i64>)),
     SelectOs(helpers::OsImageId),
     SelectLocalOs(helpers::BoardImage),
@@ -36,32 +29,23 @@ pub(crate) enum GemImagerMessage {
     GotoOsListParent,
     UpdateInitFormat(gem_config::config::InitFormat),
 
-    /// Choose Destination page
     SelectDest(helpers::Destination),
     SelectFileDest(String),
     DestinationFilter(bool),
-    /// Sent by the placeholder row that stands in for an absent DFU target.
     ShowDfuNotReadyNotice,
-    /// Closes whichever illustrated notice the current screen is showing.
     DismissNotice,
 
-    // Customization Page
     UpdateFlashConfig(crate::helpers::FlashingCustomization),
     ResetFlashingConfig,
-    /// Toggle the Wi-Fi block. On enable it also kicks off host-network detection.
     ToggleWifi(bool),
-    /// The host's current Wi-Fi network, detected off-thread, ready to pre-fill the form.
     WifiAutofill(crate::helpers::HostWifiPrefill),
 
-    // Review Page
     RequestFlash,
     CancelFlashRequest,
     FlashStart,
 
-    /// Change and persist the interface language.
     SetLanguage(gem_i18n::Lang),
 
-    // Flashing Page
     FlashProgress(gem_flasher::DownloadFlashingStatus),
     FlashSuccess,
     FlashCancel,
@@ -70,23 +54,16 @@ pub(crate) enum GemImagerMessage {
     Restart,
     Retry,
 
-    /// Open URL in browser
     OpenUrl(url::Url),
 
-    /// Next button pressed
     Next,
-    /// Back button pressed
     Back,
 
-    /// Add image to cache
     ResolveImage(url::Url, std::path::PathBuf),
-    // Download images which have not already been downloaded
     FilterResolveImages(Vec<url::Url>),
 
-    /// Update destinations
     Destinations(Vec<helpers::Destination>),
 
-    /// Read-only Windows PnP state and the one-click WinUSB helper flow.
     #[cfg(feature = "dfu-driver-mvp")]
     DfuDriverProbe(gem_winusb::DriverState),
     #[cfg(feature = "dfu-driver-mvp")]
@@ -100,19 +77,14 @@ pub(crate) enum GemImagerMessage {
     #[cfg(feature = "dfu-driver-mvp")]
     DfuDriverBackToOffer,
 
-    /// Read-only editor
     EditorEvent(iced::widget::text_editor::Action),
 
-    /// Show application information
     AppInfo,
 
-    /// Copy text to clipboard.
     CopyToClipboard(String),
 
-    /// DB Ops
     DbInitSuccess,
 
-    /// Search
     UpdateSearchText(String),
 }
 
@@ -134,24 +106,17 @@ pub(crate) fn update(state: &mut GemImager, message: GemImagerMessage) -> Task<G
                 GemImagerMessage::SelectBoard,
             );
         }
-        GemImagerMessage::UpdateBoardList(boards) => {
-            // Update board list only if still on that page.
-            //
-            // These arrive from a `Task` that queries the database off-thread, so the user can
-            // have navigated away before the answer comes back. A late result is stale, not a
-            // programming error: drop it, exactly as `UpdateOsList` and `Destinations` already do.
-            match state {
-                GemImager::ChooseBoard(x) => {
+        GemImagerMessage::UpdateBoardList(boards) => match state {
+            GemImager::ChooseBoard(x) => {
+                x.boards = boards;
+            }
+            GemImager::AppInfo(overlay_state) => {
+                if let OverlayData::ChooseBoard(x) = &mut overlay_state.page {
                     x.boards = boards;
                 }
-                GemImager::AppInfo(overlay_state) => {
-                    if let OverlayData::ChooseBoard(x) = &mut overlay_state.page {
-                        x.boards = boards;
-                    }
-                }
-                _ => {}
             }
-        }
+            _ => {}
+        },
         GemImagerMessage::SelectBoard(b) => match state {
             GemImager::ChooseBoard(inner) => {
                 inner.selected_board = Some(b);
@@ -161,7 +126,6 @@ pub(crate) fn update(state: &mut GemImager, message: GemImagerMessage) -> Task<G
                     inner.selected_board = Some(b);
                 }
             }
-            // Late result for a page the user already left.
             _ => {}
         },
         GemImagerMessage::UpdateOsList((imgs, pos)) => {
@@ -242,11 +206,8 @@ pub(crate) fn update(state: &mut GemImager, message: GemImagerMessage) -> Task<G
                     ));
                 }
             }
-            // Late `os_image_by_id` result for a page the user already left.
             _ => {}
         },
-        // The file dialog runs as its own task and the user can leave the page while it is open,
-        // so a pick that lands elsewhere is discarded rather than fatal.
         GemImagerMessage::SelectLocalOs(image) => {
             if let GemImager::ChooseOs(inner) = state {
                 inner.selected_image = Some((helpers::OsImageId::Local(image.flasher()), image))
@@ -308,7 +269,6 @@ pub(crate) fn update(state: &mut GemImager, message: GemImagerMessage) -> Task<G
                 _ => state.common().fetch_board_images(),
             };
 
-            // Board images must be fetched after the config has been added.
             return db_task.chain(tail_tasks);
         }
         GemImagerMessage::ResolveRemoteSubitemItem { item, target } => {
@@ -354,11 +314,8 @@ pub(crate) fn update(state: &mut GemImager, message: GemImagerMessage) -> Task<G
             if let GemImager::ChooseDest(inner) = state
                 && x != inner.destinations
             {
-                // A pulled card or a board that left DFU mode must not stay selected behind an enabled NEXT.
                 inner.selected_dest =
                     helpers::keep_selected_destination(inner.selected_dest.take(), &x);
-                // Once a real DFU target shows up the notice is not just stale, it is in the way:
-                // its scrim covers the row that has become clickable. Must run before `x` moves.
                 inner.dfu_notice &= !x.iter().any(|d| d.is_dfu());
                 inner.destinations = x;
             }
@@ -400,7 +357,6 @@ pub(crate) fn update(state: &mut GemImager, message: GemImagerMessage) -> Task<G
                 inner.dfu_notice = true;
             }
         }
-        // Unlike its neighbours this does not panic: a dismissal can race a screen transition.
         GemImagerMessage::DismissNotice => match state {
             GemImager::ChooseDest(inner) => inner.dfu_notice = false,
             GemImager::FlashingSuccess(inner) => inner.notice_dismissed = true,
@@ -552,7 +508,6 @@ pub(crate) fn update(state: &mut GemImager, message: GemImagerMessage) -> Task<G
                 OverlayData::Flashing(flashing_state) => flashing_state.progress_update(x),
                 _ => panic!("Unexpected message"),
             },
-            // Debug builds can be slow enough to deliver progress after the screen moved on.
             _ => {}
         },
         GemImagerMessage::FlashStart | GemImagerMessage::Retry => {
@@ -660,15 +615,9 @@ pub(crate) fn update(state: &mut GemImager, message: GemImagerMessage) -> Task<G
     Task::none()
 }
 
-/// Turn low-level flasher chains into an actionable, translated message.
-///
-/// The complete chain is written to the log before this message reaches the reducer. The finish
-/// screen intentionally receives only this safe summary, so implementation details do not become
-/// the sole explanation offered to the user.
 fn localized_flash_error(lang: gem_i18n::Lang, technical: &str) -> String {
     let lower = technical.to_ascii_lowercase();
 
-    // Staging is written before the board is touched, so it reads as a host-disk problem.
     if lower.contains("staging") {
         return format!(
             "{}\n\n{}",
@@ -677,9 +626,6 @@ fn localized_flash_error(lang: gem_i18n::Lang, technical: &str) -> String {
         );
     }
 
-    // DFU failures are matched before the generic ones. "Permission denied" needs a udev rule for the
-    // USB device rather than the block device, and the Windows driver case has no SD equivalent. The
-    // alt-setting and boot-manifest errors never name DFU, and they are the two that most need it.
     let ambiguous_dfu =
         lower.contains("devices match") && lower.contains("choose one physical port");
     if ambiguous_dfu
@@ -692,7 +638,6 @@ fn localized_flash_error(lang: gem_i18n::Lang, technical: &str) -> String {
         || lower.contains("raw emmc")
     {
         let dfu_pair = if ambiguous_dfu {
-            // Two boards on one host: refusing to guess is safe, but the message must say nothing was written.
             Some((
                 gem_i18n::Msg::DfuAmbiguousTitle,
                 gem_i18n::Msg::DfuAmbiguousBody,
@@ -712,7 +657,6 @@ fn localized_flash_error(lang: gem_i18n::Lang, technical: &str) -> String {
             || lower.contains("disconnected before dfuidle")
             || lower.contains("final dfu detach")
         {
-            // All raw bytes are handed over, so failure from the ZLP on is a finalization failure.
             Some((
                 gem_i18n::Msg::DfuFinalizeFailedTitle,
                 gem_i18n::Msg::DfuFinalizeFailedBody,
@@ -740,14 +684,11 @@ fn localized_flash_error(lang: gem_i18n::Lang, technical: &str) -> String {
                 gem_i18n::Msg::DfuPermissionBody,
             ))
         } else if lower.contains("timed out") || lower.contains("disconnected before") {
-            // Checked before the alt-setting branch: the reconnect timeout also names an alt-setting, but a
-            // board coming back late is a different problem from a board in the wrong mode.
             Some((
                 gem_i18n::Msg::DfuReconnectTimeoutTitle,
                 gem_i18n::Msg::DfuReconnectTimeoutBody,
             ))
         } else if lower.contains("alt-setting") {
-            // The board is attached but in the wrong mode, so the switches are the thing to check.
             Some((
                 gem_i18n::Msg::DfuSwitchToBootModeTitle,
                 gem_i18n::Msg::DfuSwitchToBootModeBody,
@@ -842,9 +783,6 @@ mod i18n_tests {
         assert!(!tr.contains("deadbeef"));
     }
 
-    /// The DFU failures a user can actually act on must each say something different, in both
-    /// languages. Collapsing them into the shared "flashing failed" wording — or into the SD card's
-    /// udev advice — sends the user to fix the wrong thing.
     #[test]
     fn dfu_failures_are_told_apart_and_are_actionable() {
         let driver = localized_flash_error(
@@ -891,7 +829,6 @@ mod i18n_tests {
             .contains("All data was sent")
         );
 
-        // Distinct remedies, not one generic wording reused.
         let all = [
             &driver,
             &permission,
@@ -908,14 +845,12 @@ mod i18n_tests {
             }
         }
 
-        // A DFU permission failure must not be answered with the SD card's disk advice.
         assert!(!permission.contains("card"));
         assert_ne!(
             permission,
             localized_flash_error(Lang::En, "Permission denied opening /dev/sda")
         );
 
-        // Turkish carries the same distinctions rather than falling back to English.
         for (technical, marker) in [
             (
                 "DFU transport error: the WinUSB driver is not bound to this device",
@@ -939,10 +874,6 @@ mod i18n_tests {
         }
     }
 
-    /// A board that is listed but cannot be opened is refused before any download, and that
-    /// refusal has to arrive as the same actionable instruction the deeper backend errors produce.
-    /// These are the exact sentences `helpers::flash` emits, so the coupling is asserted rather
-    /// than assumed.
     #[test]
     fn a_listed_but_unopenable_board_still_reaches_its_instruction() {
         let permission = localized_flash_error(
@@ -966,8 +897,6 @@ mod i18n_tests {
         );
     }
 
-    /// The staging image is prepared on the host before the board is touched, so running out of
-    /// disk has to read as a host problem — and has to say the board was left alone.
     #[test]
     fn a_full_disk_during_staging_reads_as_a_host_problem() {
         let technical = "not enough free space for the DFU staging image in C:\\cache: \
@@ -980,13 +909,9 @@ mod i18n_tests {
         assert!(en.contains("board was not touched"));
         assert!(tr.contains("disk alanı"));
         assert!(tr.contains("karta dokunulmadı"));
-        // The raw byte counts belong in the log, not on the finish screen.
         assert!(!en.contains("4352000000"));
     }
 
-    /// A destination the drive list no longer knows about is now refused outright rather than
-    /// written to unchecked. That refusal has to arrive as its own "reconnect the card" advice,
-    /// not as the generic "check the logs" ending, which the user cannot act on.
     #[test]
     fn an_unrecognised_destination_asks_the_user_to_reconnect_the_card() {
         let technical = "Refusing to write to \"/dev/sdb\": it is not a recognised removable \
@@ -998,7 +923,6 @@ mod i18n_tests {
         assert!(en.contains("Reconnect the card"), "{en}");
         assert!(tr.contains("Kartı yeniden takın"), "{tr}");
         assert!(!en.contains("Logs"), "{en}");
-        // It must not be confused with the system-disk refusal or the too-small card.
         assert_ne!(
             en,
             localized_flash_error(

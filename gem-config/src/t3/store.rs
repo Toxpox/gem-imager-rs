@@ -1,17 +1,3 @@
-//! Versioned, persistent SQLite storage for a validated T3 catalog (`instruction.md` §6.4).
-//!
-//! Three things this module deliberately does *not* do:
-//!
-//! * It never uses a temporary database. The caller supplies a path inside the application data
-//!   directory, so a cached catalog survives a restart.
-//! * It never drops and recreates tables to "migrate". Schema changes go through
-//!   [`MIGRATIONS`], keyed on `PRAGMA user_version`, so stored rows are carried forward.
-//! * It never collapses the four integrity gates. `archive_sha256`, `archive_size`,
-//!   `extracted_sha256` and `extracted_size` are four separate columns.
-//!
-//! Resolving *where* the application data directory lives is the front-end's job; this module only
-//! takes a path, so the library gains no platform-directory dependency.
-
 use std::collections::BTreeSet;
 use std::fmt;
 use std::path::Path;
@@ -29,14 +15,8 @@ use crate::t3::canonical::{
 use crate::t3::sha256::Sha256;
 use crate::t3::validate::{CatalogProvenance, ValidatedT3Catalog};
 
-/// Schema version this build writes and expects.
 pub const CURRENT_SCHEMA_VERSION: u32 = 2;
 
-/// Ordered schema migrations.
-///
-/// Each entry is `(target_version, sql)` and is applied inside a transaction when the database's
-/// `user_version` is below `target_version`. Adding a migration means appending here and bumping
-/// [`CURRENT_SCHEMA_VERSION`]; existing rows must be preserved by the SQL, never recreated.
 pub const MIGRATIONS: &[(u32, &str)] = &[(1, SCHEMA_V1), (2, SCHEMA_V2)];
 
 const SCHEMA_V1: &str = r#"
@@ -108,11 +88,6 @@ CREATE INDEX idx_board_tags_tag    ON board_tags(tag);
 CREATE INDEX idx_image_devices_tag ON image_devices(tag);
 "#;
 
-/// v2 (`instruction.md` §8.3): remember *how* the last-known-good documents were fetched, and keep
-/// a verified boot manifest across restarts.
-///
-/// `ALTER TABLE ... ADD COLUMN` is used rather than a table rebuild so the catalog a user already
-/// has on disk survives the upgrade — the whole point of a last-known-good cache.
 const SCHEMA_V2: &str = r#"
 ALTER TABLE catalog_provenance ADD COLUMN etag TEXT;
 ALTER TABLE catalog_provenance ADD COLUMN last_modified TEXT;
@@ -136,47 +111,23 @@ CREATE TABLE boot_manifest_artifacts (
 );
 "#;
 
-/// The HTTP cache validators a document was last fetched with (`instruction.md` §8.2).
-///
-/// Storing them is what makes a refresh conditional: the client can ask "has this changed?" and
-/// keep the verified copy it already has when the answer is no.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct HttpValidators {
-    /// `ETag` response header, verbatim.
     pub etag: Option<String>,
-    /// `Last-Modified` response header, verbatim.
     pub last_modified: Option<String>,
 }
 
 impl HttpValidators {
-    /// Whether a conditional request can be made at all.
     pub const fn is_empty(&self) -> bool {
         self.etag.is_none() && self.last_modified.is_none()
     }
 }
 
-/// Why a catalog store operation failed.
 #[derive(Debug)]
 pub enum StoreError {
-    /// The underlying SQLite call failed.
     Sqlite(rusqlite::Error),
-    /// The database was written by a newer build.
-    ///
-    /// Downgrading is not attempted; the caller should surface this and offer a controlled reset
-    /// rather than risk interpreting unknown columns.
-    FutureSchema {
-        /// Version found on disk.
-        found: u32,
-        /// Version this build understands.
-        supported: u32,
-    },
-    /// A stored row could not be turned back into a canonical value.
-    Corrupt {
-        /// Which table the bad row came from.
-        table: &'static str,
-        /// What was wrong with it.
-        reason: String,
-    },
+    FutureSchema { found: u32, supported: u32 },
+    Corrupt { table: &'static str, reason: String },
 }
 
 impl fmt::Display for StoreError {
@@ -211,19 +162,16 @@ impl From<rusqlite::Error> for StoreError {
     }
 }
 
-/// A persistent, versioned catalog cache.
 #[derive(Debug)]
 pub struct T3CatalogStore {
     connection: Connection,
 }
 
 impl T3CatalogStore {
-    /// Open (or create) a store at `path`, migrating it to [`CURRENT_SCHEMA_VERSION`].
     pub fn open(path: &Path) -> Result<Self, StoreError> {
         Self::from_connection(Connection::open(path)?)
     }
 
-    /// Open an in-memory store. Intended for tests.
     pub fn open_in_memory() -> Result<Self, StoreError> {
         Self::from_connection(Connection::open_in_memory()?)
     }
@@ -235,17 +183,12 @@ impl T3CatalogStore {
         Ok(store)
     }
 
-    /// Schema version currently on disk.
     pub fn schema_version(&self) -> Result<u32, StoreError> {
         Ok(self
             .connection
             .query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))? as u32)
     }
 
-    /// Apply any outstanding migrations.
-    ///
-    /// Each migration runs in its own transaction, so an interrupted upgrade leaves the database at
-    /// the last fully applied version rather than half-migrated.
     fn migrate(&mut self) -> Result<(), StoreError> {
         let current = self.schema_version()?;
         if current > CURRENT_SCHEMA_VERSION {
@@ -268,10 +211,6 @@ impl T3CatalogStore {
         Ok(())
     }
 
-    /// Replace the stored catalog with `catalog`.
-    ///
-    /// The whole write runs in one transaction: a failure part-way leaves the previous
-    /// last-known-good catalog intact rather than a half-written one.
     pub fn save(
         &mut self,
         catalog: &ValidatedT3Catalog,
@@ -281,11 +220,6 @@ impl T3CatalogStore {
         self.save_with_validators(catalog, scope, fetched_at, &HttpValidators::default())
     }
 
-    /// Replace the stored catalog and remember the HTTP validators it arrived with.
-    ///
-    /// Only a catalog that has already been through [`crate::t3::validate`] can be passed here, so
-    /// "stored" and "validated" cannot drift apart: an unparsable refresh never reaches this
-    /// method and therefore never displaces the last-known-good copy (`instruction.md` §8.3).
     pub fn save_with_validators(
         &mut self,
         catalog: &ValidatedT3Catalog,
@@ -324,7 +258,6 @@ impl T3CatalogStore {
         Ok(())
     }
 
-    /// Load the stored catalog, or `None` when nothing has been saved yet.
     pub fn load(&self) -> Result<Option<ValidatedT3Catalog>, StoreError> {
         let Some(provenance) = self.load_provenance()? else {
             return Ok(None);
@@ -337,7 +270,6 @@ impl T3CatalogStore {
         }))
     }
 
-    /// Date the stored catalog was fetched, for the "showing a catalog from …" UI state.
     pub fn stored_fetched_at(&self) -> Result<Option<NaiveDate>, StoreError> {
         let raw: Option<String> = self
             .connection
@@ -359,7 +291,6 @@ impl T3CatalogStore {
         .transpose()
     }
 
-    /// HTTP validators the stored catalog was fetched with, if any.
     pub fn stored_validators(&self) -> Result<Option<HttpValidators>, StoreError> {
         Ok(self
             .connection
@@ -376,10 +307,6 @@ impl T3CatalogStore {
             .optional()?)
     }
 
-    /// Store a boot manifest that has already been verified.
-    ///
-    /// The type system carries the guarantee: a [`VerifiedBootManifest`] cannot be built from a
-    /// manifest that is missing a stage, so nothing incomplete can be written here.
     pub fn save_boot_manifest(
         &mut self,
         board_tag: &str,
@@ -423,12 +350,6 @@ impl T3CatalogStore {
         Ok(())
     }
 
-    /// Load the last-known-good boot manifest for a board.
-    ///
-    /// Returns `Ok(None)` when nothing has been stored, and an error when what is stored no longer
-    /// satisfies `required`. Neither result is a manifest, and `instruction.md` §8.3 is explicit
-    /// that without a verified manifest DFU does not start — there is deliberately no way to get a
-    /// partial one out of this method.
     pub fn load_boot_manifest(
         &self,
         board_tag: &str,
@@ -477,7 +398,6 @@ impl T3CatalogStore {
             })
     }
 
-    /// Product scope the stored catalog was validated against.
     pub fn stored_scope(&self) -> Result<Option<ProductScope>, StoreError> {
         self.connection
             .query_row(
@@ -657,7 +577,6 @@ impl T3CatalogStore {
         key_column: &str,
         id: i64,
     ) -> Result<BTreeSet<String>, StoreError> {
-        // `table` and `key_column` are compile-time literals from this module, never user input.
         let sql = format!("SELECT tag FROM {table} WHERE {key_column} = ?1 ORDER BY tag");
         let mut statement = self.connection.prepare(&sql)?;
         let tags = statement
@@ -720,7 +639,6 @@ fn insert_board(tx: &rusqlite::Transaction<'_>, board: &Board) -> Result<(), Sto
 }
 
 fn insert_image(tx: &rusqlite::Transaction<'_>, image: &Image) -> Result<(), StoreError> {
-    // SQLite integers are signed 64-bit, so a value past `i64::MAX` must not silently wrap via `as`.
     let archive_size = image
         .integrity
         .archive_size
@@ -766,7 +684,6 @@ fn insert_image(tx: &rusqlite::Transaction<'_>, image: &Image) -> Result<(), Sto
     Ok(())
 }
 
-/// Convert a model size into SQLite's signed integer domain, refusing to wrap.
 fn size_to_sql(value: u64, field: &'static str) -> Result<i64, StoreError> {
     i64::try_from(value).map_err(|_| StoreError::Corrupt {
         table: "images",
@@ -774,7 +691,6 @@ fn size_to_sql(value: u64, field: &'static str) -> Result<i64, StoreError> {
     })
 }
 
-/// Convert a stored size back, refusing to read a negative row as a huge unsigned value.
 fn size_from_sql(value: i64, field: &'static str) -> Result<u64, StoreError> {
     u64::try_from(value).map_err(|_| StoreError::Corrupt {
         table: "images",

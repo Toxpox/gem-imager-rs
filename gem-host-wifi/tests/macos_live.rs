@@ -1,15 +1,3 @@
-//! Real-host integration checks for the macOS CoreWLAN/Keychain backend.
-//!
-//! These need Location authorization, a live Wi-Fi association and a System keychain the user can
-//! unlock, none of which a CI runner has (§14.6), so they are `#[ignore]` by default:
-//!
-//! ```sh
-//! cargo test -p gem-host-wifi --test macos_live -- --ignored --nocapture
-//! ```
-//!
-//! On a Personal network the password read really does prompt for Touch ID or a password. That
-//! prompt appearing at all is the behaviour being verified; the value is never printed.
-
 #![cfg(target_os = "macos")]
 
 use gem_host_wifi::{DetectedSsid, HostWifiError, PasswordOutcome, SecurityKind};
@@ -44,7 +32,6 @@ fn detects_the_current_network_on_this_host() {
                     println!("retrieved a {len}-byte credential (value not shown)");
                 }
                 (SecurityKind::Personal, PasswordOutcome::NotStored) => {
-                    // Before the System-keychain fix this was the outcome for every network, with no prompt shown.
                     println!(
                         "NotStored on a Personal network: no prompt was shown. If this network's \
                          password is saved in Settings > Wi-Fi, the System keychain lookup is \
@@ -52,7 +39,6 @@ fn detects_the_current_network_on_this_host() {
                     );
                 }
                 (SecurityKind::Personal, other) => {
-                    // Deny/Cancel/PermissionDenied all mean the prompt did appear.
                     println!("prompt reached the user, outcome: {other:?}");
                 }
                 (kind, other) => println!("security {kind:?}, outcome: {other:?}"),
@@ -72,12 +58,8 @@ fn detects_the_current_network_on_this_host() {
     }
 }
 
-/// The password read must not depend on Location: the Keychain lookup is keyed by SSID only.
-///
-/// This is a pure-logic guard that runs without a live network.
 #[test]
 fn an_unrepresentable_ssid_never_reaches_the_keychain() {
-    // An empty name (a non-UTF-8 SSID) must short-circuit rather than query with a blank account.
     let wifi = gem_host_wifi::detect_current_wifi();
     if let Ok(w) = wifi
         && matches!(w.ssid, DetectedSsid::UnsupportedEncoding)

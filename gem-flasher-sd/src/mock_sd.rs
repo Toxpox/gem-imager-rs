@@ -5,7 +5,7 @@ use mbrman::{CHS, MBR, MBRPartitionEntry};
 
 use gem_helper::cancel::CancellationToken;
 
-const DISK_SIZE: u64 = 128 * 1024 * 1024; // 128 MiB
+const DISK_SIZE: u64 = 128 * 1024 * 1024;
 const SECTOR_SIZE: u32 = 512;
 const FIRST_LBA: u32 = 2048;
 
@@ -36,7 +36,7 @@ impl MockSd {
         mbr[1] = MBRPartitionEntry {
             boot: 0x80,
             first_chs: CHS::empty(),
-            sys: 0x0C, // FAT32 (LBA)
+            sys: 0x0C,
             last_chs: CHS::empty(),
             starting_lba: FIRST_LBA,
             sectors: num_sectors,
@@ -73,16 +73,10 @@ impl MockSd {
         }
     }
 
-    /// Cancel to make every `read`/`write`/`seek` fail.
     pub fn fail_token(&self) -> CancellationToken {
         self.fail.clone()
     }
 
-    /// Cancel to make only the sync fail, with every write still reporting success.
-    ///
-    /// This is the case a write-error injection cannot reach: a device that accepted every byte
-    /// into its cache and then lost power, which is indistinguishable from a good flash unless the
-    /// sync failure itself is treated as fatal.
     pub fn sync_fail_token(&self) -> CancellationToken {
         self.sync_fail.clone()
     }
@@ -139,8 +133,6 @@ impl Read for MockSd {
 }
 
 impl crate::helpers::Commit for MockSd {
-    /// Honours [`MockSd::fail_token`] so tests can inject a sync failure — the case where the
-    /// device is pulled after the last successful `write` but before the data is durable.
     fn commit(&mut self) -> io::Result<()> {
         if self.fail.is_cancelled() || self.sync_fail.is_cancelled() {
             return Err(io::Error::new(io::ErrorKind::QuotaExceeded, "Fail"));

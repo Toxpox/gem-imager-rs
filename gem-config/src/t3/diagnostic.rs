@@ -1,135 +1,72 @@
-//! Typed, path-carrying diagnostics produced while validating a T3 catalog.
-//!
-//! `instruction.md` §6.2 forbids `VecSkipError`-style silent skipping in the T3 adapter: when an
-//! entry is dropped, the caller must be able to say how many entries were rejected and why, and
-//! the UI must be able to surface and log that. Every diagnostic therefore carries the JSON path
-//! of the offending entry.
-
 use std::fmt;
 
 use crate::t3::sha256::Sha256ParseError;
 
-/// What happened to the catalog entry a diagnostic refers to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DiagnosticSeverity {
-    /// The entry was dropped from the canonical catalog and cannot be flashed.
     Rejected,
-    /// The entry was kept, but with reduced capability or hidden from the product surface.
     Retained,
-    /// The catalog as a whole is unusable.
     Fatal,
 }
 
-/// A single validation finding, always anchored to a JSON path such as
-/// `os_list[4].subitems[2].extract_sha256`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum T3Diagnostic {
-    /// A required field was absent.
     MissingField {
-        /// JSON path of the entry.
         path: String,
-        /// Name of the absent field.
         field: &'static str,
     },
-    /// A hash field was present but not a valid 64-character digest.
     InvalidSha256 {
-        /// JSON path of the entry.
         path: String,
-        /// Name of the offending field.
         field: &'static str,
-        /// Why parsing failed.
         error: Sha256ParseError,
     },
-    /// `extract_size` was zero, so the extracted-size gate could never be meaningful.
     ZeroExtractSize {
-        /// JSON path of the entry.
         path: String,
     },
-    /// A URL field did not use HTTPS.
     InsecureUrl {
-        /// JSON path of the entry.
         path: String,
-        /// Name of the offending field.
         field: &'static str,
-        /// Scheme actually seen.
         scheme: String,
     },
-    /// A URL field could not be parsed at all.
     InvalidUrl {
-        /// JSON path of the entry.
         path: String,
-        /// Name of the offending field.
         field: &'static str,
-        /// Raw value that failed to parse.
         value: String,
     },
-    /// `release_date` was not an ISO-8601 calendar date.
     InvalidReleaseDate {
-        /// JSON path of the entry.
         path: String,
-        /// Raw value that failed to parse.
         value: String,
     },
-    /// An image referenced a board tag that no device in the catalog declares.
     OrphanDeviceTag {
-        /// JSON path of the entry.
         path: String,
-        /// The unmatched tag.
         tag: String,
     },
-    /// An image declared no board tags at all, so it can never be matched to a board.
     NoDeviceTags {
-        /// JSON path of the entry.
         path: String,
     },
-    /// A board parsed cleanly but is outside the configured product scope.
-    ///
-    /// The board is retained in the canonical model so a later scope decision does not require a
-    /// re-parse (`instruction.md` §3.1), but it must not be shown on the product surface.
     OutOfProductScope {
-        /// JSON path of the entry.
         path: String,
-        /// Board name.
         board: String,
     },
-    /// `init_format` held a value this build has no customization consumer for.
-    ///
-    /// The image is retained and remains flashable; only customization is disabled.
     UnsupportedInitFormat {
-        /// JSON path of the entry.
         path: String,
-        /// Raw value seen.
         value: String,
     },
-    /// A board advertised `emmc: true` but is not the T3 board, so no verified DFU profile exists.
-    ///
-    /// Fail-closed: the board keeps SD support and loses DFU (`instruction.md` §6.2).
     EmmcWithoutVerifiedDfuProfile {
-        /// JSON path of the entry.
         path: String,
-        /// Board name.
         board: String,
     },
-    /// A device entry declared no tags, so no image can ever match it.
     BoardWithoutTags {
-        /// JSON path of the entry.
         path: String,
-        /// Board name.
         board: String,
     },
-    /// An icon URL was unusable, so the icon was dropped.
-    ///
-    /// Icons are cosmetic: dropping one must never remove a flashable board or image.
     DroppedIcon {
-        /// JSON path of the entry.
         path: String,
-        /// Why the icon was dropped.
         reason: String,
     },
 }
 
 impl T3Diagnostic {
-    /// Whether the entry survived validation.
     pub fn severity(&self) -> DiagnosticSeverity {
         match self {
             Self::MissingField { .. }
@@ -148,7 +85,6 @@ impl T3Diagnostic {
         }
     }
 
-    /// JSON path of the entry this diagnostic refers to.
     pub fn path(&self) -> &str {
         match self {
             Self::MissingField { path, .. }
@@ -167,7 +103,6 @@ impl T3Diagnostic {
         }
     }
 
-    /// Whether this diagnostic caused its entry to be dropped.
     pub fn is_rejection(&self) -> bool {
         self.severity() == DiagnosticSeverity::Rejected
     }
@@ -226,17 +161,13 @@ impl fmt::Display for T3Diagnostic {
     }
 }
 
-/// Summary of a validation run, for logging and for the UI's "partial catalog" banner.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct DiagnosticSummary {
-    /// Entries dropped from the canonical catalog.
     pub rejected: usize,
-    /// Entries kept with reduced capability or hidden from the product surface.
     pub retained: usize,
 }
 
 impl DiagnosticSummary {
-    /// Count severities across a diagnostic list.
     pub fn of(diagnostics: &[T3Diagnostic]) -> Self {
         let mut summary = Self::default();
         for diagnostic in diagnostics {
@@ -249,7 +180,6 @@ impl DiagnosticSummary {
         summary
     }
 
-    /// Whether anything at all was dropped.
     pub fn has_rejections(&self) -> bool {
         self.rejected > 0
     }

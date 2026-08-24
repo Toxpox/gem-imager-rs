@@ -1,20 +1,3 @@
-//! Library to flash SD cards with OS images. Powers SD card flashing in [T3 Gemstone Imager].
-//!
-//! Also allows optional extra [Customization] for images that declare an init format.
-//!
-//! # Platform Support
-//!
-//! - Linux
-//! - Windows
-//! - MacOS
-//!
-//! # Features
-//!
-//! - `udev`: Dynamic permissions on Linux. Mostly useful for GUI and flatpaks
-//! - `macos_authopen`: Dynamic permissions on MacOS.
-//!
-//! [T3 Gemstone Imager]: https://github.com/Toxpox/gem-imager-rs
-
 use std::{
     io,
     path::{Path, PathBuf},
@@ -35,9 +18,7 @@ pub use flashing::{Status, flash};
 pub(crate) type Result<T, E = Error> = std::result::Result<T, E>;
 
 #[derive(Error, Debug)]
-/// Errors for this crate
 pub enum Error {
-    /// The partition table of image invalid.
     #[error("Partition table of image not valid.")]
     InvalidPartitionTable,
     #[error("Only FAT BOOT partitions are supported.")]
@@ -49,23 +30,17 @@ pub enum Error {
         file: Box<str>,
     },
 
-    /// A customization file did not survive the round trip to the card.
-    ///
-    /// The message carries the file name and nothing else on purpose: these files hold password
-    /// hashes and pre-shared keys, so neither the expected nor the actual bytes may be reported.
     #[error(
         "Read-back verification failed for {file}: the boot partition does not hold the bytes \
          that were written. The card may be faulty, counterfeit, or was disconnected."
     )]
     CustomizationReadBackMismatch { file: Box<str> },
-    /// Unknown error occured during IO.
     #[error("Unknown Error during IO. Please check logs for more information.")]
     IoError {
         #[from]
         #[source]
         source: io::Error,
     },
-    /// Aborted before completing
     #[error("Aborted before completing.")]
     Aborted,
     #[error("Failed to format SD Card.")]
@@ -81,14 +56,9 @@ pub enum Error {
     #[error("Writer thread has been closed.")]
     WriterClosed,
 
-    /// The image stream ended before the declared size was written.
-    ///
-    /// Silently succeeding here produces a card that flashes "successfully" and then fails to
-    /// boot, which is the hardest failure for a user to attribute.
     #[error("Only {written} of {expected} bytes reached the destination.")]
     ShortWrite { expected: u64, written: u64 },
 
-    /// The device gave back something other than what was written to it.
     #[error(
         "Read-back verification failed: the destination holds different data than was written \
          (expected sha256 {expected}, device returned {actual}). The card may be faulty, \
@@ -99,7 +69,6 @@ pub enum Error {
         actual: Box<str>,
     },
 
-    /// The partition-table block is written last and receives its own physical read-back.
     #[error(
         "Read-back verification failed for the published partition layout. The card may be faulty, counterfeit, or was disconnected during writing."
     )]
@@ -113,18 +82,12 @@ pub enum Error {
     #[error("Refusing to write to \"{name}\": it is reported as a system disk.")]
     SystemDisk { name: Box<str> },
 
-    /// The destination was not among the enumerated devices.
-    ///
-    /// Treated as a refusal rather than a warning: an unrecognised path bypasses both the
-    /// system-disk and the capacity gate, and the very next step opens it for raw writing.
     #[error(
         "Refusing to write to \"{path}\": it is not a recognised removable device. Reconnect the \
          card and try again."
     )]
     UnknownDestination { path: Box<str> },
 
-    /// Buffers could not be made durable. Never downgraded to a warning: an unsynced tail is
-    /// indistinguishable from a successful flash until the board fails to boot.
     #[error("Failed to flush written data to the destination.")]
     SyncFailed {
         #[source]
@@ -157,7 +120,6 @@ pub enum Error {
     WindowsSpannedVolume { volume: Box<str>, disk_number: u32 },
 }
 
-/// Enumerate all SD Cards in system
 pub fn devices(filter: bool) -> Vec<Device> {
     gem_drivelist::drive_list()
         .expect("Unsupported OS for Sd Card")
@@ -181,16 +143,10 @@ pub fn devices(filter: bool) -> Vec<Device> {
 }
 
 #[derive(Hash, Debug, PartialEq, Eq, Clone)]
-/// SD Card
 pub struct Device {
     pub name: String,
     pub path: PathBuf,
     pub size: u64,
-    /// Whether the platform reports this as a disk the running system depends on.
-    ///
-    /// Carried on the device rather than filtered away at enumeration so callers that list
-    /// unfiltered destinations can still show it and refuse it, instead of it quietly reappearing
-    /// as a selectable target.
     pub is_system: bool,
 }
 
@@ -205,7 +161,6 @@ impl Device {
     }
 }
 
-/// Format SD card to fat32
 pub fn format(dst: &std::path::Path) -> Result<()> {
     crate::pal::format(dst)
 }

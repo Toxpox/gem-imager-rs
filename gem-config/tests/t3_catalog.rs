@@ -1,8 +1,3 @@
-//! Contract tests for the strict T3 catalog adapter (`instruction.md` §6.5).
-//!
-//! `main_catalog.json` and `boot_manifest.json` are verbatim captures of the live service taken on
-//! 2026-07-31, so these tests double as schema-drift detectors.
-
 use gem_config::t3::{
     DiagnosticSummary, ProductScope, T3_BOARD_TAG, T3CatalogError, T3Diagnostic, WriteMethod,
     parse_catalog,
@@ -23,7 +18,6 @@ fn parse(bytes: &[u8], scope: ProductScope) -> gem_config::t3::T3CatalogParse {
 fn every_t3_image_in_the_live_catalog_binds_correctly() {
     let parsed = parse(LIVE_CATALOG, ProductScope::T3Only);
 
-    // The live capture holds 34 leaf images, evenly split between the two boards.
     assert_eq!(parsed.catalog.images.len(), 34);
     assert_eq!(parsed.catalog.t3_images().count(), 17);
 
@@ -31,7 +25,6 @@ fn every_t3_image_in_the_live_catalog_binds_correctly() {
         assert!(image.devices.contains(T3_BOARD_TAG));
         assert!(image.integrity.extracted_size > 0);
         assert_eq!(image.url.scheme(), "https");
-        // Archive and extracted digests are distinct values in distinct fields.
         assert_ne!(
             image.integrity.archive_sha256,
             image.integrity.extracted_sha256
@@ -99,14 +92,11 @@ fn write_methods_come_from_the_board_image_intersection_not_a_single_flasher_fie
         .find(|image| !image.is_t3())
         .expect("a BeagleY image");
 
-    // The same T3 image supports both destinations.
     assert_eq!(
         t3.write_methods_for(t3_image),
         [WriteMethod::Sd, WriteMethod::EmmcDfu]
     );
-    // BeagleY is SD-only even though the image itself is otherwise identical in shape.
     assert_eq!(beagley.write_methods_for(beagley_image), [WriteMethod::Sd]);
-    // A board never offers a write method for an image that does not name it.
     assert!(t3.write_methods_for(beagley_image).is_empty());
 }
 
@@ -114,7 +104,6 @@ fn write_methods_come_from_the_board_image_intersection_not_a_single_flasher_fie
 fn t3_only_scope_marks_beagley_out_of_scope_without_dropping_it() {
     let parsed = parse(LIVE_CATALOG, ProductScope::T3Only);
 
-    // Both real boards survive parsing; only visibility changes.
     assert_eq!(parsed.catalog.boards.len(), 2);
     assert_eq!(parsed.catalog.boards_in_scope().count(), 1);
     assert!(parsed.catalog.boards_in_scope().all(|board| board.is_t3()));
@@ -151,7 +140,6 @@ fn missing_required_field_is_reported_with_its_json_path() {
         .expect("missing extract_sha256 is reported");
     assert_eq!(diagnostic.path(), "os_list[0]");
 
-    // The healthy neighbour still comes through: one bad entry does not poison the catalog.
     assert_eq!(parsed.catalog.images.len(), 1);
 }
 
@@ -220,7 +208,6 @@ fn malformed_json_is_reported_as_a_json_error() {
 
 #[test]
 fn unknown_future_fields_are_ignored_for_forward_compatibility() {
-    // `random` already exists on live sub-list wrappers; a future scalar field must not break us.
     let json = br#"{
         "imager": {
             "devices": [{"name": "T3-GEM-O1", "tags": ["t3-gem-o1"], "emmc": true}],
@@ -367,12 +354,6 @@ fn provenance_records_where_the_catalog_came_from() {
     );
 }
 
-/// End-to-end proof against the captured live catalog: the two product boards, and only those,
-/// reach the model the front-end screens actually render.
-///
-/// This is the test that would have caught the fork's headline defect. The adapter and the
-/// canonical model were correct all along; nothing translated them into the front-end model, so
-/// the board list was empty no matter what the catalog said.
 #[test]
 fn the_live_catalog_reaches_the_front_end_model_with_both_product_boards() {
     let parsed = parse(LIVE_CATALOG, ProductScope::T3AndBeagleY);
@@ -392,7 +373,6 @@ fn the_live_catalog_reaches_the_front_end_model_with_both_product_boards() {
         "the product surface is exactly these two boards"
     );
 
-    // The tagless "No filtering" pseudo-device must not become a selectable board.
     assert!(
         config.imager.devices.iter().all(|d| !d.tags.is_empty()),
         "a tagless pseudo-device must never reach the board list"
@@ -403,21 +383,18 @@ fn the_live_catalog_reaches_the_front_end_model_with_both_product_boards() {
         "an empty image list is never a success"
     );
 
-    // Every emitted image belongs to one of the two boards.
     let board_tags: std::collections::HashSet<&str> = config
         .imager
         .devices
         .iter()
         .flat_map(|d| d.tags.iter().map(String::as_str))
         .collect();
-    // The bridge rebuilds the catalog's distribution/release wrappers, so images sit at tree leaves.
     for img in leaf_images(&config.os_list) {
         assert!(
             img.devices.iter().any(|d| board_tags.contains(d.as_str())),
             "image \"{}\" targets no board in the product surface",
             img.name
         );
-        // Faz 3/4 verify against these; an image that arrives without them flashes unverified.
         assert!(
             img.extract_sha256.is_some(),
             "{} lost its extracted digest",
@@ -427,7 +404,6 @@ fn the_live_catalog_reaches_the_front_end_model_with_both_product_boards() {
     }
 }
 
-/// Every image in the tree, at whatever depth the bridge placed it.
 fn leaf_images(items: &[gem_config::config::OsListItem]) -> Vec<&gem_config::config::OsImage> {
     items
         .iter()
@@ -439,7 +415,6 @@ fn leaf_images(items: &[gem_config::config::OsListItem]) -> Vec<&gem_config::con
         .collect()
 }
 
-/// The T3 board must carry at least one image of its own, otherwise selecting it is a dead end.
 #[test]
 fn the_t3_board_has_images_in_the_front_end_model() {
     let parsed = parse(LIVE_CATALOG, ProductScope::T3AndBeagleY);

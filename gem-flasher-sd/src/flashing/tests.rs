@@ -32,8 +32,6 @@ fn sd_write() {
     assert_eq!(outcome.sha256, sha256(dummy_file.get_ref()));
 }
 
-/// The writer counts what it actually put on the device, so a stream that ends before the declared
-/// size can no longer be reported as a completed flash.
 #[test]
 fn a_stream_shorter_than_the_declared_size_is_a_short_write() {
     const ACTUAL_LEN: usize = 4 * 1024;
@@ -52,11 +50,9 @@ fn a_stream_shorter_than_the_declared_size_is_a_short_write() {
     }
 }
 
-/// Padding the last chunk up to the device alignment must not push the reported progress past 1.0;
-/// the GUI extrapolates an ETA from it and a value above 1 yields a negative duration.
 #[test]
 fn progress_never_exceeds_one_when_the_last_chunk_is_padded() {
-    const FILE_LEN: usize = 1000; // deliberately not a multiple of 512
+    const FILE_LEN: usize = 1000;
 
     let (tx, rx) = mpsc::sync_channel(32);
     let mut sd = std::io::Cursor::new(Vec::<u8>::new());
@@ -91,9 +87,6 @@ fn read_back_accepts_data_that_matches_what_was_written() {
     verify_written(&mut sd, outcome, None, None).expect("an untouched device must verify");
 }
 
-/// A single flipped byte anywhere in the written region has to fail. This is the failure mode that
-/// every earlier gate — archive hash, extracted hash, byte count — is blind to, because they all
-/// describe the data on the way *to* the device.
 #[test]
 fn read_back_rejects_a_single_flipped_byte() {
     const FILE_LEN: usize = 12 * 1024;
@@ -102,7 +95,6 @@ fn read_back_rejects_a_single_flipped_byte() {
     let mut sd = std::io::Cursor::new(Vec::<u8>::new());
     let outcome = write_sd(img, FILE_LEN as u64, &mut sd, None, None).unwrap();
 
-    // Corrupt the device behind the flasher's back.
     sd.get_mut()[FILE_LEN / 2] ^= 0xFF;
 
     let err = verify_written(&mut sd, outcome, None, None)
@@ -117,8 +109,6 @@ fn read_back_rejects_a_single_flipped_byte() {
     }
 }
 
-/// A device that returns fewer bytes than were written to it (truncated, removed mid-verify) must
-/// not be able to pass by hashing only the prefix it did return.
 #[test]
 fn read_back_rejects_a_device_that_returns_too_little() {
     const FILE_LEN: usize = 12 * 1024;
@@ -190,9 +180,6 @@ mod target_guard {
         }
     }
 
-    /// The single most destructive mistake this tool can make is writing an OS image over the
-    /// disk the user is running from. It is refused on the device flag, not on `is_removable`,
-    /// which reports true for USB-attached system disks.
     #[test]
     fn a_system_disk_is_refused() {
         let err = evaluate_target(Some(&device(true, 64 * 1024 * 1024 * 1024)))
@@ -212,16 +199,11 @@ mod target_guard {
         );
     }
 
-    /// An unreported size must not be read as "0 bytes free", which would refuse every image.
     #[test]
     fn an_unknown_capacity_does_not_block_the_flash() {
         assert_eq!(evaluate_target(Some(&device(false, 0))).unwrap(), None);
     }
 
-    /// A path the drive list does not know about skips both gates above, so it is refused rather
-    /// than warned about. The format path (`helpers::destination_size`) has always behaved this
-    /// way; the write path used to fail open, which let an arbitrary `Destination::SdCard` reach
-    /// a raw handle (and `Clear-Disk` on Windows) unchecked.
     #[test]
     fn a_target_missing_from_the_drive_list_is_refused() {
         let err = guard_target(std::path::Path::new(
@@ -238,8 +220,6 @@ mod target_guard {
     }
 }
 
-/// Helpers for driving `flash_internal` against [`crate::mock_sd::MockSd`], which is a real
-/// 128 MiB MBR + FAT32 image and therefore exercises partition detection as well.
 mod mock_card {
     use super::*;
     use crate::customization::{ContentType, Customization, ParitionType};
@@ -261,11 +241,6 @@ mod mock_card {
         card
     }
 
-    /// The first 512 bytes of the card, i.e. the MBR the user's existing installation lives behind.
-    ///
-    /// Read through an independent handle cloned before the card is moved into the flasher: the
-    /// backing temp file is unlinked when `MockSd` drops, so a path-based read would race the
-    /// flash rather than observe it.
     fn layout_block(f: &std::fs::File) -> Vec<u8> {
         use std::io::Read;
         let mut f = f.try_clone().unwrap();
@@ -275,12 +250,6 @@ mod mock_card {
         buf
     }
 
-    /// A flash that never gets past image resolution must leave the card exactly as it was.
-    ///
-    /// The destructive `hide_layout` used to run in `flash` before `flash_internal` had resolved
-    /// the image, so a download failure or an integrity-gate rejection destroyed the partition
-    /// table of a card the tool then refused to write. Asserting on the returned error alone does
-    /// not catch that, so this reads the MBR back off the card.
     #[test]
     fn a_failed_image_resolve_leaves_the_partition_table_intact() {
         let card = MockSd::new();
@@ -336,8 +305,6 @@ mod mock_card {
         assert_eq!(layout_block(&probe), before);
     }
 
-    /// Same contract for the user pressing cancel: nothing irreversible before the first
-    /// cancellation point.
     #[test]
     fn a_cancelled_flash_leaves_the_partition_table_intact() {
         let card = MockSd::new();
@@ -368,7 +335,6 @@ mod mock_card {
         );
     }
 
-    /// The capacity gate is also an abort-without-damage point.
     #[test]
     fn an_oversized_image_leaves_the_partition_table_intact() {
         let card = MockSd::new();
@@ -405,7 +371,6 @@ mod mock_card {
         })
     }
 
-    /// Same as [`boot_file`], but the file is read back off the card and compared.
     fn verified_boot_file(name: &str, data: &[u8]) -> std::iter::Once<Customization<Content>> {
         let entries = vec![(name.into(), data.to_vec().into_boxed_slice())];
         let content: Content = entries
@@ -418,9 +383,6 @@ mod mock_card {
         })
     }
 
-    /// `instruction.md` §10.4: the first-boot file is written to the FAT partition and then read
-    /// back from it. This drives the real MBR + FAT32 image, so it covers the partition lookup,
-    /// the write and the verifying re-open.
     #[test]
     fn a_verified_boot_file_is_written_and_read_back() {
         let card = MockSd::new();
@@ -439,8 +401,6 @@ mod mock_card {
         .expect("a healthy card must write and verify config.ini");
     }
 
-    /// The read-back opens the file from a fresh filesystem handle, so a file that never landed is
-    /// caught instead of being echoed back from the writer's own buffer.
     #[test]
     fn a_missing_file_fails_the_read_back() {
         let mut card = MockSd::new();
@@ -458,8 +418,6 @@ mod mock_card {
         );
     }
 
-    /// A byte flip after the write must surface as a mismatch, not as a successful flash. This is
-    /// the file-level counterpart of the raw read-back test above.
     #[test]
     fn a_flipped_byte_fails_the_read_back() {
         let mut card = MockSd::new();
@@ -488,7 +446,6 @@ mod mock_card {
         );
     }
 
-    /// The error names the file and nothing else: these files carry password hashes and PSKs.
     #[test]
     fn the_read_back_error_never_quotes_the_file_contents() {
         let err = crate::Error::CustomizationReadBackMismatch {
@@ -501,8 +458,6 @@ mod mock_card {
         assert!(!rendered.contains('$'));
     }
 
-    /// The whole pipeline over a real partitioned image: write, sync, read back, then land a file
-    /// in the first FAT partition. A failure anywhere in MBR/FAT detection surfaces here.
     #[test]
     fn a_full_flash_writes_verifies_and_customizes() {
         let card = MockSd::new();
@@ -520,8 +475,6 @@ mod mock_card {
         .expect("a healthy card must flash, verify and customize");
     }
 
-    /// A device that accepts every write and then fails to sync must fail the flash. Reporting
-    /// success here is how a card that was never actually written gets handed to a user.
     #[test]
     fn a_sync_failure_fails_the_flash() {
         let card = MockSd::new();
@@ -548,8 +501,6 @@ mod mock_card {
         );
     }
 
-    /// Capacity is checked before the first byte is written, so an oversized image fails fast
-    /// instead of after filling the card.
     #[test]
     fn an_image_larger_than_the_card_is_rejected_before_writing() {
         const CAPACITY: u64 = 8 * 1024;
@@ -586,7 +537,6 @@ mod mock_card {
         );
     }
 
-    /// A card exactly as large as the image is fine; the guard must reject only what does not fit.
     #[test]
     fn an_image_that_exactly_fills_the_card_is_accepted() {
         let card = MockSd::new();
@@ -607,7 +557,7 @@ mod mock_card {
 
 #[test]
 fn test_read_aligned_exact_multiple() {
-    let input_data = vec![1u8; 1024]; // Exactly 2x 512-byte alignment blocks
+    let input_data = vec![1u8; 1024];
     let mut cursor = Cursor::new(input_data);
     let mut buf = vec![0u8; 1024];
 
@@ -619,18 +569,15 @@ fn test_read_aligned_exact_multiple() {
 
 #[test]
 fn test_read_aligned_padding_needed() {
-    let input_data = vec![5u8; 300]; // Not an alignment multiple (512)
+    let input_data = vec![5u8; 300];
     let mut cursor = Cursor::new(input_data);
     let mut buf = vec![0u8; 512];
 
     let result = read_aligned(&mut cursor, &mut buf);
     assert!(result.is_ok());
-    // Pads out to the next 512-byte boundary.
     assert_eq!(result.unwrap(), 512);
 
-    // Original data intact
     assert_eq!(&buf[0..300], &vec![5u8; 300][..]);
-    // Padded area zeroed out
     assert_eq!(&buf[300..512], &vec![0u8; 212][..]);
 }
 
@@ -644,14 +591,12 @@ fn test_reader_task_stops_at_eof() {
 
     buf_tx_pool.send(Box::new(DirectIoBuffer::new())).unwrap();
 
-    // Dropping the pool transmitter ends the loop when buffers run out or EOF hits.
     drop(buf_tx_pool);
 
     let result = reader_task(&mut cursor, buf_rx_pool, buf_tx_out, None);
     assert!(result.is_ok());
 
     let (received_buf, count) = buf_rx_out.recv().unwrap();
-    // Since input was 100 bytes, it got aligned up to 512
     assert_eq!(count, 512);
     assert_eq!(received_buf.as_slice()[0], 42);
 }
@@ -667,7 +612,7 @@ fn test_writer_task_success() {
     mock_buf.as_mut_slice()[0..10].copy_from_slice(&[9u8; 10]);
 
     tx_out.send((mock_buf, 10)).unwrap();
-    drop(tx_out); // Close input stream for writer loop
+    drop(tx_out);
 
     let mut writer_target = output;
     let outcome = writer_task(

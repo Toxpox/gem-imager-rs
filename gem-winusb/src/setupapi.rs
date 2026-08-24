@@ -92,7 +92,6 @@ fn probe_inner() -> Result<Vec<DeviceFacts>, u32> {
             return Err(config_result);
         }
 
-        // The literal keeps the classifier platform-independent; the assertion catches Windows binding drift.
         debug_assert_eq!(CM_PROB_FAILED_INSTALL, 28);
         devices.push(DeviceFacts {
             service,

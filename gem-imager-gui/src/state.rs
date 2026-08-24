@@ -23,29 +23,17 @@ pub(crate) struct GemImagerCommon {
     pub(crate) scroll_id: widget::Id,
     pub(crate) db: db::Db,
 
-    /// The language every screen renders in.
-    ///
-    /// Resolved once at start-up from the stored preference, then the system locale, then the
-    /// default — and held here rather than looked up per view so a language change is a single
-    /// state transition instead of a cache that can go stale mid-flow.
     pub(crate) lang: gem_i18n::Lang,
 
-    /// Per-attachment WinUSB offer state. The probe itself is read-only; mutation is delegated
-    /// to the separately elevated helper.
     #[cfg(feature = "dfu-driver-mvp")]
     pub(crate) dfu_driver: crate::driver_ui::DfuDriverUiState,
 }
 
 impl GemImagerCommon {
-    /// The language every screen renders in.
     pub(crate) fn lang(&self) -> gem_i18n::Lang {
         self.lang
     }
 
-    /// Switch language and remember the choice.
-    ///
-    /// The persisted write is best-effort: failing to save a language preference must not
-    /// interrupt a flash in progress, so it is logged rather than surfaced.
     pub(crate) fn set_lang(&mut self, lang: gem_i18n::Lang) {
         self.lang = lang;
         self.app_config = self.app_config.clone().update_language(lang);
@@ -135,7 +123,6 @@ pub(crate) struct ChooseOsState {
 
 impl ChooseOsState {
     pub(crate) fn update_images(&mut self, mut imgs: Vec<OsImageItem>, pos: Option<i64>) {
-        // `Flasher` only has `SdCard`, so every board offers the format and local-image entries.
         imgs.extend([
             OsImageItem::format(),
             OsImageItem::local(config::Flasher::SdCard),
@@ -245,29 +232,11 @@ pub(crate) struct ChooseDestState {
     pub(crate) destinations: Vec<helpers::Destination>,
     pub(crate) filter_destination: bool,
     pub(crate) search_text: String,
-    /// Which write methods this board/image pair allows.
-    ///
-    /// Resolved once when the screen is entered rather than re-derived per frame, so the list, the
-    /// enumeration subscription and the instructions can never disagree about whether DFU is on
-    /// offer.
     pub(crate) write_methods: helpers::WriteMethods,
-    /// Whether the "board is not in DFU mode" notice is open.
-    ///
-    /// Kept per screen rather than on [`GemImagerCommon`], which is carried verbatim through every
-    /// `From` conversion as well as `restart()` and `back()` — a modal parked there would follow
-    /// the user all the way through Customize, Review and Flashing.
     pub(crate) dfu_notice: bool,
 }
 
 impl ChooseDestState {
-    /// Whether to show the placeholder row standing in for an absent DFU target.
-    ///
-    /// All three conditions are load-bearing:
-    /// - `write_methods.dfu`: on a board/image pair that cannot use DFU the row must never appear.
-    /// - `search_text.is_empty()`: the search filter is applied inside the enumeration
-    ///   subscription, so while a search is active an empty `destinations` says nothing about
-    ///   whether a board is attached.
-    /// - no real DFU target listed: one or more real rows suppress the placeholder.
     pub(crate) fn show_dfu_placeholder(&self) -> bool {
         show_dfu_placeholder(
             self.write_methods.dfu,
@@ -299,8 +268,6 @@ impl ChooseDestState {
     }
 }
 
-/// The placeholder-row predicate, split out from [`ChooseDestState`] so it can be exercised
-/// without standing up a board, an image and a full common state around it.
 fn show_dfu_placeholder(
     board_supports_dfu: bool,
     search_text: &str,
@@ -311,7 +278,6 @@ fn show_dfu_placeholder(
 
 impl From<CustomizeState> for ChooseDestState {
     fn from(value: CustomizeState) -> Self {
-        // Recomputed rather than carried: BACK also reaches this screen, and the methods follow the pair.
         let write_methods =
             helpers::WriteMethods::resolve(&value.selected_board, &value.selected_image.1);
 
@@ -324,7 +290,6 @@ impl From<CustomizeState> for ChooseDestState {
             filter_destination: true,
             search_text: String::new(),
             write_methods,
-            // Arriving here via BACK must not resurrect a notice the user already dismissed.
             dfu_notice: false,
         }
     }
@@ -337,7 +302,6 @@ pub(crate) struct CustomizeState {
     pub(crate) selected_image: (OsImageId, helpers::BoardImage),
     pub(crate) selected_dest: helpers::Destination,
     pub(crate) customization: helpers::FlashingCustomization,
-    /// Whether the review page is displaying the final destructive-action confirmation.
     pub(crate) erase_confirmation: bool,
 }
 
@@ -392,12 +356,6 @@ pub(crate) struct FlashingState {
     pub(crate) selected_image: (OsImageId, helpers::BoardImage),
     pub(crate) selected_dest: helpers::Destination,
     pub(crate) customization: helpers::FlashingCustomization,
-    /// Highest overall fraction reached so far.
-    ///
-    /// The write is a sequence of passes and each pass reports its own 0..1. Displaying those
-    /// directly makes the indicator fall back towards zero every time one pass hands over to the
-    /// next — which reads as "it started over", not as "it moved on". The screen therefore renders
-    /// one monotonic axis, and this is its high-water mark.
     pub(crate) max_progress: f32,
 }
 
@@ -407,7 +365,6 @@ impl FlashingState {
     }
 
     pub(crate) fn progress_update(&mut self, u: gem_flasher::DownloadFlashingStatus) {
-        // Required for better time estimate.
         match u {
             gem_flasher::DownloadFlashingStatus::DownloadingProgress(_)
             | gem_flasher::DownloadFlashingStatus::FlashingProgress(_)
@@ -425,8 +382,6 @@ impl FlashingState {
         self.progress = u;
     }
 
-    /// What to draw right now: the label, and the fraction — or `None` while a phase with nothing
-    /// to count is running.
     pub(crate) fn phase(&self) -> FlashPhase {
         let phase = flash_phase(self.progress, self.selected_dest.is_dfu());
         FlashPhase {
@@ -436,22 +391,12 @@ impl FlashingState {
     }
 }
 
-/// Where a status sits on the overall axis, and what it is called.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct FlashPhase {
     pub(crate) label: gem_i18n::Msg,
-    /// `None` for phases whose duration cannot be measured — the board re-enumerating, or the eMMC
-    /// flush after the last byte. Those get an indeterminate indicator rather than an invented
-    /// number that would sit still and then jump.
     pub(crate) fraction: Option<f32>,
 }
 
-/// Place a status on the single overall axis.
-///
-/// The two flows have different phase sets and very different cost distributions, so the weights
-/// are per flow. The DFU numbers follow `instruction.md` §13.4: the raw eMMC stream dominates, and
-/// the three boot artifacts — three orders of magnitude smaller — must not take a quarter of the
-/// bar each.
 pub(crate) fn flash_phase(status: gem_flasher::DownloadFlashingStatus, is_dfu: bool) -> FlashPhase {
     use gem_flasher::DownloadFlashingStatus as S;
     use gem_i18n::Msg;
@@ -464,7 +409,6 @@ pub(crate) fn flash_phase(status: gem_flasher::DownloadFlashingStatus, is_dfu: b
             fraction: Some(0.0),
         },
 
-        // ---- SD: download, write, read back, customize ---------------------------------------
         (S::DownloadingProgress(x), false) => FlashPhase {
             label: Msg::Downloading,
             fraction: span(0.0, 0.50, x),
@@ -482,7 +426,6 @@ pub(crate) fn flash_phase(status: gem_flasher::DownloadFlashingStatus, is_dfu: b
             fraction: Some(0.98),
         },
 
-        // ---- DFU: the same four passes against a staging file, then the board -----------------
         (S::DownloadingProgress(x), true) => FlashPhase {
             label: Msg::Downloading,
             fraction: span(0.0, 0.30, x),
@@ -503,8 +446,6 @@ pub(crate) fn flash_phase(status: gem_flasher::DownloadFlashingStatus, is_dfu: b
             label: Msg::ResolvingBootArtifacts,
             fraction: None,
         },
-        // Reading the staged image end to end is measurable and slow, so it gets its own slice instead of
-        // hiding inside the indeterminate phase before it.
         (S::ChecksummingImage(x), _) => FlashPhase {
             label: Msg::ChecksummingImage,
             fraction: span(0.53, 0.03, x),
@@ -515,7 +456,6 @@ pub(crate) fn flash_phase(status: gem_flasher::DownloadFlashingStatus, is_dfu: b
         },
         (S::BootStage { stage, progress }, _) => FlashPhase {
             label: Msg::WritingBootloader,
-            // Three stages sharing 6 % of the axis: visible movement, honest weight.
             fraction: span(
                 0.56 + f32::from(stage.saturating_sub(1)) * 0.02,
                 0.02,
@@ -533,13 +473,6 @@ pub(crate) fn flash_phase(status: gem_flasher::DownloadFlashingStatus, is_dfu: b
     }
 }
 
-/// Estimate the remaining flashing time from the current `progress` and how
-/// much time has `elapsed` since the first progress update.
-///
-/// Split out of [`FlashingState::time_remaining`] so the ETA math is testable
-/// without an `Instant` clock: a linear extrapolation `elapsed * (1 - x) / x`,
-/// suppressed until progress clears a small threshold to avoid wild early
-/// estimates.
 fn time_remaining_from(
     progress: gem_flasher::DownloadFlashingStatus,
     elapsed: Option<Duration>,
@@ -568,15 +501,7 @@ pub(crate) struct FlashingFinishState {
     pub(crate) common: GemImagerCommon,
     pub(crate) selected_board: Board,
     pub(crate) is_download: bool,
-    /// Whether the write that just ended went over DFU.
-    ///
-    /// Recorded here because `selected_dest` does not survive the conversion, and because
-    /// `!is_download` is not a stand-in: an SD card write is not a download either.
     pub(crate) is_dfu: bool,
-    /// Whether the user has closed the "switch back to eMMC" notice.
-    ///
-    /// The notice is open on entry, so there is no separate "show" flag; visibility is
-    /// `is_dfu && !notice_dismissed`.
     pub(crate) notice_dismissed: bool,
 }
 
@@ -615,7 +540,6 @@ impl From<FlashingFailState> for CustomizeState {
     }
 }
 
-// Pages reachable from any normal page but outside the normal flow, e.g. application info.
 pub(crate) enum OverlayData {
     ChooseBoard(ChooseBoardState),
     ChooseOs(ChooseOsState),
@@ -738,10 +662,6 @@ mod tests {
         assert!(!show_dfu_placeholder(false, "", false));
     }
 
-    /// Regression lock. The search filter is applied inside the enumeration subscription, so while
-    /// a search is active `destinations` is empty for reasons that have nothing to do with whether
-    /// a board is attached. Without this condition the notice would claim "not connected" about a
-    /// board that is physically plugged in.
     #[test]
     fn placeholder_hidden_while_searching() {
         assert!(!show_dfu_placeholder(true, "sd", false));
@@ -757,9 +677,6 @@ mod tests {
         assert!(show_dfu_placeholder(true, "", false));
     }
 
-    /// The whole point of the shared axis: every phase of a DFU write, in the order the backend
-    /// emits them, must produce a non-decreasing fraction. Before this, staging ended near the top
-    /// of the bar and the DFU transfer restarted it at zero.
     #[test]
     fn a_dfu_write_never_moves_the_indicator_backwards() {
         let sequence = [
@@ -790,12 +707,9 @@ mod tests {
 
         let mut last = 0.0_f32;
         for status in sequence {
-            // Unmeasurable phases report no fraction; they must not reset the axis either.
             let Some(fraction) = flash_phase(status, true).fraction else {
                 continue;
             };
-            // The epsilon covers f32 representation at a hand-over point (0.30 + 0.15), not a regression;
-            // `max_progress` clamps the rendered value anyway.
             assert!(
                 fraction >= last - f32::EPSILON,
                 "{status:?} moved the indicator from {last} to {fraction}"
@@ -809,7 +723,6 @@ mod tests {
         );
     }
 
-    /// The same rule on the SD flow, where the read-back pass used to restart the bar.
     #[test]
     fn an_sd_write_never_moves_the_indicator_backwards() {
         let sequence = [
@@ -829,8 +742,6 @@ mod tests {
         }
     }
 
-    /// The three boot artifacts are three orders of magnitude smaller than the raw image, so they
-    /// must not occupy a comparable share of the axis.
     #[test]
     fn the_raw_emmc_stream_dominates_the_axis() {
         let boot_share = flash_phase(
@@ -864,7 +775,6 @@ mod tests {
         );
     }
 
-    /// Phases the backend cannot measure must say so rather than inventing a number.
     #[test]
     fn unmeasurable_phases_are_indeterminate() {
         for status in [
@@ -878,7 +788,6 @@ mod tests {
 
     #[test]
     fn eta_scales_linearly_with_remaining_fraction() {
-        // At 50% after 10s, the remaining half should take another ~10s.
         assert_eq!(
             time_remaining_from(
                 DownloadFlashingStatus::FlashingProgress(0.5),
@@ -886,7 +795,6 @@ mod tests {
             ),
             Some(Duration::from_secs(10))
         );
-        // At 25% after 10s, the remaining 75% extrapolates to 30s.
         assert_eq!(
             time_remaining_from(
                 DownloadFlashingStatus::FlashingProgress(0.25),
@@ -909,7 +817,6 @@ mod tests {
 
     #[test]
     fn eta_suppressed_below_threshold() {
-        // Below 2% the estimate is too noisy, so no ETA is reported.
         assert_eq!(
             time_remaining_from(
                 DownloadFlashingStatus::FlashingProgress(0.01),
@@ -921,7 +828,6 @@ mod tests {
 
     #[test]
     fn eta_requires_a_start_timestamp() {
-        // Past the threshold but with no elapsed time recorded yet.
         assert_eq!(
             time_remaining_from(DownloadFlashingStatus::FlashingProgress(0.5), None),
             None
@@ -930,7 +836,6 @@ mod tests {
 
     #[test]
     fn eta_clamps_progress_above_one() {
-        // A progress value >1.0 clamps to 1.0, yielding a zero remainder.
         assert_eq!(
             time_remaining_from(
                 DownloadFlashingStatus::FlashingProgress(1.5),

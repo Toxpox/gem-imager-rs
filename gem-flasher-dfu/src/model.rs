@@ -1,7 +1,5 @@
 use std::{fmt, io, path::Path, time::Duration};
 
-/// Stable USB topology identity. Device addresses and serial strings may change across reset;
-/// bus plus the complete physical port chain does not as long as the cable stays in place.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct UsbPath {
     pub bus: u8,
@@ -16,7 +14,6 @@ impl UsbPath {
         Ok(Self { bus, ports })
     }
 
-    /// Compatibility selector for identifiers produced before full topology paths were exposed.
     pub fn legacy(bus: u8, port: u8) -> Self {
         Self {
             bus,
@@ -139,9 +136,6 @@ pub struct DfuStatus {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TransportErrorKind {
     Disconnected,
-    /// `LIBUSB_ERROR_NOT_FOUND`. On a control transfer this is a genuine "no such
-    /// interface/alt-setting", but `libusb_reset_device` documents it as the *normal* answer when
-    /// the device had to be re-enumerated — see [`Self::is_reset_reenumeration`].
     NotFound,
     Io,
     Timeout,
@@ -162,11 +156,6 @@ impl TransportErrorKind {
         )
     }
 
-    /// Whether this is how a *successful* device reset reports itself.
-    ///
-    /// Kept separate from [`Self::may_be_reset_disconnect`]: that predicate also guards the
-    /// streaming path, where a missing interface must stay an error instead of being read as "the
-    /// board booted".
     pub const fn is_reset_reenumeration(self) -> bool {
         matches!(self, Self::NotFound)
     }
@@ -195,32 +184,13 @@ impl fmt::Display for TransportError {
 
 impl std::error::Error for TransportError {}
 
-/// What the DFU chain is doing right now.
-///
-/// A single 0..1 number cannot describe this chain honestly: it contains two phases whose duration
-/// is not measurable in bytes (waiting for the board to re-enumerate, and the eMMC flush after the
-/// last byte) and four transfers whose sizes differ by three orders of magnitude. Reporting each
-/// phase by name lets the front-end weight them and show an indeterminate indicator exactly where
-/// there is nothing to measure, instead of a bar that stalls and then jumps.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum DfuProgress {
-    /// Resolving and verifying the three boot artifacts. Not byte-measured: they are small and
-    /// usually served from cache.
     BootArtifacts,
-    /// Reading the raw eMMC image end to end to establish the digest the write is verified against.
-    ///
-    /// Byte-measured on purpose: this pass touches the whole multi-gigabyte image before a single
-    /// USB packet is sent, and a screen that keeps saying "verifying boot files" through all of it
-    /// is indistinguishable from a hang.
     ChecksummingImage(f32),
-    /// Waiting for the board to disappear and come back on the same physical port.
     Reconnecting,
-    /// Transferring boot stage `index` (1-based, of three); `fraction` is within that stage.
     BootStage { index: u8, fraction: f32 },
-    /// Streaming the raw eMMC image — the dominant cost of the whole operation.
     RawWrite(f32),
-    /// After the last byte: manifest, flush and final detach. The board is writing, so this takes
-    /// minutes with nothing to count.
     Finalizing,
 }
 

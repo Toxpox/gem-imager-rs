@@ -42,13 +42,11 @@ fn flash(target: TargetCommands, quite: bool) {
                     .unwrap();
 
                 while let Ok(progress) = rx.recv() {
-                    // Skip if no change in stage
                     if progress == last_state {
                         continue;
                     }
 
                     match (progress, last_state) {
-                        // Only the progress value moved, so the existing bar is updated in place.
                         (
                             DownloadFlashingStatus::DownloadingProgress(p),
                             DownloadFlashingStatus::DownloadingProgress(_),
@@ -63,7 +61,6 @@ fn flash(target: TargetCommands, quite: bool) {
                         ) => {
                             last_bar.as_ref().unwrap().set_position((p * 100.0) as u64);
                         }
-                        // The DFU stream, same treatment: one bar per stage of the chain.
                         (
                             DownloadFlashingStatus::RawWrite(p),
                             DownloadFlashingStatus::RawWrite(_),
@@ -78,7 +75,6 @@ fn flash(target: TargetCommands, quite: bool) {
                         ) => {
                             last_bar.as_ref().unwrap().set_position((p * 100.0) as u64);
                         }
-                        // Create new bar when stage has changed
                         (DownloadFlashingStatus::DownloadingProgress(p), _)
                         | (DownloadFlashingStatus::FlashingProgress(p), _)
                         | (DownloadFlashingStatus::RawWrite(p), _)
@@ -97,8 +93,6 @@ fn flash(target: TargetCommands, quite: bool) {
                             temp_bar.set_position((p * 100.0) as u64);
                             last_bar = Some(temp_bar);
                         }
-                        // A new stage with nothing to count prints instead of drawing a bar; the three DFU phases with no
-                        // measurable progress belong here rather than on a bar that would have to invent a position.
                         (DownloadFlashingStatus::Customizing, _)
                         | (DownloadFlashingStatus::ResolvingBootArtifacts, _)
                         | (DownloadFlashingStatus::Reconnecting, _)
@@ -246,7 +240,6 @@ fn check_macos_device_path(dst: PathBuf) -> PathBuf {
                 console::style(&rdisk).bold()
             ));
 
-            // Simple stdin read since we don't have dialoguer
             let mut input = String::new();
             std::io::stdin()
                 .read_line(&mut input)

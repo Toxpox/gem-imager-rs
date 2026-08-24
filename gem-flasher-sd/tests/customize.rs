@@ -1,11 +1,5 @@
 #![cfg(feature = "mock_sd")]
 
-//! End-to-end test of the public `flash` entry point *with customizations
-//! applied*. The existing tests/flashing.rs public test flashes with EMPTY
-//! customizations, so the customization loop in `flash` is never exercised
-//! through the public API. This drives it by flashing a full (MBR + FAT32)
-//! image and asserting the injected file lands in the boot partition.
-
 use std::io::{Cursor, Read};
 
 use gem_flasher_sd::mock_sd::MockSd;
@@ -13,8 +7,6 @@ use gem_flasher_sd::{ContentType, Customization, Destination, ParitionType};
 
 #[test]
 fn flash_applies_customization_through_public_api() {
-    // A fresh MockSd is a valid 128 MiB MBR + FAT32 image, so its bytes are flashed back onto its own
-    // path and the result inspected with `open_boot`.
     let mut mock = MockSd::new();
     let image_bytes: Box<[u8]> = std::fs::read(mock.path()).unwrap().into_boxed_slice();
     let img_size = image_bytes.len() as u64;
@@ -23,8 +15,6 @@ fn flash_applies_customization_through_public_api() {
 
     const FILE_NAME: &str = "customization.txt";
     const FILE_DATA: &[u8] = b"hello from the flasher test";
-    // `ContentType` is not Send, so the iterator constructs it lazily from Send inputs via `map` --
-    // the same shape the real facade uses to satisfy `flash`'s `+ Send` bound.
     let content = vec![(FILE_NAME.into(), FILE_DATA.to_vec().into_boxed_slice())]
         .into_iter()
         .map(|(name, data): (Box<str>, Box<[u8]>)| (name, ContentType::DataAppend(data)));
@@ -33,7 +23,6 @@ fn flash_applies_customization_through_public_api() {
         content,
     };
 
-    // Progress to completion is covered by tests/flashing.rs, so this flashes without a channel.
     gem_flasher_sd::flash(
         img_resolver,
         Destination::File(mock.path().into()),
@@ -43,7 +32,6 @@ fn flash_applies_customization_through_public_api() {
     )
     .expect("flash with customization should succeed");
 
-    // The customization file should now exist in the boot partition.
     let fs = mock.open_boot();
     let mut contents = String::new();
     fs.root_dir()

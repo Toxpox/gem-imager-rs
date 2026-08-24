@@ -42,15 +42,9 @@ pub(crate) static BOARD_PHOTO_T3_GEM_O1: LazyLock<BoardPhoto> =
 pub(crate) static BOARD_PHOTO_BEAGLEY_AI: LazyLock<BoardPhoto> =
     LazyLock::new(|| BoardPhoto::new(constants::BOARD_PHOTO_BEAGLEY_AI_BYTES));
 
-/// A bundled board photograph and the aspect ratio it must be drawn at.
-///
-/// The ratio is read from the asset rather than written down beside it: a list row gives the image
-/// a fixed width and would otherwise need a hard-coded height, which silently starts cropping or
-/// letterboxing the moment someone re-exports the picture at a different size.
 #[derive(Debug, Clone)]
 pub(crate) struct BoardPhoto {
     handle: widget::image::Handle,
-    /// width / height of the source image.
     aspect: f32,
 }
 
@@ -66,18 +60,11 @@ impl BoardPhoto {
         }
     }
 
-    /// Height that keeps the photo undistorted at `width`.
     fn height_for(&self, width: f32) -> f32 {
         width / self.aspect
     }
 }
 
-/// The bundled photograph of a board, matched on its catalog tag.
-///
-/// Matching is on tag, not on name: the tag is the identity the catalog itself uses to attach
-/// images to a board, so a display-name change cannot detach the picture. A board this build has
-/// no photograph of returns `None` and keeps the catalog icon it always had — the fallback chain
-/// is never shortened by adding a picture for one board.
 pub(crate) fn board_photo(tags: &[String]) -> Option<&'static BoardPhoto> {
     tags.iter().find_map(|tag| match tag.as_str() {
         gem_config::t3::T3_BOARD_TAG => Some(&*BOARD_PHOTO_T3_GEM_O1),
@@ -86,8 +73,6 @@ pub(crate) fn board_photo(tags: &[String]) -> Option<&'static BoardPhoto> {
     })
 }
 
-/// A board's row picture in the selection list: the bundled photograph when this build has one,
-/// else the catalog icon, else the generic board glyph.
 pub(crate) fn board_list_image<'a>(
     cache: &'a gem_iced_widgets::cached_icon::Cache<url::Url>,
     tags: &[String],
@@ -104,7 +89,6 @@ pub(crate) fn board_list_image<'a>(
     }
 }
 
-/// A board's picture on a detail pane, where the width is whatever the pane gives it.
 fn board_image<'a>(
     cache: &'a gem_iced_widgets::cached_icon::Cache<url::Url>,
     tags: &[String],
@@ -154,13 +138,6 @@ pub(crate) fn svg_icon_style(theme: &iced::Theme, _: svg::Status) -> svg::Style 
     }
 }
 
-/// |------|------|
-/// |      |      |
-/// |      | col2 |
-/// | col1 |      |
-/// |      |------|
-/// |      | btns |
-/// |------|------|
 pub(crate) fn page_type1<'a>(
     col1: Element<'a, GemImagerMessage>,
     col2: Element<'a, GemImagerMessage>,
@@ -198,13 +175,6 @@ pub(crate) fn page_type1<'a>(
     .into()
 }
 
-/// |--------|
-/// |        |
-/// |  row1  |
-/// |        |
-/// |--------|
-/// |  btns  |
-/// |--------|
 pub(crate) fn page_type2<'a>(
     row1: Element<'a, GemImagerMessage>,
     btns: impl IntoIterator<Item = widget::Button<'a, GemImagerMessage>>,
@@ -227,13 +197,6 @@ pub(crate) fn page_type2<'a>(
         .into()
 }
 
-/// |--------|
-/// |        |
-/// |  row1  |
-/// |        |
-/// |--------|
-/// |  btns  |
-/// |--------|
 pub(crate) fn page_type3<'a>(
     row1: Element<'a, GemImagerMessage>,
     btns: impl IntoIterator<Item = widget::Button<'a, GemImagerMessage>>,
@@ -265,7 +228,6 @@ pub(crate) fn board_view_pane<'a>(
         iced::Shrink,
     );
 
-    // Copy a catalog entry, not the row this screen was rendered from.
     let entry = gem_config::config::Device::from(dev);
     let copy_btn = copy_btn(COPY_ICON.clone()).on_press_with(move || {
         let json = serde_json::to_string_pretty(&entry).expect("device catalog entry serialises");
@@ -373,15 +335,12 @@ pub(crate) fn copy_btn<'a>(handle: svg::Handle) -> widget::Button<'a, GemImagerM
         .style(widget::button::secondary)
 }
 
-/// Horizontal separator between rows of a list pane.
 pub(crate) fn list_separator<'a>() -> Element<'a, GemImagerMessage> {
     widget::center(widget::rule::horizontal(2))
         .padding(iced::Padding::ZERO.left(16))
         .into()
 }
 
-/// Scrollable pane listing selectable items: a search box, a separator, any
-/// extra `header` rows, then the `items` themselves.
 pub(crate) fn list_pane<'a>(
     search_text: &'a str,
     scroll_id: &widget::Id,
@@ -398,8 +357,6 @@ pub(crate) fn list_pane<'a>(
     .into()
 }
 
-/// A selectable row of a [`list_pane`], laid out as a horizontal run of
-/// `contents` (typically a leading icon followed by a label).
 pub(crate) fn list_item<'a>(
     contents: impl IntoIterator<Item = Element<'a, GemImagerMessage>>,
     is_selected: bool,
@@ -415,12 +372,10 @@ pub(crate) fn list_item<'a>(
     .style(move |theme, status| card_btn_style(theme, status, is_selected))
 }
 
-/// The primary label of a [`list_item`].
 pub(crate) fn list_label<'a>(label: impl widget::text::IntoFragment<'a>) -> widget::Text<'a> {
     widget::text(label).size(18).width(iced::Length::Fill)
 }
 
-/// Scrollable pane detailing whatever is currently selected in a [`list_pane`].
 pub(crate) fn detail_pane<'a>(
     content: widget::Column<'a, GemImagerMessage>,
     scroll_id: &widget::Id,
@@ -430,7 +385,6 @@ pub(crate) fn detail_pane<'a>(
         .into()
 }
 
-/// Heading of a [`detail_pane`] with nothing selected yet.
 pub(crate) fn placeholder_heading<'a>(label: &'a str) -> widget::Text<'a> {
     widget::text(label)
         .size(28)
@@ -439,7 +393,6 @@ pub(crate) fn placeholder_heading<'a>(label: &'a str) -> widget::Text<'a> {
         .font(constants::FONT_BOLD)
 }
 
-/// A [`detail_pane`] with nothing selected yet.
 pub(crate) fn placeholder_pane<'a>(label: &'a str) -> Element<'a, GemImagerMessage> {
     widget::center(placeholder_heading(label))
         .padding(VIEW_COL_PADDING)
@@ -510,11 +463,6 @@ pub(crate) fn network_image_or_default<'a>(
 mod tests {
     use super::{BOARD_PHOTO_BEAGLEY_AI, BOARD_PHOTO_T3_GEM_O1, board_photo};
 
-    /// Each shipped board resolves to *its own* photograph.
-    ///
-    /// The two boards look alike at list-row size, so a copy/paste in the match arm would swap
-    /// them without anything failing to compile — and a user holding a BeagleY-AI would be shown
-    /// an Obsidian. Comparing the resolved handle against the expected asset is what catches that.
     #[test]
     fn each_board_tag_resolves_to_its_own_photo() {
         let t3 = board_photo(&[gem_config::t3::T3_BOARD_TAG.to_string()])
@@ -530,20 +478,12 @@ mod tests {
         );
     }
 
-    /// A board this build has no photograph of keeps the catalog icon path.
-    ///
-    /// `board_photo` returning `Some` for an unknown board would replace a correct remote icon
-    /// with a picture of different hardware, which is worse than the generic glyph.
     #[test]
     fn an_unknown_board_has_no_bundled_photo() {
         assert!(board_photo(&[]).is_none());
         assert!(board_photo(&["beagleplay".to_string()]).is_none());
     }
 
-    /// The photo is found regardless of where the tag sits in the catalog's tag set.
-    ///
-    /// Tags arrive from a `HashSet` in the config model, so their order is not stable between
-    /// runs; matching only the first tag would make the picture appear intermittently.
     #[test]
     fn the_photo_is_found_behind_other_tags() {
         let tags = vec![
@@ -559,10 +499,6 @@ mod tests {
         );
     }
 
-    /// The aspect ratio used for list rows comes from the asset and is landscape.
-    ///
-    /// A list row fixes the width and derives the height from this ratio. If the ratio were ever
-    /// read as height/width, every board row would render a tall, cropped sliver.
     #[test]
     fn board_photos_report_a_landscape_aspect_ratio() {
         for photo in [&*BOARD_PHOTO_T3_GEM_O1, &*BOARD_PHOTO_BEAGLEY_AI] {
@@ -571,7 +507,6 @@ mod tests {
                 "board photos are landscape; got aspect {}",
                 photo.aspect
             );
-            // A 100px-wide row must stay shorter than it is wide.
             assert!(photo.height_for(100.0) < 100.0);
         }
     }

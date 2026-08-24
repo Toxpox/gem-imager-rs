@@ -1,5 +1,3 @@
-//! Read-only diagnostic for the T3 ROM DFU Windows driver state.
-
 fn main() {
     let state = gem_winusb::probe();
     println!("PnP state: {state:?}");

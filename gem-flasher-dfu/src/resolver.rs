@@ -14,8 +14,6 @@ use crate::{
     model::{DfuStage, DfuStageInput, DfuStageKind},
 };
 
-/// One boot artifact that has passed the manifest, byte-count and SHA-256 gates and is now
-/// reachable under the downloader's content-addressed cache name.
 #[derive(Debug, Clone)]
 pub struct ResolvedBootArtifact {
     pub stage: DfuStage,
@@ -130,8 +128,6 @@ impl BootArtifactResolver {
         profile: &DfuProfile,
         cancel: Option<&CancellationToken>,
     ) -> Result<Vec<ResolvedBootArtifact>> {
-        // `enable_all` is not optional: without the IO and time drivers the first request panics with
-        // "there is no reactor running", and a panic on a blocking worker never reaches the failure screen.
         tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()

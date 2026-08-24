@@ -44,8 +44,6 @@ fn main() -> iced::Result {
         .try_init()
         .expect("Failed to register tracing_subscriber");
 
-    // Release builds are `windows_subsystem = "windows"`, so a panic has nowhere to go and the default
-    // hook does not touch tracing. Route panics into the log file before any of them can happen.
     {
         let default_hook = std::panic::take_hook();
         std::panic::set_hook(Box::new(move |info| {
@@ -59,11 +57,8 @@ fn main() -> iced::Result {
 
     tracing::info!("Resolved GUI keymap: {:?}", helpers::system_keymap());
 
-    // A staging image is a full OS image carrying the user's Wi-Fi PSK and password hash. `Drop`
-    // removes it on every ordinary path; this covers a previous run killed mid-write.
     staging::cleanup_stale();
 
-    // Force using the low power gpu since this is not a GPU intensive application
     unsafe { std::env::set_var("WGPU_POWER_PREF", "low") };
 
     let icon = iced::window::icon::from_file_data(
@@ -76,8 +71,6 @@ fn main() -> iced::Result {
     #[cfg(all(target_os = "macos", feature = "notify-rust"))]
     let _ = notify_rust::set_application(constants::APP_ID);
 
-    // macOS grants Wi-Fi SSID access asynchronously to the *main* thread's run loop, so ask before
-    // the event loop starts; the detection worker would never receive the answer. No-op elsewhere.
     gem_host_wifi::prime_location_authorization();
 
     let settings = iced::window::Settings {
@@ -100,7 +93,6 @@ fn main() -> iced::Result {
 
 #[derive(Default)]
 enum GemImager {
-    // Dummy state to allow clone-free move among variants. Should never be exposed in view.
     #[default]
     Dummy,
     ChooseBoard(state::ChooseBoardState),
@@ -249,7 +241,6 @@ impl GemImager {
         const INTERVAL: std::time::Duration = std::time::Duration::from_secs(1);
 
         let destinations = match self {
-            // A pair with no write method only enumerates destinations the write path would refuse.
             Self::ChooseDest(x) if !x.write_methods.is_empty() => Subscription::run_with(
                 (
                     x.write_methods,
@@ -336,9 +327,6 @@ impl GemImager {
                 }
                 Err(e) => {
                     tracing::error!("Flashing failed with error: {:#?}", e);
-                    // `{e}` prints only the outermost error, which is often the least informative: an integrity
-                    // failure arrives as "Unknown Error during IO", reading like a full disk. `{e:#}` appends the
-                    // source chain, so a bad download can be told apart from a faulty card.
                     GemImagerMessage::FlashFail(format!("{e:#}"))
                 }
             };
@@ -443,7 +431,6 @@ impl GemImager {
                     .selected_image
                     .expect("Image should already be selected");
 
-                // Board capability × image compatibility × what this build can actually drive.
                 let write_methods =
                     helpers::WriteMethods::resolve(&inner.selected_board, &selected_image.1);
                 tracing::info!(
@@ -541,8 +528,6 @@ impl GemImager {
 
                     Task::batch([inner.save_app_config(), self.scroll_reset()])
                 }
-                // Saved for the next run. The secret fields are `#[serde(skip)]`, so only the host name, network
-                // name, country, time zone and keymap land on disk (`instruction.md` 10.3).
                 helpers::FlashingCustomization::T3GemInit { config, .. } => {
                     let mut temp = inner
                         .common

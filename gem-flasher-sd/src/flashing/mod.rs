@@ -7,7 +7,6 @@ use sha2::{Digest as _, Sha256};
 
 use crate::Result;
 use crate::customization::Customization;
-// `Commit` is reachable through the `Eject: Commit` supertrait bound, so it needs no import here.
 use crate::helpers::{
     DirectIoBuffer, Eject, PublishLayout, chan_send, check_cancel, progress, read_at_least,
 };
@@ -15,38 +14,24 @@ use crate::helpers::{
 #[cfg(test)]
 mod tests;
 
-// Stack overflow occurs during debug since box moves data from stack to heap in debug builds
 #[cfg(not(debug_assertions))]
 const BUFFER_SIZE: usize = 1024 * 1024;
 #[cfg(debug_assertions)]
 const BUFFER_SIZE: usize = 8 * 1024;
 
-/// Direct IO wants reads whose length is a multiple of the device block size, so the tail of the
-/// read-back is rounded up to this. `BUFFER_SIZE` is a multiple of it in both build profiles.
 const IO_ALIGNMENT: usize = 4096;
 
-/// Which stage of the flash a progress value belongs to.
-///
-/// The stages are reported separately rather than folded into one 0..1 bar. A full read-back costs
-/// roughly as much time as the write it verifies, and a bar that reaches 100% and then sits there
-/// for another minute is exactly what makes a user pull the card early.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Status {
     Preparing,
-    /// Fraction of the image written to the device.
     Writing(f32),
-    /// Fraction of the written region read back and hashed.
     Verifying(f32),
     Customizing,
 }
 
-/// What actually reached the device, as counted by the writer itself.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct WriteOutcome {
-    /// Bytes handed to the device, including the zero padding `read_aligned` adds to the last
-    /// chunk. This is the region the read-back covers.
     written: u64,
-    /// SHA-256 over exactly those `written` bytes.
     sha256: [u8; 32],
 }
 
@@ -71,12 +56,6 @@ fn reader_task(
     Ok(())
 }
 
-/// Writes the decoded stream to the device, counting and hashing every byte on the way past.
-///
-/// The hash is taken here rather than on the reader side because the point of comparison is what
-/// the *writer* claims to have put on the device: read-back then answers "did the device keep what
-/// I handed it", independently of whether the image itself was the right one (which the decoder's
-/// own extract gate answers).
 fn writer_task(
     img_size: u64,
     mut sd: impl Write + Seek,
@@ -91,7 +70,6 @@ fn writer_task(
     while let Ok((buf, count)) = buf_rx.recv() {
         let chunk = &buf.as_slice()[..count];
 
-        // `write_all` turns a short write into an error; relaxing it to `write` would drop the tail.
         sd.write_all(chunk)?;
         hasher.update(chunk);
 
@@ -104,8 +82,6 @@ fn writer_task(
 
     sd.flush()?;
 
-    // The reader pads the final chunk to 512-byte alignment, so the writer may overshoot but never
-    // undershoot. Fewer bytes than the image declares means the stream ended early.
     if pos < img_size {
         return Err(crate::Error::ShortWrite {
             expected: img_size,
@@ -119,8 +95,6 @@ fn writer_task(
     })
 }
 
-/// A lot of reads from compressed files are not aligned. Since reading even from compressed files
-/// is significantly faster than writing to SD Card, better to do multiple reads.
 fn read_aligned(mut img: impl Read, buf: &mut [u8]) -> Result<usize> {
     const ALIGNMENT: usize = 512;
 
@@ -166,19 +140,11 @@ fn write_sd(
         let write_res = writer_task(img_size, sd, chan, rx2, tx1, cancel);
         tracing::info!("Total Time taken: {:?}", global_start.elapsed());
 
-        // The reader's error is reported first because it is the root cause: a decoder that fails its
-        // integrity gate closes the channel, which the writer would surface only as `ShortWrite`.
         handle.join().unwrap()?;
         write_res
     })
 }
 
-/// Reads the written region back off the device and compares it with what the writer produced.
-///
-/// This is the only check that covers the device itself — controller-level write caching, a card
-/// lying about its capacity, and a cable that dropped mid-transfer all survive every earlier gate
-/// and fail here. It runs after the sync and before customization, so it sees the raw image exactly
-/// as it was written.
 fn verify_written(
     mut sd: impl Read + Seek,
     outcome: WriteOutcome,
@@ -217,21 +183,10 @@ fn verify_written(
     Ok(())
 }
 
-/// Refuse targets that are obviously wrong before anything is opened, and report the capacity the
-/// image has to fit into.
-///
-/// `is_removable` on its own is not the check: USB-attached system disks and internal card readers
-/// each report as removable on at least one platform, so the drive list's own system-disk
-/// determination is what gates the write.
 fn guard_target(path: &std::path::Path) -> Result<Option<u64>> {
     let dev = crate::devices(false).into_iter().find(|d| d.path == path);
 
     if dev.is_none() {
-        // Enumeration missing the device is not evidence that writing to it is safe. The write path
-        // is about to hand the path to `Clear-Disk` on Windows and to a raw `O_DIRECT` handle
-        // elsewhere, so an unrecognised target skips both the system-disk and the capacity gate.
-        // The format path already refuses this case (`helpers::destination_size`); refusing here
-        // too keeps one policy across the crate.
         return Err(crate::Error::UnknownDestination {
             path: path.display().to_string().into_boxed_str(),
         });
@@ -240,8 +195,6 @@ fn guard_target(path: &std::path::Path) -> Result<Option<u64>> {
     evaluate_target(dev.as_ref())
 }
 
-/// The target decision itself, separated from device enumeration so it can be tested without real
-/// hardware.
 fn evaluate_target(dev: Option<&crate::Device>) -> Result<Option<u64>> {
     let Some(dev) = dev else {
         return Ok(None);
@@ -253,39 +206,9 @@ fn evaluate_target(dev: Option<&crate::Device>) -> Result<Option<u64>> {
         });
     }
 
-    // A zero size means the backend reported none; treat that as unknown, not as too small.
     Ok(Some(dev.size).filter(|s| *s > 0))
 }
 
-/// Flash OS image to SD card.
-///
-/// # Customization
-///
-/// Support post flashing customization. Currently only sysconf is supported, which is used by
-/// [BeagleBoard.org].
-///
-/// # Image
-///
-/// Using a resolver function for image and image size. This is to allow downloading the image, or
-/// some kind of lazy loading after SD card permissions have be acquired. This is useful in GUIs
-/// since the user would expect a password prompt at the start of flashing.
-///
-/// Many users might switch task after starting the flashing process, which would make it
-/// frustrating if the prompt occured after downloading.
-///
-/// The resolver is also the non-destructive integrity boundary. It must not return until every
-/// source-side validation that can fail at end-of-stream, such as archive and extracted-image
-/// hashes, has completed. Once it succeeds and the capacity/cancellation checks pass, flashing may
-/// hide the destination's existing partition layout before reading from the returned reader.
-///
-/// # Progress
-///
-/// Each [`Status`] stage carries its own 0..1 progress; the stages do not share one bar.
-///
-/// # Verification
-///
-/// The written region is always read back off the device and compared against the bytes the writer
-/// produced. A mismatch is [`crate::Error::ReadBackMismatch`] — never a warning.
 pub fn flash<'a, R, C>(
     img: impl FnOnce() -> std::io::Result<(R, u64)> + Send,
     dst: crate::Destination,
@@ -344,7 +267,6 @@ where
         result => result?,
     };
 
-    // Checked before the first write: a card that runs out halfway wastes an hour first.
     if let Some(available) = capacity
         && img_size > available
     {
@@ -356,10 +278,6 @@ where
 
     check_cancel(cancel.as_ref())?;
 
-    // Everything above this line can still fail without touching the destination: image resolution
-    // (which is where a download and its integrity gates run), the capacity check, and the first
-    // cancellation point. Wiping the existing partition table is irreversible, so it happens only
-    // once the flash is actually committed to writing.
     sd.hide_existing_layout(capacity)?;
 
     tracing::info!("Writing to SD Card");
@@ -387,7 +305,6 @@ where
     tracing::info!("Publishing and verifying the partition layout");
     sd.publish_layout()?;
 
-    // Everything is durable by now, so a refused eject is a convenience problem, not a data one.
     tracing::info!("Ejecting SD Card");
     if let Err(e) = sd.eject() {
         tracing::warn!("Failed to eject the destination: {e}");
