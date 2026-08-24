@@ -3,8 +3,10 @@ use std::{borrow::Cow, fmt::Display, path::PathBuf, sync::LazyLock, time::Durati
 
 use crate::{GemImagerMessage, PACKAGE_QUALIFIER, constants};
 use gem_config::config;
+use gem_flasher::DownloadFlashingStatus;
+#[cfg(any(feature = "sd", feature = "dfu"))]
+use gem_flasher::GemFlasherTarget;
 use gem_flasher::img::OsImage;
-use gem_flasher::{DownloadFlashingStatus, GemFlasherTarget};
 use std::sync::mpsc;
 use url::Url;
 
@@ -548,7 +550,10 @@ pub(crate) async fn flash(
     img: BoardImage,
     customization: FlashingCustomization,
     dst: Destination,
-    chan: mpsc::SyncSender<DownloadFlashingStatus>,
+    #[cfg_attr(not(feature = "sd"), allow(unused_variables))] chan: mpsc::SyncSender<
+        DownloadFlashingStatus,
+    >,
+    #[cfg_attr(not(feature = "sd"), allow(unused_variables))]
     cancel_sync: gem_helper::cancel::CancellationToken,
 ) -> anyhow::Result<()> {
     if let Some((title, _)) = dst.unavailable_reason() {
@@ -632,7 +637,7 @@ pub(crate) async fn flash(
             .await
             .unwrap()
         }
-        _ => unimplemented!(),
+        _ => anyhow::bail!("no write path is compiled for this image and destination combination"),
     }
 }
 
@@ -783,7 +788,9 @@ pub(crate) fn file_filter(flasher: config::Flasher) -> &'static [&'static str] {
         #[cfg(feature = "sd")]
         config::Flasher::SdCard => gem_flasher::sd::Target::FILE_TYPES,
         #[allow(unreachable_patterns)]
-        _ => unimplemented!(),
+        _ => unreachable!(
+            "file filter requested for {flasher:?}, which has no write path in this build"
+        ),
     }
 }
 
@@ -844,7 +851,9 @@ impl FlashingCustomization {
             }
             config::Flasher::SdCard => Self::NoneSd,
             #[allow(unreachable_patterns)]
-            _ => unimplemented!(),
+            _ => unreachable!(
+                "customization requested for {flasher:?}, which has no write path in this build"
+            ),
         }
     }
 
