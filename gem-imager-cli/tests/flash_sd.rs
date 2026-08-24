@@ -1,4 +1,3 @@
-
 use std::io::{Read, Seek, Write};
 
 use clap::Parser;

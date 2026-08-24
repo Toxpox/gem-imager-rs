@@ -1,4 +1,3 @@
-
 use rusb::UsbContext as _;
 
 const DFU_CLASS: u8 = 0xfe;

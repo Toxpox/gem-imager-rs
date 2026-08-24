@@ -1,4 +1,3 @@
-
 use gem_config::t3::canonical::{T3_DFU_PRODUCT_ID, T3_DFU_VENDOR_ID};
 
 const RULES: &str = include_str!("../assets/packages/linux/udev/10-t3gemstone.rules");

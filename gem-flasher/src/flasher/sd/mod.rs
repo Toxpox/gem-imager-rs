@@ -1,4 +1,3 @@
-
 mod cloud_init;
 
 use gem_helper::cancel::CancellationToken;

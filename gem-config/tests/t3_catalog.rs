@@ -1,4 +1,3 @@
-
 use gem_config::t3::{
     DiagnosticSummary, ProductScope, T3_BOARD_TAG, T3CatalogError, T3Diagnostic, WriteMethod,
     parse_catalog,

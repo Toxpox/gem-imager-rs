@@ -1,4 +1,3 @@
-
 use std::time::Duration;
 
 use gem_winusb::{DriverState, InstallError, InstallOutcome};

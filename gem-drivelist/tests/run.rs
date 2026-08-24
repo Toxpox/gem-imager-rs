@@ -1,4 +1,3 @@
-
 #[test]
 fn drive_list_succeeds_and_descriptors_are_well_formed() {
     let devices = gem_drivelist::drive_list().expect("drive_list should succeed");

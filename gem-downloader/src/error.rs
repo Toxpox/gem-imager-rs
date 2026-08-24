@@ -1,4 +1,3 @@
-
 use std::io;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]

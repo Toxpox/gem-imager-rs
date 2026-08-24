@@ -1,4 +1,3 @@
-
 use gem_helper::secret::{DerivedSecret, Secret};
 use windows::Networking::Connectivity::NetworkInformation;
 use windows::System::UserProfile::GlobalizationPreferences;

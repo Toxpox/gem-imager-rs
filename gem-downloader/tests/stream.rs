@@ -1,4 +1,3 @@
-
 use gem_downloader::{
     ArchiveIntegrity, DownloadError, Downloader, RedirectRefusal, TransportPolicy,
 };

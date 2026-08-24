@@ -1,4 +1,3 @@
-
 use std::io;
 
 use sha2::{Digest as _, Sha256};

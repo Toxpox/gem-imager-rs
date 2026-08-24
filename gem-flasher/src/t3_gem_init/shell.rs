@@ -1,4 +1,3 @@
-
 use super::T3GemInitError;
 
 pub(super) fn quote(field: &'static str, value: &str) -> Result<String, T3GemInitError> {

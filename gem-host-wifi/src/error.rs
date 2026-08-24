@@ -1,4 +1,3 @@
-
 use thiserror::Error;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

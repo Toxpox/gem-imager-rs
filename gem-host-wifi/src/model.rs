@@ -1,4 +1,3 @@
-
 use gem_helper::secret::Secret;
 
 #[derive(Clone, PartialEq, Eq)]

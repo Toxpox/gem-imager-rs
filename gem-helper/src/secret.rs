@@ -1,4 +1,3 @@
-
 use zeroize::{Zeroize, Zeroizing};
 
 #[derive(Clone, Default, PartialEq, Eq)]

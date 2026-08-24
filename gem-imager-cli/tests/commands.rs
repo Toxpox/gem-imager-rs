@@ -1,4 +1,3 @@
-
 use clap::{Parser, ValueEnum};
 use gem_imager_cli::cli::Opt;
 

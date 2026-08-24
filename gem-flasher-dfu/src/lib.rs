@@ -1,4 +1,3 @@
-
 mod model;
 mod resolver;
 mod state_machine;

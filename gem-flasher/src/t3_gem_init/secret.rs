@@ -1,4 +1,3 @@
-
 pub use gem_helper::secret::{DerivedSecret, Secret};
 
 #[cfg(test)]

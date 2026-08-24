@@ -1,4 +1,3 @@
-
 use gem_helper::secret::Secret;
 use objc2_core_wlan::{CWKeychainDomain, CWKeychainFindWiFiPassword, CWSecurity, CWWiFiClient};
 use objc2_foundation::{NSData, NSString};

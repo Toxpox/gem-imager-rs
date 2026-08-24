@@ -1,4 +1,3 @@
-
 use std::io;
 
 use semver::Version;

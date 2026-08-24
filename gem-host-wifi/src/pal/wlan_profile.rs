@@ -1,4 +1,3 @@
-
 use crate::model::SecurityKind;
 
 #[derive(Debug, PartialEq, Eq)]

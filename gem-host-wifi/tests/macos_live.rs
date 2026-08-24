@@ -1,4 +1,3 @@
-
 #![cfg(target_os = "macos")]
 
 use gem_host_wifi::{DetectedSsid, HostWifiError, PasswordOutcome, SecurityKind};

@@ -1,4 +1,3 @@
-
 #[cfg(feature = "piped_image")]
 use gem_helper::file_stream::ReaderFileStream;
 use rc_zip_sync::ReadZipStreaming;

@@ -1,4 +1,3 @@
-
 fn main() {
     let state = gem_winusb::probe();
     println!("PnP state: {state:?}");
