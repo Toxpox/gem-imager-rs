@@ -14,8 +14,6 @@ fn test_file(len: usize) -> std::io::Cursor<Box<[u8]>> {
     std::io::Cursor::new(data.into())
 }
 
-/// `flash` is generic over the customization iterator, so even an empty flash has to name a
-/// concrete item type.
 type NoCustomizations =
     std::iter::Empty<Customization<std::iter::Empty<(Box<str>, ContentType<'static>)>>>;
 
@@ -25,30 +23,25 @@ fn no_customizations() -> NoCustomizations {
 
 #[test]
 fn test_public_flash_with_temp_file() {
-    const FILE_LEN: usize = 16 * 1024; // 16 KB
+    const FILE_LEN: usize = 16 * 1024;
     let dummy_file = test_file(FILE_LEN);
     let expected_bytes = dummy_file.get_ref().clone();
 
-    // 1. Create a named temporary file to serve as our flash destination
     let temp_destination = NamedTempFile::new().expect("Failed to create temp file");
     let dst = Destination::File(temp_destination.path().into());
 
-    // 2. Image Resolver Closure
     let img_data = expected_bytes.clone();
     let img_resolver = move || {
         let reader = Cursor::new(img_data);
         Ok((reader, FILE_LEN as u64))
     };
 
-    // 3. Progress Channel
     let (tx, rx) = mpsc::sync_channel(32);
 
-    // 4. Execute the public flash function
     let result = gem_flasher_sd::flash(img_resolver, dst, Some(tx), no_customizations(), None);
 
     assert!(result.is_ok(), "Public flash failed: {:?}", result.err());
 
-    // 5. Verify the contents written to the temporary file
     let mut written_file = temp_destination
         .reopen()
         .expect("Failed to reopen temp file");
@@ -60,8 +53,6 @@ fn test_public_flash_with_temp_file() {
     assert_eq!(written_bytes.len(), FILE_LEN);
     assert_eq!(written_bytes, expected_bytes.into_vec());
 
-    // 6. The write must have run to completion with a verify pass. A flash that never reported
-    //    `Verifying` wrote unverified data, which is what this phase exists to prevent.
     let updates: Vec<Status> = rx.try_iter().collect();
     assert!(
         updates
@@ -75,8 +66,6 @@ fn test_public_flash_with_temp_file() {
     );
 }
 
-/// The stages must arrive in pipeline order. In particular verification has to come after the
-/// write, never interleaved with it.
 #[test]
 fn stages_are_reported_in_pipeline_order() {
     const FILE_LEN: usize = 16 * 1024;
@@ -128,7 +117,6 @@ fn flash_aborts_with_cancelled_token() {
 
     let img_resolver = move || Ok((Cursor::new(img_data), FILE_LEN as u64));
 
-    // Cancel the token before flashing begins.
     let token = CancellationToken::default();
     drop(token.drop_guard());
     assert!(token.is_cancelled());
@@ -141,7 +129,6 @@ fn flash_aborts_with_cancelled_token() {
     );
 }
 
-/// A stream that ends early must fail rather than leave a half-written card reported as flashed.
 #[test]
 fn a_truncated_image_fails_instead_of_succeeding() {
     const DECLARED_LEN: u64 = 32 * 1024;

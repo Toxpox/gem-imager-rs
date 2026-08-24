@@ -1,8 +1,3 @@
-//! Flash Linux Os Images to SD Cards with optioinal post-install customization.
-//!
-//! Post-install customization is only available for [BeagleBoard.org] images
-//!
-//! [BeagleBoard.org]: https://www.beagleboard.org/
 
 mod cloud_init;
 
@@ -11,7 +6,6 @@ use std::{borrow::Cow, fmt::Display, path::PathBuf};
 
 use crate::common::{DownloadFlashingStatus, GemFlasherTarget};
 
-/// SD Card
 #[derive(Debug, Hash, PartialEq, Eq, Clone)]
 pub struct Target(gem_flasher_sd::Device);
 
@@ -23,7 +17,6 @@ impl Target {
             .collect()
     }
 
-    /// SD Card size in bytes
     pub const fn size(&self) -> u64 {
         self.0.size
     }
@@ -65,19 +58,12 @@ impl GemFlasherTarget for Target {
     }
 }
 
-/// Linux Image post-install customization options.
-///
-/// Each entry is a file to place on the boot partition. Entries carrying secrets are marked so the
-/// SD backend reads them back off the card and compares them, instead of trusting the write.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct FlashingSdLinuxConfig(Vec<(Box<str>, Box<[u8]>, Verification)>);
 
-/// Whether a customization file is read back off the card after it is written.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 enum Verification {
-    /// Trust the filesystem write, as the BeagleBoard paths have always done.
     None,
-    /// Re-open the partition, read the file back and compare it byte for byte.
     ReadBack,
 }
 
@@ -147,14 +133,6 @@ impl FlashingSdLinuxConfig {
         }
     }
 
-    /// Customization for T3 GemStone images: the `config.ini` file `gem-first-boot` consumes.
-    ///
-    /// The bytes come from [`crate::t3_gem_init`], which is the only place allowed to build them —
-    /// the file is `source`d as root on the board, so it is never assembled by concatenation here.
-    ///
-    /// It is written with [`Verification::ReadBack`]: a `config.ini` that silently failed to land
-    /// produces a board with the factory password and no network, which looks like a successful
-    /// flash until the user tries to log in.
     #[cfg(feature = "t3_gem_init")]
     pub fn t3_gem_init(
         config: &crate::t3_gem_init::T3GemInitConfig,
@@ -203,7 +181,6 @@ impl Extend<Self> for FlashingSdLinuxConfig {
     }
 }
 
-/// Flasher to format SD Cards
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct FormatFlasher(PathBuf);
 
@@ -217,12 +194,6 @@ impl FormatFlasher {
     }
 }
 
-/// Map the SD backend's stages onto the front-end progress vocabulary.
-///
-/// When the destination is a plain file the "write" stage is really the download/extract that
-/// produced it, which is why it is reported as `DownloadingProgress` there. The verify stage keeps
-/// its own fraction in both cases — it is a separate pass over the whole image, not a tail of the
-/// write.
 const fn translate_status(
     status: gem_flasher_sd::Status,
     is_file_dest: bool,
@@ -245,13 +216,6 @@ const fn translate_status(
 mod status_tests {
     use super::*;
 
-    /// The extract gate has to fail the **flash**, not merely the read.
-    ///
-    /// `instruction.md` §8.1 puts the extracted digest between the decoder and the writer, and the
-    /// verifier only settles when the decoder reports EOF. That makes the whole guarantee depend on
-    /// the writer reading all the way to EOF rather than stopping once it has the declared number of
-    /// bytes. Nothing else asserts that, and if it ever regressed the gate would silently never fire
-    /// — the flash would report success for an image the catalog never published.
     #[test]
     fn a_declared_gate_mismatch_fails_the_whole_flash() {
         use crate::img::{ExtractGate, ExtractedIntegrity, OsImage};
@@ -267,8 +231,6 @@ mod status_tests {
 
         let dst = tempfile::NamedTempFile::new().unwrap();
         let size = payload.len() as u64;
-        // Right size, wrong digest: exactly the "a different image was downloaded" case, which the
-        // post-write read-back cannot detect because the card faithfully keeps what it was handed.
         let gate = ExtractGate::Declared(ExtractedIntegrity::new(size, [0u8; 32]));
         let path = archive.path().to_path_buf();
 
@@ -280,8 +242,6 @@ mod status_tests {
         .flash(None, None)
         .expect_err("an image that fails the extracted digest must not flash successfully");
 
-        // Asserted on the source chain, not `err.to_string()`: the SD backend wraps the decoder error in
-        // its catch-all `IoError`, so the reason lives one level down, where the front-end also reads it.
         let chain = format!("{err:#}");
         assert!(
             chain.contains("integrity"),
@@ -289,8 +249,6 @@ mod status_tests {
         );
     }
 
-    /// The same pipeline with the true digest completes, so the test above fails for the declared
-    /// reason rather than because this path never works at all.
     #[test]
     fn a_matching_declared_gate_flashes_to_completion() {
         use crate::img::{ExtractGate, ExtractedIntegrity, OsImage};
@@ -332,8 +290,6 @@ mod status_tests {
         );
     }
 
-    /// Verification must never be folded back into the write bar: the user has to be able to see
-    /// that a distinct read-back pass ran.
     #[test]
     fn verification_keeps_its_own_stage_and_fraction() {
         assert_eq!(
@@ -359,12 +315,6 @@ mod status_tests {
     }
 }
 
-/// Flasher of flashing Os Images to SD Card
-///
-/// # Supported Images
-///
-/// - img: Raw images
-/// - xz: Xz compressed raw images
 #[derive(Debug, Clone)]
 pub struct Flasher<I> {
     img: I,
@@ -426,7 +376,6 @@ where
             Some(chan) => {
                 let (tx, rx) = std::sync::mpsc::sync_channel(2);
                 std::thread::spawn(move || {
-                    // Runs until tx is dropped; on abort cancel is dropped too, signalling the flasher task.
                     while let Ok(x) = rx.recv() {
                         let _ = chan.try_send(translate_status(x, is_file_dest));
                     }

@@ -1,24 +1,3 @@
-//! Windows backend: WinRT for the connected SSID and home region.
-//!
-//! The connected SSID comes from the WinRT connection profile, not `WlanQueryInterface` (§7.1):
-//! since the 2024 Windows 11 Wi-Fi location-privacy changes that call can return
-//! `ERROR_ACCESS_DENIED` when location is off, whereas `GetConnectedSsid()` keeps working.
-//!
-//! ```text
-//! NetworkInformation::GetConnectionProfiles()
-//!   -> the profile with IsWlanConnectionProfile() == true
-//!      -> WlanConnectionProfileDetails().GetConnectedSsid()   (the SSID)
-//!      -> NetworkAdapter().NetworkAdapterId()                 (the interface GUID)
-//! ```
-//!
-//! The country is a best-effort guess from `GlobalizationPreferences::HomeGeographicRegion` (§7.6):
-//! Windows has no unprivileged API for the *radio's* regulatory country, so it is tagged
-//! [`CountrySource::UserRegion`] and left editable.
-//!
-//! The security type and the saved password both come from the Win32 native profile, resolved by
-//! matching its SSID against the connected one (§7.2) and parsed in [`crate::pal::wlan_profile`].
-//! Discovery reads only the non-secret part of that document; the plaintext flag is used solely by
-//! [`read_saved_password`].
 
 use gem_helper::secret::{DerivedSecret, Secret};
 use windows::Networking::Connectivity::NetworkInformation;
@@ -38,11 +17,9 @@ use crate::model::{
 use crate::pal::wlan_profile;
 use crate::{HostWifiError, PasswordOutcome};
 
-/// Turn a WinRT `windows::core::Error` into our data-free error for a given stage.
 fn platform_err(operation: Operation) -> impl Fn(windows::core::Error) -> HostWifiError {
     move |e| {
-        // E_ACCESSDENIED family: treated as a permission problem so the UI can say location is off.
-        const E_ACCESSDENIED: i32 = -0x7FFF_BFFB; // 0x80070005 as i32
+        const E_ACCESSDENIED: i32 = -0x7FFF_BFFB;
         if e.code().0 == E_ACCESSDENIED {
             HostWifiError::PermissionDenied { operation }
         } else {
@@ -75,30 +52,24 @@ pub(crate) fn detect_current_wifi() -> Result<DetectedWifi, HostWifiError> {
             .GetConnectedSsid()
             .map_err(platform_err(Operation::ReadSsid))?;
         let ssid_text = ssid_hstring.to_string();
-        // An empty SSID here means the WLAN profile exists but is not currently associated.
         if ssid_text.is_empty() {
             continue;
         }
 
-        // Captured now so the returned NetworkRef is self-contained; WlanGetProfile keys off it.
         let interface_guid = profile
             .NetworkAdapter()
             .and_then(|na| na.NetworkAdapterId())
             .map(|guid| format!("{guid:?}"))
             .unwrap_or_default();
 
-        // Routed through the same byte-classifying path as the other backends, for a consistent model.
         let ssid = DetectedSsid::from_bytes(ssid_text.as_bytes());
 
-        // The security type lives in the native profile, read *without* the plaintext flag so discovery
-        // never touches a key. A failure is not fatal: the SSID and country are still worth filling in.
         let security =
             detect_security(&interface_guid, &ssid_text).unwrap_or(SecurityKind::Unknown);
 
         return Ok(DetectedWifi {
             network: NetworkRef(NetworkRefInner::Windows {
                 interface_guid,
-                // Stored as the starting point: retrieval resolves the real native profile name (§7.2).
                 profile_name: ssid_text,
             }),
             ssid,
@@ -114,18 +85,14 @@ pub(crate) fn detect_current_wifi() -> Result<DetectedWifi, HostWifiError> {
     })
 }
 
-/// Classify the connected network's security from its saved profile, without reading any key.
 fn detect_security(interface_guid: &str, ssid: &str) -> Option<SecurityKind> {
     let interface = parse_interface_guid(interface_guid).ok()?;
     let handle = WlanHandle::open().ok()?;
     let profile_name = resolve_profile(&handle, &interface, ssid).ok()?;
-    // `plaintext = false`: the security type is in the non-secret part of the document.
     let xml = get_profile_xml(&handle, &interface, &profile_name, false).ok()?;
     Some(wlan_profile::parse(&xml)?.security)
 }
 
-/// Best-effort country from the user's home region (§7.6), tagged as a non-authoritative guess.
-/// Falls back to the process locale when the region is missing or not a valid code.
 fn detect_country() -> Option<CountryHint> {
     let from_region = GlobalizationPreferences::HomeGeographicRegion()
         .ok()
@@ -137,14 +104,12 @@ fn detect_country() -> Option<CountryHint> {
     from_region.or_else(crate::country_from_locale)
 }
 
-/// A `WlanOpenHandle` handle that closes itself, so no early return can leak it.
 struct WlanHandle(HANDLE);
 
 impl WlanHandle {
     fn open() -> Result<Self, HostWifiError> {
         let mut negotiated = 0u32;
         let mut handle = HANDLE::default();
-        // Client version 2 is the Vista-and-later Native Wi-Fi API.
         let status = unsafe { WlanOpenHandle(2, None, &mut negotiated, &mut handle) };
         win32_result(status, Operation::ReadSecret)?;
         Ok(Self(handle))
@@ -159,7 +124,6 @@ impl Drop for WlanHandle {
     }
 }
 
-/// A pointer owned by the WLAN API, freed with `WlanFreeMemory` however the caller leaves scope.
 struct WlanMemory<T>(*mut T);
 
 impl<T> Drop for WlanMemory<T> {
@@ -170,11 +134,9 @@ impl<T> Drop for WlanMemory<T> {
     }
 }
 
-/// Turn a Win32 `DWORD` status into our error type. `ERROR_SUCCESS` is 0.
 fn win32_result(status: u32, operation: Operation) -> Result<(), HostWifiError> {
     match status {
         0 => Ok(()),
-        // ERROR_ACCESS_DENIED. Expected without elevation, or with a restrictive WLAN DACL (§7.4).
         5 => Err(HostWifiError::PermissionDenied { operation }),
         code => Err(HostWifiError::PlatformApi {
             operation,
@@ -183,32 +145,18 @@ fn win32_result(status: u32, operation: Operation) -> Result<(), HostWifiError> 
     }
 }
 
-/// Whether a Win32 status means "the secret specifically is not available", as opposed to a failure
-/// of the query itself.
-///
-/// `ERROR_ACCESS_DENIED` here is a normal outcome: on a debug build running as `asInvoker`, or under
-/// a restrictive DACL, the plaintext key is simply not granted (§7.4).
 fn secret_outcome_for_status(status: u32) -> Option<PasswordOutcome> {
     match status {
         5 => Some(PasswordOutcome::PermissionDenied),
-        // ERROR_NOT_FOUND / ERROR_NO_MATCH: the profile vanished between listing and reading.
         1168 | 1169 => Some(PasswordOutcome::NotStored),
         _ => None,
     }
 }
 
-/// Parse the interface GUID that discovery stored in the [`NetworkRef`].
-///
-/// Discovery formats it with `Debug`, which for `windows_core::GUID` is the standard braced form
-/// that `GUID::try_from(&str)` accepts.
 fn parse_interface_guid(text: &str) -> Result<GUID, HostWifiError> {
     GUID::try_from(text).map_err(|_| HostWifiError::MalformedProfile)
 }
 
-/// Read one profile's XML, asking for the plaintext key when `plaintext` is set.
-///
-/// The returned buffer belongs to the WLAN API. It is copied into a zeroizing string and the native
-/// buffer is overwritten before being freed (§7.5).
 fn get_profile_xml(
     handle: &WlanHandle,
     interface: &GUID,
@@ -247,7 +195,6 @@ fn get_profile_xml(
         let len = xml.len();
         let slice = std::slice::from_raw_parts(xml.0, len);
         let owned = DerivedSecret::new(String::from_utf16_lossy(slice));
-        // Wipe the native buffer before releasing it: it can hold the plaintext key.
         std::ptr::write_bytes(xml.0, 0, len);
         WlanFreeMemory(xml.0 as *const core::ffi::c_void);
         owned
@@ -255,13 +202,10 @@ fn get_profile_xml(
     Ok(text)
 }
 
-/// Why reading a profile failed, kept separate from [`HostWifiError`] so the caller decides whether
-/// a given status is a normal outcome or a genuine failure.
 enum ProfileReadError {
     Status(u32),
 }
 
-/// List the profile names saved on one interface (§7.2).
 fn profile_names(handle: &WlanHandle, interface: &GUID) -> Result<Vec<String>, HostWifiError> {
     let mut list: *mut WLAN_PROFILE_INFO_LIST = std::ptr::null_mut();
     let status = unsafe { WlanGetProfileList(handle.0, interface, None, &mut list) };
@@ -286,10 +230,6 @@ fn profile_names(handle: &WlanHandle, interface: &GUID) -> Result<Vec<String>, H
     Ok(names)
 }
 
-/// Find the single saved profile whose SSID equals the connected one (§7.2).
-///
-/// Every profile is read *without* the plaintext flag, so resolution never collects anybody's keys.
-/// Zero matches and more than one match are both refusals rather than a guess.
 fn resolve_profile(
     handle: &WlanHandle,
     interface: &GUID,
@@ -298,7 +238,6 @@ fn resolve_profile(
     let mut matches = Vec::new();
     for name in profile_names(handle, interface)? {
         let Ok(xml) = get_profile_xml(handle, interface, &name, false) else {
-            // A profile that cannot be read cannot be the match we can prove.
             continue;
         };
         let Some(profile) = wlan_profile::parse(&xml) else {
@@ -331,10 +270,8 @@ pub(crate) fn read_saved_password(network: &NetworkRef) -> Result<PasswordOutcom
     let interface = parse_interface_guid(interface_guid)?;
     let handle = WlanHandle::open()?;
 
-    // Discovery stores the SSID, not a profile name: the two are not interchangeable (§7.2).
     let profile_name = match resolve_profile(&handle, &interface, ssid) {
         Ok(name) => name,
-        // No saved profile for this SSID is an ordinary situation, not a failure.
         Err(HostWifiError::MalformedProfile) => return Ok(PasswordOutcome::NotStored),
         Err(e) => return Err(e),
     };
@@ -359,9 +296,7 @@ pub(crate) fn read_saved_password(network: &NetworkRef) -> Result<PasswordOutcom
     Ok(outcome_from_profile(&profile))
 }
 
-/// Turn a parsed profile into the outcome the UI states (§7.3).
 fn outcome_from_profile(profile: &wlan_profile::WlanProfile) -> PasswordOutcome {
-    // The security type decides whether a portable passphrase can exist at all.
     match profile.security {
         SecurityKind::Open => return PasswordOutcome::NotRequired,
         SecurityKind::Enterprise | SecurityKind::UnsupportedSecurity => {
@@ -374,7 +309,6 @@ fn outcome_from_profile(profile: &wlan_profile::WlanProfile) -> PasswordOutcome 
         wlan_profile::ProfileCredential::Plaintext(key) => {
             PasswordOutcome::Found(Secret::new(key.clone()))
         }
-        // Still DPAPI-encrypted: the plaintext flag was not granted. Decrypting it is forbidden.
         wlan_profile::ProfileCredential::Encrypted => PasswordOutcome::PermissionDenied,
         wlan_profile::ProfileCredential::None => PasswordOutcome::NotStored,
         wlan_profile::ProfileCredential::Unusable => PasswordOutcome::Unavailable,
@@ -405,7 +339,6 @@ mod tests {
 
     #[test]
     fn access_denied_on_the_secret_is_an_outcome_not_a_failure() {
-        // A debug build running as asInvoker hits this and must degrade to the manual field (§7.4).
         assert_eq!(
             secret_outcome_for_status(5),
             Some(PasswordOutcome::PermissionDenied)
@@ -414,7 +347,6 @@ mod tests {
             secret_outcome_for_status(1168),
             Some(PasswordOutcome::NotStored)
         );
-        // Anything else stays a genuine failure.
         assert_eq!(secret_outcome_for_status(87), None);
     }
 
@@ -446,7 +378,6 @@ mod tests {
             credential,
         };
 
-        // Open and enterprise are decided before the key material is looked at.
         assert_eq!(
             outcome_from_profile(&profile(SecurityKind::Open, ProfileCredential::None)),
             PasswordOutcome::NotRequired
@@ -464,7 +395,6 @@ mod tests {
             "a WEP key must not be handed over even when it is readable"
         );
 
-        // Personal networks are decided by the credential state.
         assert_eq!(
             outcome_from_profile(&profile(
                 SecurityKind::Personal,
@@ -494,7 +424,6 @@ mod tests {
 
     #[test]
     fn the_interface_guid_round_trips_through_the_network_ref() {
-        // Discovery stores the GUID with Debug; retrieval must be able to parse that back.
         let guid = GUID::from_u128(0x1234_5678_9abc_def0_1234_5678_9abc_def0);
         let stored = format!("{guid:?}");
         assert_eq!(parse_interface_guid(&stored), Ok(guid));

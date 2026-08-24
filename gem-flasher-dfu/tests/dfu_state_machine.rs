@@ -92,8 +92,6 @@ impl DfuTransport for MockTransport {
         }
     }
 
-    /// Scripted `wait_for_alt` already stands in for enumeration, so the settle gate has nothing
-    /// to observe here; it is covered against a real enumeration in the transport's own tests.
     fn wait_for_port_clear(
         &mut self,
         _vendor_id: u16,
@@ -262,9 +260,6 @@ fn successful_events(payloads: [&[u8]; 4], terminal: DfuState) -> Vec<Event> {
             Event::Finish(1),
         ]);
         if index < 3 {
-            // A boot artifact still has to be *manifested*: the zero-length download only asks to end the
-            // transfer, and the device leaves dfuDNLOAD-SYNC when the host polls status. A device still on
-            // the bus is waiting for the host to let go, so detach-then-reset is what makes U-Boot boot it.
             events.extend([
                 Event::Status(DfuState::DfuManifest, 0),
                 Event::Status(DfuState::DfuIdle, 0),
@@ -288,7 +283,6 @@ fn successful_events(payloads: [&[u8]; 4], terminal: DfuState) -> Vec<Event> {
     events
 }
 
-/// Index of the status poll that opens the first boot artifact's manifestation.
 fn first_boot_manifest_poll(events: &[Event]) -> usize {
     events
         .iter()
@@ -296,9 +290,6 @@ fn first_boot_manifest_poll(events: &[Event]) -> usize {
         .expect("boot artifacts manifest")
 }
 
-/// dfuIDLE and dfuMANIFEST-WAIT-RESET are both "still on the bus", so both end in a reset: one
-/// because DFU 1.1 says only a reset leaves that state, the other because a device that has not
-/// left is a device still waiting to be let go.
 #[test]
 fn a_boot_artifact_that_parks_in_wait_reset_is_reset_like_any_other() {
     let payloads = [b"boot".as_slice(), b"spl", b"uboot", b"raw-image"];
@@ -321,17 +312,12 @@ fn a_boot_artifact_that_parks_in_wait_reset_is_reset_like_any_other() {
     transport.done();
 }
 
-/// The TI ROM hands control to the artifact it just accepted, so the port drops before any final
-/// status can be read. For a boot artifact that is the write succeeding, not the write failing —
-/// and a board that has already left must not then be reset, because resetting the ROM restarts
-/// its DFU loop and it comes back as `bootloader`/`SocId` instead of as the stage just written.
 #[test]
 fn a_boot_artifact_that_leaves_the_bus_while_manifesting_has_booted_and_is_not_reset() {
     let payloads = [b"boot".as_slice(), b"spl", b"uboot", b"raw-image"];
     let mut events = successful_events(payloads, DfuState::DfuManifestWaitReset);
     let poll = first_boot_manifest_poll(&events);
     events[poll] = Event::Fail("status", TransportErrorKind::Disconnected);
-    // None of the second poll, the detach or the reset happens; the interface is still released.
     events.remove(poll + 1);
     events.remove(poll + 1);
     events.remove(poll + 1);
@@ -354,10 +340,6 @@ fn a_boot_artifact_that_leaves_the_bus_while_manifesting_has_booted_and_is_not_r
     transport.done();
 }
 
-/// U-Boot's DFU gadget leaves its download loop from the detach trigger, which only `DFU_DETACH`
-/// sets — a bare bus reset just restarts the gadget, so the board stays in DFU, never boots the
-/// artifact, and the next stage silently writes into the instance that should have left. The
-/// reference flow is `dfu-util -R`, which is DETACH *then* reset, so the order is asserted too.
 #[test]
 fn every_boot_stage_detaches_before_it_resets() {
     let payloads = [b"boot".as_slice(), b"spl", b"uboot", b"raw-image"];
@@ -379,7 +361,6 @@ fn every_boot_stage_detaches_before_it_resets() {
             .filter(|event| *event == "detach" || *event == "reset")
             .cloned()
             .collect::<Vec<_>>(),
-        // Three boot stages detach then reset; the raw stage only detaches.
         [
             "detach", "reset", "detach", "reset", "detach", "reset", "detach"
         ]
@@ -387,9 +368,6 @@ fn every_boot_stage_detaches_before_it_resets() {
     transport.done();
 }
 
-/// DFU 1.1 only defines `DFU_DETACH` for appIDLE, so a conformant device may stall it in dfuIDLE.
-/// The reset that follows still drives such a device out, and `dfu-util -R` carries on the same
-/// way — refusing here would fail writes the reference flow completes.
 #[test]
 fn a_boot_stage_detach_the_device_refuses_does_not_fail_the_write() {
     let payloads = [b"boot".as_slice(), b"spl", b"uboot", b"raw-image"];
@@ -415,9 +393,6 @@ fn a_boot_stage_detach_the_device_refuses_does_not_fail_the_write() {
     transport.done();
 }
 
-/// `libusb_reset_device` reports `LIBUSB_ERROR_NOT_FOUND` when the device had to be re-enumerated.
-/// For a boot artifact that is the success case — the gadget left and the board comes back with the
-/// next stage's alt-setting — so it must not end the write.
 #[test]
 fn a_boot_stage_reset_that_re_enumerates_the_device_does_not_fail_the_write() {
     let payloads = [b"boot".as_slice(), b"spl", b"uboot", b"raw-image"];
@@ -499,7 +474,6 @@ fn a_real_middle_stage_download_failure_is_not_swallowed() {
         .unwrap()
         .0;
     events[second_download] = Event::Fail("download", TransportErrorKind::Access);
-    // The state machine releases the still-connected failed interface and stops immediately.
     events.truncate(second_download + 1);
     events.push(Event::Release);
     let mut transport = MockTransport::new(events);

@@ -1,24 +1,3 @@
-//! macOS backend: CoreLocation gates access, CoreWLAN reads the network, Keychain holds the key.
-//!
-//! On macOS 14+ the SSID, BSSID and country code are all Location-gated (§6.1): the CoreWLAN
-//! getters return `nil` unless Location Services is on and this app is authorized. If Location is
-//! denied we do *not* fall back to a command-line workaround; we return
-//! [`HostWifiError::PermissionDenied`] and the UI keeps the manual SSID field.
-//!
-//! Winning that authorization is its own problem, and it lives in [`super::macos_location`]: it
-//! needs a delegate, a retained manager and the main run loop, none of which this module can
-//! provide from the worker thread the detection runs on. Note that authorization is also refused
-//! outright to a bundle that is not code-signed, so an unsigned build can never autofill.
-//!
-//! Password retrieval goes through CoreWLAN's `CWKeychainFindWiFiPassword` against the System
-//! keychain domain (§6.4) — never the `security` CLI, never the Keychain database on disk, and never
-//! an attempt to modify an item's ACL (§6.6). macOS stores a joined network's password in the System
-//! keychain, owned by `airportd`, so a bare `SecItemCopyMatching` searches the login keychain, finds
-//! nothing and never prompts.
-//!
-//! Every CoreWLAN/CoreLocation call is `unsafe` because it is an Objective-C message send; in each
-//! case we only pass the receiver the framework gave us and immediately convert the result to an
-//! owned Rust value.
 
 use gem_helper::secret::Secret;
 use objc2_core_wlan::{CWKeychainDomain, CWKeychainFindWiFiPassword, CWSecurity, CWWiFiClient};
@@ -37,24 +16,14 @@ use crate::model::{
 };
 use crate::{HostWifiError, PasswordOutcome};
 
-/// The Security framework's result code. `objc2-security` keeps its own alias private, so it is
-/// restated here against the same underlying type the `errSec*` constants are declared with.
 type OSStatus = i32;
 
-/// Ensure this process is authorized to read Location-gated Wi-Fi data, prompting once if the user
-/// has not decided yet.
-///
-/// The prompt is asynchronous, so a first run that reaches this before the user has answered gets
-/// [`HostWifiError::PermissionDenied`] and autofill simply happens on the next attempt (§6.1). What
-/// this must never do is report "denied" merely because it asked too early — see
-/// [`super::macos_location`] for why reading `authorizationStatus` directly does exactly that.
 fn ensure_location_authorized() -> Result<(), HostWifiError> {
     use super::macos_location;
 
     macos_location::prime();
     match macos_location::wait_for_decision() {
         Some(status) if macos_location::is_authorized(status) => Ok(()),
-        // Denied, restricted, or still undecided: no access this time round.
         Some(status) => {
             tracing::info!(
                 "Wi-Fi autofill blocked: CoreLocation reports {}",
@@ -64,8 +33,6 @@ fn ensure_location_authorized() -> Result<(), HostWifiError> {
                 operation: Operation::ReadSsid,
             })
         }
-        // Nothing came back: either the main run loop never ran, or macOS is ignoring an app it will
-        // not authorize -- an unsigned bundle, or one launched as a bare binary rather than a .app.
         None => {
             tracing::warn!(
                 "Wi-Fi autofill blocked: CoreLocation never reported an authorization status. \
@@ -79,7 +46,6 @@ fn ensure_location_authorized() -> Result<(), HostWifiError> {
     }
 }
 
-/// Map CoreWLAN's fine-grained security enum onto our coarse [`SecurityKind`] (§8.4).
 fn classify_security(security: CWSecurity) -> SecurityKind {
     match security {
         CWSecurity::None | CWSecurity::OWE | CWSecurity::OWETransition => SecurityKind::Open,
@@ -94,9 +60,7 @@ fn classify_security(security: CWSecurity) -> SecurityKind {
         | CWSecurity::WPA2Enterprise
         | CWSecurity::Enterprise
         | CWSecurity::WPA3Enterprise
-        // Dynamic WEP is 802.1X-based, so it belongs with the enterprise schemes.
         | CWSecurity::DynamicWEP => SecurityKind::Enterprise,
-        // Static WEP is secured but carries no WPA-family passphrase; Open would mislead the user.
         CWSecurity::WEP => SecurityKind::UnsupportedSecurity,
         _ => SecurityKind::Unknown,
     }
@@ -111,12 +75,9 @@ pub(crate) fn detect_current_wifi() -> Result<DetectedWifi, HostWifiError> {
         let client = CWWiFiClient::sharedWiFiClient();
         let interface = client.interface().ok_or(HostWifiError::NoWifiDevice)?;
 
-        // `ssid()` is nil when not associated, which after authorization means not connected.
         let ssid = match interface.ssid() {
             Some(ns) => DetectedSsid::Utf8(ns.to_string()),
             None => {
-                // Distinguish "radio off / no network" from a genuinely non-UTF-8 SSID by falling
-                // back to the raw bytes.
                 match interface.ssidData() {
                     Some(data) => DetectedSsid::from_bytes(&data.to_vec()),
                     None => return Err(HostWifiError::NotConnected),
@@ -131,7 +92,6 @@ pub(crate) fn detect_current_wifi() -> Result<DetectedWifi, HostWifiError> {
             .and_then(|ns| CountryCode::parse(&ns.to_string()))
             .map(|code| CountryHint {
                 code,
-                // CoreWLAN's countryCode is the adopted regulatory code for the interface.
                 source: CountrySource::Regulatory,
             })
             .or_else(crate::country_from_locale);
@@ -150,22 +110,12 @@ pub(crate) fn detect_current_wifi() -> Result<DetectedWifi, HostWifiError> {
     }
 }
 
-/// Map a Keychain `OSStatus` to the outcome it actually describes (§6.4).
-///
-/// Constants come from the Security framework's `SecBase.h`. Every result here is a *normal*
-/// answer, not a product failure: the manual password field stays the fallback.
 fn outcome_for_status(status: OSStatus) -> PasswordOutcome {
-    // Matched with guards rather than bare patterns: a lowercase constant used directly as a match
-    // pattern would silently become a catch-all binding if the import ever broke.
     match status {
-        // No AirPort item: joined on another device, or in a keychain this app cannot see.
         s if s == errSecItemNotFound => PasswordOutcome::NotStored,
         s if s == errSecUserCanceled => PasswordOutcome::UserCancelled,
-        // Deny, or a failed authentication. Kept distinct from Cancel: they mean different things.
         s if s == errSecAuthFailed => PasswordOutcome::UserDenied,
-        // A prompt was required but could not be shown (locked keychain, non-interactive), not a user decision.
         s if s == errSecInteractionNotAllowed => PasswordOutcome::PermissionDenied,
-        // An unsigned or wrongly-entitled build (§6.3).
         s if s == errSecMissingEntitlement => PasswordOutcome::PermissionDenied,
         _ => PasswordOutcome::Unavailable,
     }
@@ -175,7 +125,6 @@ pub(crate) fn read_saved_password(network: &NetworkRef) -> Result<PasswordOutcom
     let NetworkRefInner::MacOs { ssid } = &network.0 else {
         return Err(HostWifiError::UnsupportedPlatform);
     };
-    // Discovery stores an empty SSID for a name that is not representable; nothing to look up.
     if ssid.is_empty() {
         return Ok(PasswordOutcome::NotStored);
     }
@@ -183,9 +132,6 @@ pub(crate) fn read_saved_password(network: &NetworkRef) -> Result<PasswordOutcom
     read_system_keychain_password(ssid)
 }
 
-/// Read the saved password for `ssid` from the System keychain, where macOS stores a joined
-/// network's password. A bare `SecItemCopyMatching` would search the login keychain, find nothing
-/// and never prompt; this is the call that raises the authorization dialog.
 fn read_system_keychain_password(ssid: &str) -> Result<PasswordOutcome, HostWifiError> {
     objc2::rc::autoreleasepool(|_pool| {
         let ssid_data = NSData::with_bytes(ssid.as_bytes());
@@ -201,7 +147,6 @@ fn read_system_keychain_password(ssid: &str) -> Result<PasswordOutcome, HostWifi
             return Ok(outcome_for_status(status));
         }
 
-        // The out parameter is `AutoreleasingUnsafeMutablePointer`, so the string comes back +0 and must be retained.
         // SAFETY: the pointer is null or a valid autoreleased NSString.
         let Some(password) = (unsafe { objc2::rc::Retained::retain(password) }) else {
             return Ok(PasswordOutcome::NotStored);
@@ -209,16 +154,12 @@ fn read_system_keychain_password(ssid: &str) -> Result<PasswordOutcome, HostWifi
 
         let mut text = password.to_string();
         let outcome = classify_credential(&text);
-        // Wipe the plaintext before the buffer is freed (§12.2).
         // SAFETY: zeroes are valid UTF-8 and `text` is not read as text again.
         unsafe { text.as_bytes_mut() }.zeroize();
         Ok(outcome)
     })
 }
 
-/// Validate a credential read from the Keychain and wrap it, or say why it is unusable.
-///
-/// Split out so the rule is unit-testable without a Keychain (§3.1).
 fn classify_credential(value: &str) -> PasswordOutcome {
     if !crate::is_usable_wifi_credential(value) {
         return PasswordOutcome::Unavailable;
@@ -250,7 +191,6 @@ mod tests {
 
     #[test]
     fn static_wep_is_unsupported_and_dynamic_wep_is_enterprise() {
-        // Calling static WEP Open would claim a secured network needs no password.
         assert_eq!(
             classify_security(CWSecurity::WEP),
             SecurityKind::UnsupportedSecurity
@@ -263,7 +203,6 @@ mod tests {
 
     #[test]
     fn keychain_statuses_map_to_the_documented_outcomes() {
-        // Values from the Security framework's SecBase.h.
         assert_eq!(
             outcome_for_status(errSecItemNotFound),
             PasswordOutcome::NotStored
@@ -284,12 +223,10 @@ mod tests {
             outcome_for_status(errSecMissingEntitlement),
             PasswordOutcome::PermissionDenied
         );
-        // Cancel and Deny must stay distinguishable: they mean different things to the user.
         assert_ne!(
             outcome_for_status(errSecUserCanceled),
             outcome_for_status(errSecAuthFailed)
         );
-        // An unmapped status is reported as unavailable rather than mistaken for a result.
         assert_eq!(outcome_for_status(-1), PasswordOutcome::Unavailable);
         assert_eq!(
             outcome_for_status(errSecSuccess),
@@ -308,7 +245,6 @@ mod tests {
             classify_credential(psk),
             PasswordOutcome::Found(Secret::new(psk))
         );
-        // Too short, and a 64-byte value that is not hex, are both unusable.
         assert_eq!(classify_credential("short"), PasswordOutcome::Unavailable);
         assert_eq!(
             classify_credential(&"z".repeat(64)),
@@ -328,7 +264,6 @@ mod tests {
 
     #[test]
     fn an_unrepresentable_ssid_reports_nothing_stored_without_querying() {
-        // An empty SSID (a non-UTF-8 name) has nothing to match on, so no Keychain call is made.
         let empty = NetworkRef(NetworkRefInner::MacOs {
             ssid: String::new(),
         });

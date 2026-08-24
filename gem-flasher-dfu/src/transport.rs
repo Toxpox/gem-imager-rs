@@ -37,15 +37,6 @@ pub trait DfuTransport {
         std::thread::sleep(duration);
     }
 
-    /// Wait until the device at `path` has left the bus.
-    ///
-    /// This exists so the lookup that follows a reset cannot match the instance that is on its way
-    /// out. The R5 SPL publishes `tispl.bin` and `u-boot.img` at the same time, so an alt-setting
-    /// name alone cannot distinguish the departing stage from the one that replaces it.
-    ///
-    /// Returns whether the port actually cleared. A board that never leaves is reported rather
-    /// than refused, because the [`wait_for_alt`](Self::wait_for_alt) that follows is the real
-    /// gate and gives a far better error than "it was still there".
     fn wait_for_port_clear(
         &mut self,
         vendor_id: u16,
@@ -56,8 +47,6 @@ pub trait DfuTransport {
     ) -> Result<bool> {
         loop {
             crate::check_cancel(cancel)?;
-            // Mid-reset the device can still be listed but no longer openable -- that is the transition being
-            // waited for, so an enumeration error keeps the wait going rather than ending it.
             if let Ok(devices) = self.enumerate(vendor_id, product_id)
                 && !devices.iter().any(|device| path.matches(&device.path))
             {
@@ -70,9 +59,6 @@ pub trait DfuTransport {
         }
     }
 
-    /// Wait for one exact physical device and alt-setting. Address and serial changes are allowed;
-    /// moving to another port is not. A legacy one-component path is rejected if it matches more
-    /// than one full topology path.
     fn wait_for_alt(
         &mut self,
         vendor_id: u16,
@@ -82,8 +68,6 @@ pub trait DfuTransport {
         deadline: Instant,
         cancel: Option<&CancellationToken>,
     ) -> Result<DfuDevice> {
-        // Only logged when it changes: the poll runs four times a second, and a board that never
-        // comes back would otherwise write sixty identical lines per stage.
         let mut last_seen: Option<Vec<String>> = None;
         loop {
             crate::check_cancel(cancel)?;
@@ -105,8 +89,6 @@ pub trait DfuTransport {
                 if device.alt_settings.iter().any(|alt| alt == alt_setting) {
                     return Ok(device);
                 }
-                // On the port but showing something else. Which alt-settings it shows is the diagnosis: the ROM's
-                // own set means it restarted instead of booting what was just written.
                 if last_seen.as_deref() != Some(device.alt_settings.as_slice()) {
                     tracing::info!(
                         wanted = alt_setting,
@@ -297,10 +279,6 @@ impl DfuTransport for RusbTransport {
                         continue;
                     }
 
-                    // The DFU functional descriptor describes the *interface*, and the spec places exactly one after
-                    // that interface's alt-setting descriptors. libusb attaches trailing bytes to whichever
-                    // alt-setting they follow, so on the T3 board only `SocId` carries it and `bootloader` has an
-                    // empty `extra()`. The whole interface is therefore searched, then the configuration.
                     let transfer_size = functional_transfer_size(alt.extra())
                         .or_else(|| {
                             interface
@@ -456,8 +434,6 @@ mod tests {
         assert_eq!(functional_transfer_size(&descriptor), Some(4096));
     }
 
-    /// The real T3 layout: `bootloader` publishes nothing and the descriptor rides on the last
-    /// alt-setting of the same interface. The search has to reach it there.
     #[test]
     fn finds_the_descriptor_on_a_sibling_alt_setting() {
         let bootloader: &[u8] = &[];
@@ -473,7 +449,6 @@ mod tests {
         );
     }
 
-    /// Only `enumerate` and `sleep` matter to the settle gate; everything else is unreachable.
     struct EnumerateOnly {
         rounds: Vec<Result<Vec<DfuDevice>>>,
     }
@@ -527,8 +502,6 @@ mod tests {
         }]
     }
 
-    /// The transition being waited for is exactly the window where the device is briefly listed
-    /// but unopenable, so an enumeration error there must not end the wait either way.
     #[test]
     fn the_settle_gate_waits_through_an_unopenable_device_until_the_port_is_empty() {
         let path = UsbPath::new(1, vec![3]).unwrap();
@@ -556,7 +529,6 @@ mod tests {
         assert!(transport.rounds.is_empty());
     }
 
-    /// A board that never leaves is reported, not refused: `wait_for_alt` gives the better error.
     #[test]
     fn the_settle_gate_gives_up_without_failing_the_write() {
         let path = UsbPath::new(1, vec![3]).unwrap();

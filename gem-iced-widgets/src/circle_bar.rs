@@ -43,7 +43,6 @@ impl<Message> widget::canvas::Program<Message> for CircleBar {
             let center = iced::Point::new(bounds.width / 2.0, bounds.height / 2.0);
             let radius = bounds.width.min(bounds.height) / 2.0 - self.thickness;
 
-            // Background ring
             let bg = widget::canvas::Path::circle(center, radius);
             frame.stroke(
                 &bg,

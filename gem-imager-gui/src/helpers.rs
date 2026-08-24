@@ -44,7 +44,6 @@ impl BoardImage {
         Self::Image {
             img: gem_flasher::LocalImage::new(path.into()).into(),
             flasher,
-            // Do not try to apply customization for local images
             init_format: config::InitFormat::None,
             info_text: None,
             description: None,
@@ -186,11 +185,6 @@ impl BoardImage {
         }
     }
 
-    /// Whether this entry can be written over DFU to onboard eMMC.
-    ///
-    /// "Format SD Card" cannot: it is an SD-card operation, and there is no eMMC equivalent of
-    /// handing the user back a FAT32 card. Every real image can, local ones included — the boot
-    /// chain that carries it comes from the verified manifest, not from the image.
     pub(crate) const fn supports_dfu(&self) -> bool {
         matches!(self, Self::Image { .. })
     }
@@ -211,16 +205,10 @@ pub(crate) fn system_timezone() -> Option<chrono_tz::Tz> {
     *SYSTEM_TIMEZONE
 }
 
-/// The interface language implied by the system locale.
-///
-/// Returns `None` when the locale names a language this build does not carry, rather than
-/// answering "English": the caller pairs this with the stored preference, and conflating
-/// "the system says German" with "the user chose English" would hide the former in the logs.
 pub(crate) fn system_language() -> Option<gem_i18n::Lang> {
     static SYSTEM_LANGUAGE: LazyLock<Option<gem_i18n::Lang>> = LazyLock::new(|| {
         let prefs = whoami::lang_prefs().ok()?;
 
-        // `message_langs` is preference-ordered, so [de, tr, en] yields Turkish rather than English.
         prefs
             .message_langs()
             .find_map(|lang| gem_i18n::Lang::from_code(&lang.to_string()))
@@ -253,10 +241,6 @@ pub(crate) fn system_keymap() -> &'static str {
     (*SYSTEM_KEYMAP).unwrap_or("us")
 }
 
-/// The host's current Wi-Fi network, discovered so the customization form can pre-fill itself.
-///
-/// Every field is optional: a missing password must not discard a good SSID. The passphrase is
-/// carried in a redacting, zeroizing [`Secret`].
 #[derive(Debug, Clone, Default)]
 pub(crate) struct HostWifiPrefill {
     pub(crate) ssid: Option<String>,
@@ -264,11 +248,6 @@ pub(crate) struct HostWifiPrefill {
     pub(crate) country: Option<String>,
 }
 
-/// Detect the host's current Wi-Fi network and, for a WPA/WPA2/WPA3-Personal network, read its
-/// saved passphrase through the OS's own API.
-///
-/// Blocking, so the caller drives it from a [`blocking_future`]. Every failure is an ordinary "let
-/// the user type it" situation, logged at info and folded into an empty result.
 pub(crate) fn detect_host_wifi() -> HostWifiPrefill {
     use gem_host_wifi::PasswordOutcome;
 
@@ -296,13 +275,6 @@ pub(crate) fn detect_host_wifi() -> HostWifiPrefill {
     out
 }
 
-/// A catalog image, with the integrity values the catalog published for it.
-///
-/// The two hashes are *not* interchangeable and never share a name (`instruction.md` §6.2):
-/// `archive_sha256` covers the compressed download and is what the cache is addressed by;
-/// `extract_sha256` covers the bytes that reach the board. Before Faz 3 this struct called the
-/// archive hash `extract_sha256` while being handed `image_download_sha256`, so the extracted
-/// bytes were never checked at all.
 #[derive(Debug, Clone, serde::Serialize)]
 pub(crate) struct RemoteImage {
     name: Box<str>,
@@ -310,7 +282,6 @@ pub(crate) struct RemoteImage {
     #[serde(with = "const_hex")]
     archive_sha256: [u8; 32],
     archive_size: Option<u64>,
-    /// `None` when the catalog entry predates the extracted-digest contract.
     #[serde(skip)]
     extract_sha256: Option<[u8; 32]>,
     extract_size: u64,
@@ -339,10 +310,6 @@ impl RemoteImage {
         }
     }
 
-    /// The extracted-side gate for this image.
-    ///
-    /// A catalog entry that publishes an extracted digest is held to it; one that does not is
-    /// marked as such rather than quietly treated as verified.
     fn extract_gate(&self) -> gem_flasher::img::ExtractGate {
         match self.extract_sha256 {
             Some(sha256) => gem_flasher::img::ExtractGate::Declared(
@@ -356,7 +323,6 @@ impl RemoteImage {
         self.url.path_segments().unwrap().next_back().unwrap()
     }
 
-    /// Bytes a cache miss can add to the filesystem before the extracted staging file is written.
     fn archive_cache_growth_estimate(&self) -> u64 {
         if self
             .downloader
@@ -370,13 +336,6 @@ impl RemoteImage {
         }
     }
 
-    /// Resolve, verify and decode the complete remote image before returning a reader.
-    ///
-    /// The SD writer destroys the destination's old partition metadata immediately after its image
-    /// resolver succeeds. Returning the live download stream here therefore made archive and
-    /// extracted-digest failures destructive: both gates finish only at EOF. Materialising the
-    /// verified extracted bytes in the private staging area keeps every integrity refusal on the
-    /// non-destructive side of that boundary.
     fn into_image_fn(
         self,
         cancel: gem_helper::cancel::CancellationToken,
@@ -398,14 +357,11 @@ impl RemoteImage {
                 self.archive_size
                     .unwrap_or(downloader.policy().max_stream_body)
             };
-            // Check the complete peak working set before downloading. The archive is persisted on
-            // the same cache filesystem and remains there while the extracted image is staged.
             let staging = crate::staging::StagingImage::create(
                 self.extract_size.saturating_add(archive_growth),
             )
             .map_err(io::Error::other)?;
 
-            // The cache is addressed by the *archive* hash, because the archive is what is stored.
             let path = if let Some(path) = cached_path {
                 tracing::info!("Found the remote image in cache");
                 path
@@ -450,8 +406,6 @@ impl RemoteImage {
                     })?
             };
 
-            // The extracted gate observes EOF, so the resolver must consume the entire decoder
-            // before it may tell the raw writer that the image is ready.
             let mut image = OsImage::from_path(&path, self.extract_gate())?;
             let mut file = std::fs::OpenOptions::new()
                 .read(true)
@@ -508,10 +462,7 @@ impl RemoteImage {
     }
 }
 
-/// Reader for a fully verified extracted image. The guard removes the staging file on every exit.
 struct StagedRemoteImage {
-    // Fields drop in declaration order. Close the handle before the guard removes its path, which
-    // is required on Windows where an open file cannot be unlinked.
     file: std::fs::File,
     _staging: crate::staging::StagingImage,
 }
@@ -534,8 +485,6 @@ impl std::fmt::Display for RemoteImage {
 #[derive(Debug, Clone, serde::Serialize)]
 pub(crate) enum SelectedImage {
     LocalImage(gem_flasher::LocalImage),
-    /// Boxed because a remote image carries the whole published integrity set while a local one is
-    /// just a path; inlining it would make every `SelectedImage` pay for the larger variant.
     RemoteImage(Box<RemoteImage>),
 }
 
@@ -547,12 +496,8 @@ impl SelectedImage {
         }
     }
 
-    /// Peak cache-filesystem growth for the remote DFU path.
     fn staging_size_estimate(&self) -> u64 {
         match self {
-            // Remote DFU holds the cached archive and verified extracted source while the SD writer
-            // creates the separately customized destination image. Reserve all three before the
-            // download starts.
             Self::RemoteImage(x) => x
                 .extract_size
                 .saturating_mul(2)
@@ -606,8 +551,6 @@ pub(crate) async fn flash(
     chan: mpsc::SyncSender<DownloadFlashingStatus>,
     cancel_sync: gem_helper::cancel::CancellationToken,
 ) -> anyhow::Result<()> {
-    // A listed but unopenable destination fails here, before anything is downloaded or written. The
-    // wording keys on `localized_flash_error`, so refusals and deep failures share one path.
     if let Some((title, _)) = dst.unavailable_reason() {
         return Err(match title {
             gem_i18n::Msg::DfuPermissionTitle => anyhow::anyhow!(
@@ -619,22 +562,17 @@ pub(crate) async fn flash(
         });
     }
 
-    // Held for the whole write, including the idle DFU re-enumeration gaps.
     let _awake = crate::keep_awake::KeepAwake::acquire();
 
     match (img, customization, dst) {
-        // DFU is two writes. The extracted, customized and verified image is first materialised into a
-        // staging file by the SD writer, so `config.ini` lands in FAT exactly as it does on a card.
         #[cfg(all(feature = "dfu", feature = "sd"))]
         (BoardImage::Image { img, .. }, customization, Destination::T3Dfu(target)) => {
             let identifier = target.identifier().into_owned();
             let customization = customization.sd_customization()?;
 
             tokio::task::spawn_blocking(move || {
-                // Before the first byte is downloaded, not after.
                 let estimate = img.staging_size_estimate();
                 let staging = crate::staging::StagingImage::create(estimate)?;
-                // The cache path commonly holds the account name and must not accompany a secret-bearing image.
                 tracing::info!("Staging the customized image in the private application cache");
 
                 gem_flasher::sd::Flasher::with_file_dest(
@@ -644,8 +582,6 @@ pub(crate) async fn flash(
                 )
                 .flash(Some(chan.clone()), Some(cancel_sync.clone()))?;
 
-                // Handed to the DFU stage as a file, not a stream: it is already the finished image, verified
-                // above, so it is hashed where it lies instead of being copied into scratch storage again.
                 gem_flasher::dfu::Flasher::from_staging_file(
                     staging.path(),
                     &identifier,
@@ -653,11 +589,8 @@ pub(crate) async fn flash(
                 )?
                 .flash(Some(chan))
 
-                // `staging` is dropped here — on success, on error and on cancellation alike.
             })
             .await
-            // A panic on the blocking worker used to reach `unwrap()` and freeze the screen on its last phase
-            // with nothing written. As an error the user at least sees a failure they can report.
             .unwrap_or_else(|join_error| {
                 Err(anyhow::anyhow!(
                     "the DFU write ended unexpectedly: {join_error}"
@@ -709,7 +642,6 @@ pub(crate) enum Destination {
     LocalFile(PathBuf),
     #[cfg(feature = "sd")]
     SdCard(gem_flasher::sd::Target),
-    /// Onboard eMMC of a T3-GEM-O1 in DFU mode, addressed by its physical USB port.
     #[cfg(feature = "dfu")]
     T3Dfu(gem_flasher::dfu::Target),
 }
@@ -733,19 +665,13 @@ impl Destination {
             return Some(item.size());
         }
 
-        // A DFU device exposes no capacity before transfer, and a guess would be worse than nothing.
         None
     }
 
-    /// Download instead of flashing
     pub(crate) fn is_download_action(&self) -> bool {
         matches!(self, Self::LocalFile(_))
     }
 
-    /// Why this destination cannot be written to right now, if it cannot.
-    ///
-    /// Returned as a message pair rather than a boolean: an unopenable board is listed on purpose,
-    /// and the whole reason for listing it is to be able to say *which* of the two fixes applies.
     #[cfg(feature = "dfu")]
     pub(crate) fn unavailable_reason(&self) -> Option<(gem_i18n::Msg, gem_i18n::Msg)> {
         let Self::T3Dfu(target) = self else {
@@ -765,16 +691,11 @@ impl Destination {
         }
     }
 
-    /// Without the DFU backend there is no destination that can be listed-but-unusable.
     #[cfg(not(feature = "dfu"))]
     pub(crate) fn unavailable_reason(&self) -> Option<(gem_i18n::Msg, gem_i18n::Msg)> {
         None
     }
 
-    /// Whether this destination writes to the board's onboard eMMC.
-    ///
-    /// The review screen keys its instructions on this: DFU is the one flow where the user must
-    /// have done something to the hardware *before* pressing the button.
     pub(crate) fn is_dfu(&self) -> bool {
         #[cfg(feature = "dfu")]
         return matches!(self, Self::T3Dfu(_));
@@ -792,7 +713,6 @@ impl Destination {
             ],
             #[cfg(feature = "dfu")]
             Self::T3Dfu(t) => vec![
-                // `bus:physical-port-path:vendor:product` distinguishes two boards on the same host.
                 ("USB Port", t.identifier().into_owned()),
                 ("Target", "Onboard eMMC (DFU)".to_owned()),
             ],
@@ -800,12 +720,6 @@ impl Destination {
     }
 }
 
-/// Which write methods may be offered for the current board/image pair.
-///
-/// `instruction.md` §6.3: the destination list is the intersection of **board capability**,
-/// **image compatibility** and **platform backend availability** — never a property read off the
-/// image alone. Keeping the three factors in one small value is what stops a screen from
-/// re-deriving a subset of them and offering a destination the write path cannot honour.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct WriteMethods {
     pub(crate) sd: bool,
@@ -813,11 +727,6 @@ pub(crate) struct WriteMethods {
 }
 
 impl WriteMethods {
-    /// Resolve the methods for a board/image pair.
-    ///
-    /// `board.emmc_dfu` comes from the catalog through the strict adapter, so a board without a
-    /// verified DFU profile — BeagleY-AI, or anything a future catalog adds — never reaches the
-    /// DFU branch regardless of what this build supports.
     pub(crate) fn resolve(board: &crate::db::Board, img: &BoardImage) -> Self {
         Self {
             sd: cfg!(feature = "sd") && board.flasher == config::Flasher::SdCard,
@@ -825,7 +734,6 @@ impl WriteMethods {
         }
     }
 
-    /// Whether no destination can be offered at all.
     pub(crate) const fn is_empty(self) -> bool {
         !self.sd && !self.dfu
     }
@@ -843,8 +751,6 @@ pub(crate) fn destinations(methods: WriteMethods, filter: bool) -> Vec<Destinati
         );
     }
 
-    // One screen on purpose: a T3 with a card and a T3 in DFU mode are two destinations for the same
-    // image, and hiding one behind a mode switch is how a user writes to the wrong one.
     #[cfg(feature = "dfu")]
     if methods.dfu {
         out.extend(
@@ -858,11 +764,6 @@ pub(crate) fn destinations(methods: WriteMethods, filter: bool) -> Vec<Destinati
     out
 }
 
-/// Keep the current selection only while it is still on offer.
-///
-/// The destination list is re-enumerated every second. A card that was removed, or a board that
-/// left DFU mode, must not stay selected behind a NEXT button that now leads to a write against a
-/// device that is gone. `LocalFile` is exempt: it is a path the user chose, not an attached device.
 pub(crate) fn keep_selected_destination(
     selected: Option<Destination>,
     available: &[Destination],
@@ -882,7 +783,6 @@ pub(crate) fn file_filter(flasher: config::Flasher) -> &'static [&'static str] {
     match flasher {
         #[cfg(feature = "sd")]
         config::Flasher::SdCard => gem_flasher::sd::Target::FILE_TYPES,
-        // Only reachable when the crate is built without the `sd` feature.
         #[allow(unreachable_patterns)]
         _ => unimplemented!(),
     }
@@ -892,7 +792,6 @@ pub(crate) const fn flasher_supported(flasher: config::Flasher) -> bool {
     match flasher {
         #[cfg(feature = "sd")]
         config::Flasher::SdCard => true,
-        // Only reachable when the crate is built without the `sd` feature.
         #[allow(unreachable_patterns)]
         _ => false,
     }
@@ -903,8 +802,6 @@ pub(crate) enum FlashingCustomization {
     NoneSd,
     LinuxSdSysconfig(crate::persistance::SdSysconfCustomization),
     LinuxSdCloudInit(crate::persistance::SdSysconfCustomization),
-    /// T3 GemStone `config.ini`. The flag carries whether the selected image is a desktop variant,
-    /// which is what decides whether the VNC fields exist at all.
     T3GemInit {
         config: crate::persistance::T3GemInitCustomization,
         desktop: bool,
@@ -955,7 +852,6 @@ impl FlashingCustomization {
     pub(crate) fn reset(&mut self) {
         match self {
             Self::LinuxSdSysconfig(_) => *self = Self::LinuxSdSysconfig(Default::default()),
-            // The whole buffer is replaced rather than cleared field by field, so the secrets go too.
             Self::T3GemInit { desktop, .. } => {
                 *self = Self::T3GemInit {
                     config: Default::default(),
@@ -966,7 +862,6 @@ impl FlashingCustomization {
         }
     }
 
-    /// Enable the Wi-Fi block with an empty form, ready for the user or host autofill to fill.
     pub(crate) fn enable_wifi(&mut self) {
         match self {
             Self::LinuxSdSysconfig(c) | Self::LinuxSdCloudInit(c) if c.wifi.is_none() => {
@@ -979,7 +874,6 @@ impl FlashingCustomization {
         }
     }
 
-    /// Whether the Wi-Fi block is currently enabled (shown as an expanded form).
     pub(crate) fn wifi_enabled(&self) -> bool {
         match self {
             Self::LinuxSdSysconfig(c) | Self::LinuxSdCloudInit(c) => c.wifi.is_some(),
@@ -988,7 +882,6 @@ impl FlashingCustomization {
         }
     }
 
-    /// Clear the Wi-Fi block, discarding any secret it held.
     pub(crate) fn disable_wifi(&mut self) {
         match self {
             Self::LinuxSdSysconfig(c) | Self::LinuxSdCloudInit(c) => c.wifi = None,
@@ -1032,15 +925,11 @@ impl FlashingCustomization {
             | FlashingCustomization::LinuxSdCloudInit(sd_customization) => {
                 sd_customization.validate_user()
             }
-            // Valid exactly when the file can be produced, so ask the serializer instead of restating its rules.
             FlashingCustomization::T3GemInit { config, desktop } => config.build(*desktop).is_ok(),
             _ => true,
         }
     }
 
-    /// The first problem with the current T3 form, for display next to the disabled NEXT button.
-    ///
-    /// Returns `None` when the form is valid or is not a T3 form.
     pub(crate) fn validation_error(&self, lang: gem_i18n::Lang) -> Option<&'static str> {
         match self {
             FlashingCustomization::T3GemInit { config, desktop } => {
@@ -1080,11 +969,6 @@ impl FlashingCustomization {
         }
     }
 
-    /// Build the customization the flasher will apply.
-    ///
-    /// This returns a `Result` rather than falling back to "no customization": a card flashed
-    /// without the first-boot file the user configured is a wrong result, not a degraded one, and
-    /// it would only be discovered after boot.
     #[cfg(feature = "sd")]
     fn sd_customization(self) -> anyhow::Result<gem_flasher::sd::FlashingSdLinuxConfig> {
         Ok(match self {
@@ -1176,7 +1060,6 @@ pub(crate) fn pretty_bytes(bytes: u64) -> String {
     }
 }
 
-/// Return customization enum variant for cases where no customization is present
 pub(crate) fn no_customization(
     flasher: config::Flasher,
     img: &BoardImage,
@@ -1214,9 +1097,7 @@ pub(crate) fn app_title(_: &crate::GemImager) -> String {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum OsImageId {
     Format,
-    // points to parent
     Local(config::Flasher),
-    // points to OsImage
     OsImage(i64),
     OsSublist((i64, config::Flasher)),
 }
@@ -1322,15 +1203,9 @@ impl<'a> DestinationItem<'a> {
         }
     }
 
-    /// The second line under a destination.
-    ///
-    /// A card shows its capacity. A DFU board has none to show, and an entry with no second line
-    /// would be the least distinguishable item on a screen where picking the wrong one erases the
-    /// wrong storage — so it says what it is instead.
     pub(crate) fn subtitle(&self, lang: gem_i18n::Lang) -> Option<String> {
         match self {
             DestinationItem::SaveToFile(_) => None,
-            // Said on the row itself, so the user need not start a write to discover it.
             DestinationItem::Destination(d) if let Some((title, _)) = d.unavailable_reason() => {
                 Some(lang.text(title).to_owned())
             }
@@ -1365,10 +1240,6 @@ pub(crate) fn fetch_images(
     iced::Task::batch(tasks)
 }
 
-/// Whether a remote config URL is the T3 image catalog.
-///
-/// Matched on host rather than on the exact URL so a mirror or a path change still takes the
-/// strict adapter instead of silently falling back to the BeagleBoard parser.
 fn is_t3_catalog(url: &Url) -> bool {
     gem_config::t3::T3_CATALOG_URL
         .parse::<Url>()
@@ -1377,13 +1248,6 @@ fn is_t3_catalog(url: &Url) -> bool {
         .is_some_and(|(canonical_host, host)| canonical_host == host)
 }
 
-/// Fetch a remote config, routing the T3 catalog through its strict adapter.
-///
-/// The T3 document must never be parsed as a [`gem_config::config::Config`]. It has no `flasher`
-/// field on devices and declares `init_format: "systemd"` on images, and both structs are parsed
-/// with `VecSkipError` — so the legacy path does not fail, it yields an **empty board and image
-/// list**. That is why the board never appeared. Anything that is not the T3 catalog keeps the
-/// original path.
 pub(crate) async fn fetch_remote_config(
     downloader: &gem_downloader::Downloader,
     url: Url,
@@ -1394,8 +1258,6 @@ pub(crate) async fn fetch_remote_config(
 
     let raw: gem_config::t3::RawT3Catalog = downloader.download_json_no_cache(url.clone()).await?;
 
-    // Scope is T3-GEM-O1 and BeagleY-AI. The catalog's tagless "No filtering" pseudo-device carries
-    // neither board tag, so it falls out by construction rather than by a name check.
     let parsed = gem_config::t3::validate_catalog(
         raw,
         gem_config::t3::ProductScope::T3AndBeagleY,
@@ -1403,7 +1265,6 @@ pub(crate) async fn fetch_remote_config(
     )
     .map_err(|e| std::io::Error::other(format!("T3 catalog rejected: {e}")))?;
 
-    // Every diagnostic carries a JSON path; surfacing them keeps a shrinking catalog visible.
     for diagnostic in &parsed.diagnostics {
         tracing::warn!("T3 catalog: {diagnostic}");
     }
@@ -1417,7 +1278,6 @@ pub(crate) async fn fetch_remote_config(
 
     let config = gem_config::t3::catalog_to_config(&parsed.catalog);
     tracing::info!(
-        // Not `os_list.len()`: the bridge nests images under sub-lists, so entries are not images.
         "T3 catalog: {} board(s) and {} image(s) in scope",
         config.imager.devices.len(),
         config.image_count()
@@ -1523,7 +1383,6 @@ mod tests {
 
     #[test]
     fn flasher_supported_matches_enabled_features() {
-        // Feature-gated const fn, so compare against cfg! to hold under any feature set.
         assert_eq!(
             flasher_supported(config::Flasher::SdCard),
             cfg!(feature = "sd")
@@ -1581,7 +1440,6 @@ mod tests {
 
     #[test]
     fn flashing_customization_new_selects_variant_by_flasher() {
-        // A format image has init_format None, so SD falls through to NoneSd.
         let img = BoardImage::format();
         let cfg = GuiConfiguration::default();
 
@@ -1655,8 +1513,6 @@ mod tests {
         assert_eq!(SelectedImage::from(remote).staging_size_estimate(), 29);
     }
 
-    /// The raw SD writer treats a successful resolver as the point of no return. Both the archive
-    /// and extracted gates therefore have to fail here, before a reader is returned to that writer.
     #[tokio::test(flavor = "multi_thread")]
     async fn remote_resolver_finishes_every_integrity_gate_before_returning() {
         use httpmock::{Method::GET, MockServer};
@@ -1828,7 +1684,6 @@ mod tests {
             _ => panic!("variant should be preserved"),
         }
 
-        // Variants without inner state are left untouched.
         let mut none = FlashingCustomization::NoneSd;
         none.reset();
         assert!(matches!(none, FlashingCustomization::NoneSd));
@@ -1867,9 +1722,6 @@ mod tests {
         let details = img.details();
         assert!(details.iter().any(|(k, _)| *k == "Path"));
         assert!(details.iter().any(|(k, v)| *k == "Size" && v == "10"));
-        // A local file carries no catalog metadata, so for an SD target the user picks the format instead
-        // (see `board_image_update_init_format_on_image`). The T3 GemInit formats are deliberately absent:
-        // writing `config.ini` onto an arbitrary image would be guessing that the image is a T3 one.
         assert_eq!(
             img.supported_init_formats(),
             &[config::InitFormat::Sysconf, config::InitFormat::CloudInit]
@@ -1917,12 +1769,9 @@ mod tests {
         assert_eq!(item.to_string(), "Save To File");
         assert!(item.is_selected(&dst));
         assert!(!item.is_selected(&other));
-        // LocalFile has no size, so no subtitle.
         assert!(item.subtitle(gem_i18n::Lang::En).is_none());
     }
 
-    /// A board as the destination screen sees it, with only the fields the intersection reads
-    /// carrying meaning.
     fn board(name: &str, emmc_dfu: bool) -> crate::db::Board {
         crate::db::Board {
             id: 1,
@@ -1945,8 +1794,6 @@ mod tests {
         BoardImage::local(file.path().to_path_buf(), config::Flasher::SdCard)
     }
 
-    /// T3 with a real image offers both destinations; the DFU half only exists when this build
-    /// can actually drive it.
     #[test]
     fn a_dfu_capable_board_offers_both_write_methods() {
         let methods = WriteMethods::resolve(&board("T3-GEM-O1", true), &catalog_image());
@@ -1956,9 +1803,6 @@ mod tests {
         assert!(!methods.is_empty() || (!cfg!(feature = "sd") && !cfg!(feature = "dfu")));
     }
 
-    /// The regression this intersection exists for: a board without a verified DFU profile must
-    /// never be offered a destination that erases onboard storage, no matter what this build
-    /// supports.
     #[test]
     fn a_board_without_the_capability_is_never_offered_dfu() {
         let methods = WriteMethods::resolve(&board("BeagleY-AI", false), &catalog_image());
@@ -1967,8 +1811,6 @@ mod tests {
         assert_eq!(methods.sd, cfg!(feature = "sd"));
     }
 
-    /// "Format SD Card" is an SD-card operation. There is no eMMC equivalent, so the image half of
-    /// the intersection removes DFU even on a board that supports it.
     #[test]
     fn formatting_a_card_is_never_a_dfu_operation() {
         let methods = WriteMethods::resolve(&board("T3-GEM-O1", true), &BoardImage::format());
@@ -1978,14 +1820,11 @@ mod tests {
         assert!(catalog_image().supports_dfu());
     }
 
-    /// A destination that vanished between two enumeration ticks — a card pulled out, a board that
-    /// left DFU mode — must not stay selected behind an enabled NEXT button.
     #[test]
     fn a_destination_that_disappeared_is_deselected() {
         let present = Destination::LocalFile(PathBuf::from("/tmp/present.img"));
         let gone = Destination::LocalFile(PathBuf::from("/tmp/gone.img"));
 
-        // `LocalFile` is a path the user chose rather than an attached device, so it is exempt.
         assert_eq!(
             keep_selected_destination(Some(gone.clone()), std::slice::from_ref(&present)),
             Some(gone)
@@ -1997,7 +1836,6 @@ mod tests {
         assert_eq!(keep_selected_destination(None, &[]), None);
     }
 
-    /// The DFU-only branch of the same rule, exercised with a real device value.
     #[cfg(feature = "dfu")]
     #[test]
     fn an_unplugged_dfu_board_is_deselected() {
@@ -2010,12 +1848,10 @@ mod tests {
         )
         .into_iter()
         .next() else {
-            // No board attached in CI; the SD-shaped case above already covers the logic.
             return;
         };
 
         assert!(dest.is_dfu());
-        // Still listed: kept. Gone from the list: cleared.
         assert_eq!(
             keep_selected_destination(Some(dest.clone()), std::slice::from_ref(&dest)),
             Some(dest.clone())
@@ -2074,7 +1910,6 @@ mod tests {
 
     #[test]
     fn system_keymap_is_never_empty() {
-        // Falls back to "us" when the locale cannot be resolved.
         assert!(!system_keymap().is_empty());
     }
 }

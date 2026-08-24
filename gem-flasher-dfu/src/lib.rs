@@ -1,8 +1,3 @@
-//! Fail-closed T3-GEM-O1 DFU backend.
-//!
-//! USB discovery and control transfers are isolated behind [`DfuTransport`]. The protocol runner
-//! consumes typed stages, keeps the full physical USB topology across resets, streams raw eMMC
-//! without loading it into RAM, and only succeeds with terminal DFU evidence.
 
 mod model;
 mod resolver;
@@ -150,19 +145,10 @@ pub(crate) fn check_cancel(cancel: Option<&CancellationToken>) -> Result<()> {
     }
 }
 
-/// Whether a listed device can actually be opened, and if not, why.
-///
-/// An inaccessible board must still be **listed**. Dropping it from the enumeration is what makes
-/// the "assign WinUSB" and "install the udev rules" messages unreachable: the user cannot select a
-/// destination that is not on the screen, so the write that would produce those errors never
-/// starts and the board simply looks absent.
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum DeviceAccess {
-    /// The device opened; a write can be attempted.
     Available,
-    /// The OS refused access — on Linux, the missing `uaccess`/udev rule.
     PermissionDenied,
-    /// No usable driver is bound to the device — on Windows, WinUSB is not assigned.
     DriverMissing,
 }
 
@@ -174,7 +160,6 @@ pub struct Device {
     pub vendor_id: u16,
     pub product_id: u16,
     pub name: String,
-    /// Whether this device can be opened right now.
     pub access: DeviceAccess,
 }
 
@@ -187,17 +172,6 @@ impl Device {
     }
 }
 
-/// Enumerate boards this backend can write to.
-///
-/// Restricted to the T3 DFU identity, always. A DFU-class filter is not equivalent: a printer, a
-/// microcontroller dev board or a phone in fastboot can all present a DFU interface, and offering
-/// one as a destination on a screen whose next button erases onboard storage is a wrong result,
-/// not a permissive one. The `_show_all` toggle of [`crate::Device`]'s front-end deliberately does
-/// not widen this — "show all destinations" exists to reveal *disks* the SD path hides, and there
-/// is no corresponding hidden-but-valid DFU device.
-///
-/// Devices that cannot be opened are listed with their reason rather than dropped, so the front-end
-/// can tell the user to assign WinUSB or install the udev rules.
 pub fn devices(_show_all: bool) -> Vec<Device> {
     let Ok(context) = rusb::Context::new() else {
         return Vec::new();
@@ -224,7 +198,6 @@ pub fn devices(_show_all: bool) -> Vec<Device> {
                          as {access:?}",
                         device.bus_number()
                     );
-                    // The descriptor strings live behind the handle we could not get.
                     (
                         access,
                         format!(
@@ -249,12 +222,6 @@ pub fn devices(_show_all: bool) -> Vec<Device> {
         .collect()
 }
 
-/// Map an open failure onto the fix the user has to apply.
-///
-/// `Access` is the Linux permission case; `NotSupported`/`NotFound` is what libusb reports on
-/// Windows when no WinUSB-compatible driver is bound. Anything else is reported as a driver problem
-/// too, because from the screen's point of view "present but unopenable for an unknown reason" has
-/// the same first remedy — and the exact chain is in the log either way.
 const fn classify_open_error(error: rusb::Error) -> DeviceAccess {
     match error {
         rusb::Error::Access => DeviceAccess::PermissionDenied,
@@ -289,11 +256,6 @@ fn product_name<C: rusb::UsbContext>(
     }
 }
 
-/// Local-file parity harness retained for the CLI. It is deliberately strict: the caller must
-/// provide exactly the three boot artifacts plus raw eMMC in contract order. Production callers
-/// should obtain the first three inputs from [`BootArtifactResolver`], whose hashes are manifest
-/// anchored. This harness spools and hashes each source before touching USB, avoiding the old
-/// `u64 -> u32` conversion and ensuring a read error cannot begin a partial chain.
 pub fn flash<R, I>(
     imgs: Vec<(String, R)>,
     vendor_id: u16,
@@ -404,11 +366,6 @@ where
     Ok(())
 }
 
-/// Read `reader` to its end, hashing every byte, optionally copying them into `sink`.
-///
-/// The progress it reports is what separates this pass from a hang: it walks the whole
-/// multi-gigabyte image before the first USB packet, so a caller that stays silent here leaves the
-/// front-end showing the previous phase for minutes.
 fn digest_raw_image(
     reader: &mut dyn io::Read,
     mut sink: Option<&mut std::fs::File>,
@@ -421,7 +378,6 @@ fn digest_raw_image(
             let _ = sender.try_send(DfuProgress::ChecksummingImage(fraction));
         }
     };
-    // Roughly 200 updates over the image and never more than one per 8 MiB; the channel drops on contention.
     let step = (expected / 200).max(8 * 1024 * 1024);
     let mut next_report = step;
     let mut hasher = Sha256::new();
@@ -462,8 +418,6 @@ fn digest_raw_image(
     Ok(hasher.finalize().into())
 }
 
-/// Spool a one-shot reader (typically a decompressor) into a scratch file so it can be hashed
-/// before the write starts and replayed afterwards.
 fn stage_raw_stream<R, I>(
     raw_image: R,
     chan: Option<&mpsc::SyncSender<DfuProgress>>,
@@ -484,12 +438,6 @@ where
     Ok(raw_emmc_input(digest, advertised_size, Box::new(file)))
 }
 
-/// Hash an image that is already a finished file, in place.
-///
-/// The stream path has to spool because its reader is one-shot; a file is not, and copying it
-/// would double both the wall-clock cost of this phase and the free space the whole operation
-/// needs — for a multi-gigabyte image on a small system disk, that second copy is the difference
-/// between working and failing.
 fn stage_raw_file(
     path: &Path,
     chan: Option<&mpsc::SyncSender<DfuProgress>>,
@@ -520,11 +468,6 @@ fn raw_emmc_input(digest: [u8; 32], size: u64, reader: Box<dyn io::Read + Send>)
     }
 }
 
-/// Resolve the verified T3 boot chain and flash one extracted/customized raw eMMC image.
-///
-/// This is the production Phase 7 entry point. Unlike [`flash`], boot artifacts are never accepted
-/// from arbitrary local name/path pairs: their names and hashes come from the strict boot manifest
-/// and every object is re-hashed before reuse from cache.
 pub fn flash_t3<R, I>(
     raw_image: R,
     path: UsbPath,
@@ -545,8 +488,6 @@ where
     )
 }
 
-/// [`flash_t3`] for an image that is already a file on disk — the GUI's staging file, which was
-/// written and read-back verified before it got here.
 pub fn flash_t3_file(
     raw_image: impl AsRef<Path>,
     path: UsbPath,
@@ -575,7 +516,6 @@ fn flash_t3_inner(
     cancel: Option<CancellationToken>,
 ) -> Result<FlashReport> {
     let cache_dir = cache_dir.as_ref();
-    // Announced before the first network call: on a cold cache silence here looks like a hang.
     if let Some(sender) = &chan {
         let _ = sender.try_send(DfuProgress::BootArtifacts);
     }
@@ -609,7 +549,6 @@ fn flash_t3_inner(
     )
 }
 
-/// Platform-native persistent cache directory used by the CLI parity harness.
 pub fn default_t3_cache_dir() -> Result<PathBuf> {
     directories::ProjectDirs::from("org", "t3gemstone", "T3GemstoneImager")
         .map(|dirs| dirs.cache_dir().join("dfu"))
@@ -625,9 +564,6 @@ pub fn default_t3_cache_dir() -> Result<PathBuf> {
 mod enumeration_tests {
     use super::*;
 
-    /// The two failures a user can fix have to stay apart: a Linux permission problem is solved by
-    /// a udev rule and a Windows driver problem by assigning WinUSB, and neither instruction helps
-    /// with the other.
     #[test]
     fn open_failures_map_to_the_fix_the_user_has_to_apply() {
         assert_eq!(
@@ -638,15 +574,12 @@ mod enumeration_tests {
             classify_open_error(rusb::Error::NotSupported),
             DeviceAccess::DriverMissing
         );
-        // Unknown reasons take the driver branch rather than a permission problem the user does not have.
         assert_eq!(
             classify_open_error(rusb::Error::Other),
             DeviceAccess::DriverMissing
         );
     }
 
-    /// Enumeration must never invent a destination out of someone else's hardware. Without a board
-    /// attached this is an emptiness check; with one attached it asserts the identity filter.
     #[test]
     fn only_the_t3_dfu_identity_is_ever_listed() {
         for device in devices(true).into_iter().chain(devices(false)) {

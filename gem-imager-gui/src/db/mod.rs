@@ -1,4 +1,3 @@
-//! This module handles interaction with sqlite db used for config.
 
 use std::sync::{Arc, Mutex};
 
@@ -20,11 +19,6 @@ pub(crate) struct BoardListItem {
     pub(crate) id: i64,
     pub(crate) icon: Option<Url>,
     pub(crate) name: String,
-    /// Catalog tags of this board, e.g. `t3-gem-o1`.
-    ///
-    /// The list screen identifies a board by tag rather than by name so the bundled board photo
-    /// keeps matching when a catalog author renames "T3-GEM-O1" — the tag is the same value the
-    /// catalog already uses to attach images to boards.
     pub(crate) tags: Vec<String>,
 }
 
@@ -39,13 +33,8 @@ impl BoardListItem {
     }
 }
 
-/// Separator the tag queries aggregate with.
-///
-/// A unit separator rather than a comma: a tag is free-form catalog text, and a comma inside one
-/// would silently split it into two tags that match nothing.
 const TAG_SEPARATOR: &str = "\u{1f}";
 
-/// Split an aggregated tag column back into individual tags.
 fn parse_tags(raw: Option<String>) -> Vec<String> {
     raw.filter(|s| !s.is_empty())
         .map(|s| s.split(TAG_SEPARATOR).map(str::to_string).collect())
@@ -57,25 +46,17 @@ pub(crate) struct Board {
     pub(crate) id: i64,
     pub(crate) name: String,
     pub(crate) icon: Option<Url>,
-    /// Catalog tags of this board. See [`BoardListItem::tags`].
     pub(crate) tags: Vec<String>,
     pub(crate) description: String,
     pub(crate) documentation: Option<Url>,
     pub(crate) specification: Vec<(String, String)>,
     pub(crate) oshw: Option<String>,
     pub(crate) flasher: config::Flasher,
-    /// Whether this board accepts a DFU write to onboard eMMC.
-    ///
-    /// One half of the destination intersection in `instruction.md` §6.3; the other halves are the
-    /// selected image and whether this build has a reachable DFU backend.
     pub(crate) emmc_dfu: bool,
     pub(crate) instructions: Option<String>,
 }
 
 impl From<&Board> for config::Device {
-    /// The copy button exists so a board can be pasted back into a catalog, which means the
-    /// payload has to be a catalog entry rather than this crate's row type. `Board` is a superset
-    /// apart from `id`, the SQLite rowid, which is meaningless outside this database.
     fn from(value: &Board) -> Self {
         Self {
             name: value.name.clone(),
@@ -157,7 +138,6 @@ pub(crate) struct OsImage {
     pub(crate) url: Url,
     pub(crate) image_download_size: Option<i64>,
     pub(crate) image_download_sha256: [u8; 32],
-    /// Extracted-side digest, when the catalog publishes one (`instruction.md` §8.1).
     pub(crate) extract_sha256: Option<[u8; 32]>,
     pub(crate) extract_size: i64,
     pub(crate) release_date: chrono::NaiveDate,
@@ -274,7 +254,6 @@ impl Db {
 
     pub(crate) fn remote_configs(&self) -> rusqlite::Result<Vec<(i64, Url)>> {
         let db = self.db.lock().unwrap();
-        // Runs once per process, so a slot in rusqlite's prepared-statement cache would be wasted.
         let mut stmt = db.prepare("SELECT id, url FROM remote_configs WHERE fetched = FALSE")?;
         let res = stmt
             .query_map([], |r| {
@@ -488,10 +467,6 @@ impl Db {
         parent_id: Option<i64>,
         remote_config_id: Option<i64>,
     ) -> rusqlite::Result<i64> {
-        // The same image legitimately arrives once per board that accepts it, and letting the unique-key
-        // conflict propagate aborts the whole merge -- losing the board list, not just the duplicate.
-        // `DO UPDATE` rather than `DO NOTHING` because only an updating upsert produces a `RETURNING` row;
-        // the assignment is a deliberate no-op, so the first copy's data stands.
         let mut stmt = exec.prepare_cached(
             r#"
             INSERT INTO os_images(name, parent_id, description, icon, url,
@@ -523,7 +498,6 @@ impl Db {
             |row| row.get(0),
         )?;
 
-        // A repeated image maps to one more board; the pair itself must stay unique.
         let mut stmt = exec.prepare_cached(
             r#"
             INSERT OR IGNORE INTO os_image_boards(image_id, board_id)
@@ -577,7 +551,6 @@ impl Db {
         Ok(id)
     }
 
-    /// Get all board icons.
     pub(crate) fn board_icons(&self) -> rusqlite::Result<Vec<url::Url>> {
         let db = self.db.lock().unwrap();
         let mut stmt =
@@ -590,7 +563,6 @@ impl Db {
         Ok(res)
     }
 
-    /// Get board list data. (ID, Icon, Name, Tags)
     pub(crate) fn board_list(&self, search: &str) -> rusqlite::Result<Vec<BoardListItem>> {
         let db = self.db.lock().unwrap();
         let mut stmt = db.prepare_cached(

@@ -1,37 +1,21 @@
-//! Typed SHA-256 digest for T3 catalog integrity fields.
 
 use std::fmt;
 
-/// A parsed SHA-256 digest.
-///
-/// `instruction.md` §6.2 requires every catalog hash to be exactly 64 hex characters and to be
-/// converted to `[u8; 32]` while parsing. Keeping the digest as a typed value (rather than a
-/// `String`) makes it impossible to compare a truncated or malformed hex string downstream, and
-/// makes the archive/extracted digests non-interchangeable at the type level.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Sha256([u8; Sha256::LEN]);
 
-/// Why a hex string could not be parsed into a [`Sha256`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Sha256ParseError {
-    /// Digest was not exactly [`Sha256::HEX_LEN`] bytes long.
     Length {
-        /// Length actually seen, in bytes.
         actual: usize,
     },
-    /// Digest contained a byte outside `[0-9a-fA-F]`.
     NotHex,
 }
 
 impl Sha256 {
-    /// Length of the raw digest in bytes.
     pub const LEN: usize = 32;
-    /// Length of the hex encoding in bytes.
     pub const HEX_LEN: usize = 64;
 
-    /// Parse a 64-character hex string.
-    ///
-    /// Rejects any other length up front so a short digest can never be zero-extended.
     pub fn parse(hex: &str) -> Result<Self, Sha256ParseError> {
         if hex.len() != Self::HEX_LEN {
             return Err(Sha256ParseError::Length { actual: hex.len() });
@@ -42,17 +26,14 @@ impl Sha256 {
         Ok(Self(raw))
     }
 
-    /// Wrap an already-computed digest, e.g. one produced by a hasher during download.
     pub const fn from_bytes(raw: [u8; Self::LEN]) -> Self {
         Self(raw)
     }
 
-    /// Raw digest bytes, for comparison against a hasher result.
     pub const fn as_bytes(&self) -> &[u8; Self::LEN] {
         &self.0
     }
 
-    /// Lowercase hex encoding, for logs and persistence.
     pub fn to_hex(&self) -> String {
         const_hex::encode(self.0)
     }

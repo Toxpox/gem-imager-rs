@@ -5,17 +5,8 @@ use iced::{
 
 use crate::{constants, message::GemImagerMessage};
 
-/// Backdrop the illustration sits on.
-///
-/// The diagrams are black line art drawn for paper. Dropped straight onto
-/// [`constants::GEMSTONE_NAVY_CARD`] they read as a blown-out white rectangle — a render fault
-/// rather than a picture. A light, rounded plate around them makes the contrast look deliberate.
 const MOUNT_BACKGROUND: iced::Color = iced::color!(0xf2, 0xf3, 0xf7);
 
-/// A single-button informational modal that carries an illustration.
-///
-/// The handle is owned rather than borrowed: `svg::Handle` is a cheap `Arc` clone, so paying for
-/// one per frame is cheaper than threading a lifetime through every caller.
 pub(crate) struct Notice {
     pub(crate) illustration: widget::svg::Handle,
     pub(crate) title: gem_i18n::Msg,
@@ -24,7 +15,6 @@ pub(crate) struct Notice {
     pub(crate) dismiss: GemImagerMessage,
 }
 
-/// Overlays `notice` on `page`, or returns `page` untouched when there is nothing to show.
 pub(crate) fn wrap<'a>(
     page: Element<'a, GemImagerMessage>,
     notice: Option<Notice>,
@@ -34,8 +24,6 @@ pub(crate) fn wrap<'a>(
         return page;
     };
 
-    // No `.style(..)`: setting `svg::Style::color` makes resvg flood-fill the pixmap with one colour,
-    // collapsing every switch, digit and frame line into a blob. iced 0.14's `{ color: None }` is right.
     let illustration = widget::container(
         widget::svg(notice.illustration)
             .width(iced::Fill)

@@ -109,7 +109,6 @@ impl From<Device> for DeviceDescriptor {
 
 #[derive(Deserialize, Debug)]
 #[serde(untagged)]
-/// Sometimes fssize and fsavail are strings. So need to handle that.
 enum FsSize {
     String(String),
     U64(u64),
@@ -148,17 +147,6 @@ impl From<Child> for MountPoint {
     }
 }
 
-/// Exactly the columns [`Device`] and [`Child`] deserialize.
-///
-/// `--output-all` asks for every column lsblk knows (~70 per device and per
-/// partition), and serde then walks and discards the ones with no matching
-/// field. Naming the columns cuts the JSON to roughly a quarter, which is worth
-/// it because the GUI re-runs this once a second while the destination page is
-/// open.
-///
-/// Keep in sync with the two structs: an absent column leaves an `Option` field
-/// as `None`, but the non-optional ones (`ro`, `rm`, `hotplug`, `phy-sec`,
-/// `log-sec`) would fail to deserialize.
 const COLUMNS: &str = "NAME,KNAME,SIZE,TRAN,SUBSYSTEMS,RO,RM,HOTPLUG,PHY-SEC,LOG-SEC,\
                        PTTYPE,LABEL,VENDOR,MODEL,MOUNTPOINT,FSSIZE,FSAVAIL,PARTLABEL";
 
@@ -254,18 +242,12 @@ mod tests {
         let _: Vec<DeviceDescriptor> = res.blockdevices.into_iter().map(Into::into).collect();
     }
 
-    /// Parse a `blockdevices` JSON array through the same path `lsblk()` uses
-    /// (`Devices` -> `DeviceDescriptor`), so the classification logic can be
-    /// exercised without a real `lsblk` binary or block devices.
     fn descriptors(blockdevices: &str) -> Vec<DeviceDescriptor> {
         let data = format!(r#"{{"blockdevices":{blockdevices}}}"#);
         let res: super::Devices = serde_json::from_str(&data).unwrap();
         res.blockdevices.into_iter().map(Into::into).collect()
     }
 
-    /// A removable USB device: `rm` + a `usb`/`scsi` subsystem string. It should
-    /// be classified removable (not system), the bus type upper-cased, and the
-    /// description built from label+vendor+model with empty parts dropped.
     #[test]
     fn usb_removable_disk_classification() {
         let d = &descriptors(
@@ -295,9 +277,6 @@ mod tests {
         assert_eq!(d.description, "BOOTKingstonDataTraveler");
     }
 
-    /// An internal NVMe disk: no `usb`, not `rm`/`hotplug`, and `block` present.
-    /// It should be a non-removable system drive, `is_scsi` via the `pci`
-    /// subsystem, description built from `model` alone.
     #[test]
     fn internal_disk_is_system_not_removable() {
         let d = &descriptors(
@@ -321,9 +300,6 @@ mod tests {
         assert_eq!(d.partition_table_type, None);
     }
 
-    /// A device whose `subsystems` string lacks `block` is virtual, which forces
-    /// removable=true and system=false. A missing `tran` yields the "UNKNOWN"
-    /// bus type, and `ro` propagates to `is_readonly`.
     #[test]
     fn virtual_device_without_block_subsystem() {
         let d = &descriptors(
@@ -346,7 +322,6 @@ mod tests {
         assert_eq!(d.description, "");
     }
 
-    /// `hotplug` alone (without `rm`) must still mark the device removable.
     #[test]
     fn hotplug_alone_marks_removable() {
         let d = &descriptors(
@@ -365,9 +340,6 @@ mod tests {
         assert!(!d.is_virtual);
     }
 
-    /// Children map to mountpoints: `fssize`/`fsavail` accept either JSON strings
-    /// or numbers (the `FsSize` untagged enum), the mount label falls back to
-    /// `partlabel` when `label` is null, and a null `mountpoint` becomes "".
     #[test]
     fn children_map_to_mountpoints_with_fssize_variants() {
         let d = &descriptors(
@@ -386,20 +358,16 @@ mod tests {
 
         assert_eq!(d.mountpoints.len(), 2);
 
-        // fssize given as a JSON string, fsavail as a number.
         assert_eq!(d.mountpoints[0].path, "/boot");
         assert_eq!(d.mountpoints[0].total_bytes, Some(1048576));
         assert_eq!(d.mountpoints[0].available_bytes, Some(524288));
-        // label is null -> falls back to partlabel.
         assert_eq!(d.mountpoints[0].label.as_deref(), Some("BOOTFS"));
 
-        // null mountpoint -> empty path; label present -> used as-is.
         assert_eq!(d.mountpoints[1].path, "");
         assert_eq!(d.mountpoints[1].total_bytes, None);
         assert_eq!(d.mountpoints[1].label.as_deref(), Some("ROOT"));
     }
 
-    /// Missing `name`/`kname` fall back to the `NO_NAME` default.
     #[test]
     fn missing_name_uses_default() {
         let d = &descriptors(
@@ -415,13 +383,6 @@ mod tests {
         assert_eq!(d.raw, "NO_NAME");
     }
 
-    /// `subsystems` can be null in `lsblk` output. The device must still parse
-    /// (it used to fail deserialization when the field was a required `String`),
-    /// and every subsystems-derived flag falls to false: `is_scsi`, `is_usb`,
-    /// and `is_virtual`. Note `is_usb` is derived from `subsystems`, not `tran`,
-    /// so it stays false even though `tran` is "usb" and the bus type is "USB".
-    /// With no `rm`/`hotplug` and not virtual, the device is a non-removable
-    /// system disk.
     #[test]
     fn null_subsystems_parses_and_classifies() {
         let d = &descriptors(
@@ -439,13 +400,10 @@ mod tests {
         assert!(!d.is_virtual);
         assert!(!d.is_removable);
         assert!(d.is_system);
-        // Non-subsystems fields are unaffected: bus type still comes from `tran`.
         assert_eq!(d.bus_type.as_deref(), Some("USB"));
         assert_eq!(d.description, "Generic");
     }
 
-    /// The `subsystems` key omitted entirely (not just null) must also parse via
-    /// serde's `Option` default, yielding the same all-false classification.
     #[test]
     fn omitted_subsystems_key_parses() {
         let d = &descriptors(
@@ -463,11 +421,6 @@ mod tests {
         assert_eq!(d.bus_type.as_deref(), Some("UNKNOWN"));
     }
 
-    /// Guard against a regression where a virtual device is detected by the
-    /// *absence* of "block" in `subsystems`: a null `subsystems` is NOT the same
-    /// as a subsystems string missing "block". `is_some_and` returns false for
-    /// None, so a null-subsystems device is non-virtual (contrast with the
-    /// existing empty-string case, which is virtual).
     #[test]
     fn null_subsystems_is_not_virtual() {
         let d = &descriptors(
@@ -484,9 +437,6 @@ mod tests {
         assert!(d.is_system);
     }
 
-    /// An empty `subsystems` string is normalized to `None`, so it classifies
-    /// identically to null/missing: not virtual (contrast the old behavior where
-    /// `""` was treated as virtual because it lacks "block").
     #[test]
     fn empty_subsystems_normalized_to_none() {
         let d = &descriptors(

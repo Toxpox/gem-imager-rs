@@ -1,4 +1,3 @@
-//! This module contains persistance for configuration
 
 use std::io::{Read, Write};
 use std::path::PathBuf;
@@ -6,24 +5,16 @@ use std::path::PathBuf;
 use gem_flasher::t3_gem_init::{self, Secret};
 use serde::{Deserialize, Serialize};
 
-/// Configuration for GUI that should be presisted
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct GuiConfiguration {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) sd_customization: Option<SdCustomization>,
 
-    /// The language the user picked, as an ISO 639-1 code.
-    ///
-    /// `None` means "never chosen", which is not the same as "English": it lets the system locale
-    /// decide on every start until the user states a preference. Stored as a string rather than
-    /// as [`gem_i18n::Lang`] so a config written by a future build that supports more languages
-    /// still loads here — an unknown code falls back to the system locale rather than failing.
     #[serde(skip_serializing_if = "Option::is_none")]
     language: Option<String>,
 }
 
 impl GuiConfiguration {
-    /// The stored language, if the user picked one this build understands.
     pub(crate) fn language(&self) -> Option<gem_i18n::Lang> {
         let stored = self.language.as_deref()?;
 
@@ -38,7 +29,6 @@ impl GuiConfiguration {
         }
     }
 
-    /// Record the user's choice. Consuming and returning `self` matches the other updaters here.
     pub(crate) fn update_language(mut self, lang: gem_i18n::Lang) -> Self {
         self.language = Some(lang.code().to_string());
         self
@@ -108,17 +98,6 @@ impl SdCustomization {
     }
 }
 
-/// T3 GemStone first-boot settings as the user typed them.
-///
-/// This is the *unvalidated* edit buffer; [`Self::build`] turns it into the validated
-/// [`t3_gem_init::T3GemInitConfig`] that can actually be written.
-///
-/// # What is not saved
-///
-/// Every password field is `#[serde(skip)]`, so no secret reaches `config.json`
-/// (`instruction.md` §10.3). Reloading the application therefore restores the network name but not
-/// its passphrase, which is the intended trade: the alternative is a plaintext Wi-Fi key sitting in
-/// the user's config directory.
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub(crate) struct T3GemInitCustomization {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -180,15 +159,6 @@ impl T3GemInitCustomization {
         self
     }
 
-    /// Validate every field and produce the config the serializer accepts.
-    ///
-    /// The whole form is validated together rather than field by field, so NEXT is enabled exactly
-    /// when the file can actually be written — there is no state in which the user gets past this
-    /// screen and the flash then fails on a value they can no longer see.
-    ///
-    /// `include_vnc` comes from the selected image: the VNC fields are only offered on desktop
-    /// images, and a stale VNC entry from an earlier selection must not follow the user onto a
-    /// non-desktop image.
     pub(crate) fn build(
         &self,
         include_vnc: bool,
@@ -238,8 +208,6 @@ impl T3GemInitCustomization {
             .with_keyboard_layout(keymap)
             .with_vnc(vnc);
 
-        // Serializing is the only way to learn whether the password lengths are acceptable, and it is
-        // cheap enough to use as the check. The result is dropped: its bytes are secret.
         config.serialize()?;
 
         Ok(config)
@@ -355,15 +323,11 @@ impl SdSysconfCustomization {
     }
 }
 
-/// Used when the host username is unavailable or itself unusable. Matches the placeholder shown
-/// in the hostname field so the suggested identity is consistent across the form.
 pub(crate) const DEFAULT_USERNAME: &str = "gemstone";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct SdCustomizationUser {
     pub(crate) username: String,
-    /// Never serialized: a plaintext account password must not land in `config.json`
-    /// (`instruction.md` §10.3). Reloading restores the username but not the password.
     #[serde(skip)]
     pub(crate) password: Secret,
 }
@@ -386,9 +350,6 @@ impl SdCustomizationUser {
         self
     }
 
-    /// An empty name is as unusable as `root`: the account is written to the image but cannot be
-    /// logged in to. This is reachable without the user ever touching the field, because the
-    /// default falls back to whatever `whoami::username()` returns.
     pub(crate) fn validate_username(&self) -> bool {
         !self.username.trim().is_empty() && self.username != "root"
     }
@@ -396,9 +357,6 @@ impl SdCustomizationUser {
 
 impl Default for SdCustomizationUser {
     fn default() -> Self {
-        // `whoami::username()` fails on a stripped container or an unmapped uid. Falling back to
-        // the empty string put a name the validator now rejects into the form, so prefer a usable
-        // placeholder over one the user has to notice and correct.
         let username = whoami::username()
             .ok()
             .filter(|x| !x.trim().is_empty() && x != "root")
@@ -411,8 +369,6 @@ impl Default for SdCustomizationUser {
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct SdCustomizationWifi {
     pub(crate) ssid: String,
-    /// Never serialized: same rule as the account password. The SSID is kept so a reload restores
-    /// the network name, but the passphrase has to be re-entered.
     #[serde(skip)]
     pub(crate) password: Secret,
 }
@@ -439,18 +395,12 @@ mod tests {
         assert!(SdCustomizationUser::new("beagle".into(), "pw").validate_username());
     }
 
-    /// `whoami::username()` fails on a stripped container or an unmapped uid, and the fallback
-    /// was `unwrap_or_default()`. Since the only rule was "not root", the empty string passed
-    /// validation and got written to the image as a nameless account, which cannot be logged in
-    /// to. Refusing it keeps the NEXT button disabled until the user supplies a name.
     #[test]
     fn sd_user_validate_rejects_an_empty_username() {
         assert!(!SdCustomizationUser::new(String::new(), "pw").validate_username());
         assert!(!SdCustomizationUser::new("   ".into(), "pw").validate_username());
     }
 
-    /// The default is what a user who never touches the field flashes, so it has to be a name the
-    /// validator accepts rather than whatever `whoami` happened to return.
     #[test]
     fn sd_user_default_username_is_valid() {
         assert!(
@@ -485,9 +435,7 @@ mod tests {
 
     #[test]
     fn sysconf_validate_user_follows_inner_user() {
-        // No user configured is always valid.
         assert!(SdSysconfCustomization::default().validate_user());
-        // A configured non-root user is valid; root is not.
         let ok = SdSysconfCustomization::default()
             .update_user(Some(SdCustomizationUser::new("beagle".into(), "pw")));
         assert!(ok.validate_user());
@@ -555,7 +503,6 @@ mod tests {
 
     #[test]
     fn empty_gui_configuration_serializes_to_empty_object() {
-        // All fields are `skip_serializing_if = "Option::is_none"`.
         let json = serde_json::to_string(&GuiConfiguration::default()).unwrap();
         assert_eq!(json, "{}");
     }
@@ -584,7 +531,6 @@ mod tests {
     #[cfg(feature = "sd")]
     #[test]
     fn sysconf_converts_to_flasher_configs_without_panicking() {
-        // Exercises the sysconfig/cloudinit bridges into gem_flasher.
         let base = SdSysconfCustomization::default()
             .update_hostname(Some("beagle".into()))
             .update_user(Some(SdCustomizationUser::new("beagle".into(), "pw")))
@@ -599,7 +545,6 @@ mod tests {
 
     #[test]
     fn generic_sd_passwords_never_reach_the_config_file() {
-        // The point of `Secret` + `#[serde(skip)]`: no account or Wi-Fi password in a saved config.json.
         let mut gui = GuiConfiguration::default();
         gui.update_sd_customization({
             let mut sd = SdCustomization::default();
@@ -627,11 +572,9 @@ mod tests {
             !json.contains("wifi-secret-4471"),
             "wifi password leaked into config.json:\n{json}"
         );
-        // The non-secret fields are still there, so this is redaction, not data loss.
         assert!(json.contains("beagle"));
         assert!(json.contains("HomeNet"));
 
-        // Reloading restores the username/SSID but leaves the passwords empty for re-entry.
         let back: GuiConfiguration = serde_json::from_str(&json).unwrap();
         let sysconf = back
             .sd_customization
@@ -645,7 +588,6 @@ mod tests {
 
     #[test]
     fn generic_sd_customization_debug_redacts_passwords() {
-        // A `Debug` render of the customization state must not print either password (`instruction.md` 10.3).
         let sysconf = SdSysconfCustomization::default()
             .update_user(Some(SdCustomizationUser::new(
                 "beagle".into(),
@@ -678,8 +620,6 @@ mod tests {
             }))
     }
 
-    /// `instruction.md` §10.3: no secret may be persisted. This checks the serialized JSON text
-    /// directly, because that is the artefact that ends up on disk.
     #[test]
     fn no_t3_secret_is_ever_written_to_the_config_file() {
         let mut gui = GuiConfiguration::default();
@@ -694,13 +634,10 @@ mod tests {
         for secret in ["account-secret", "wifi-secret", "vnc1234"] {
             assert!(!json.contains(secret), "{secret} was persisted");
         }
-        // The non-secret settings are still saved, so restoring is worth doing at all.
         assert!(json.contains("t3-gemstone"));
         assert!(json.contains("Ağ-Çekirdek"));
     }
 
-    /// Reloading restores the network name but leaves its passphrase blank, rather than restoring a
-    /// wrong or stale one.
     #[test]
     fn reloading_restores_settings_but_not_passwords() {
         let mut gui = GuiConfiguration::default();
@@ -738,8 +675,6 @@ mod tests {
         assert!(matches!(err, t3_gem_init::T3GemInitError::InvalidHostname));
     }
 
-    /// The VNC fields only exist on desktop images, so a VNC entry left over from an earlier
-    /// selection must not be written when a non-desktop image is chosen.
     #[test]
     fn vnc_is_dropped_for_non_desktop_images() {
         let desktop = t3_form().build(true).unwrap();
@@ -751,8 +686,6 @@ mod tests {
         assert!(!rendered.contains("vnc"));
     }
 
-    /// A password over the protocol limit fails the whole form, so NEXT stays disabled instead of
-    /// the flash failing later.
     #[test]
     fn an_over_long_vnc_password_fails_validation() {
         let err = t3_form()
@@ -768,8 +701,6 @@ mod tests {
         ));
     }
 
-    /// The keymap picker and the serializer's allowlist have to agree, or the user could select a
-    /// layout the file refuses to carry.
     #[test]
     fn every_offered_keymap_is_accepted_by_the_serializer() {
         for keymap in crate::constants::KEYMAP_LAYOUTS {

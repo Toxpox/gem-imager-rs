@@ -1,7 +1,3 @@
-//! The shipped udev rules are a packaging artifact, so nothing in the compiler checks them against
-//! the IDs the DFU transport actually opens. `Msg::DfuPermissionBody` tells the user that
-//! installing these rules will fix an EACCES on the board, so a drift between the two turns that
-//! message into a dead end: the user installs the file and hits the same error.
 
 use gem_config::t3::canonical::{T3_DFU_PRODUCT_ID, T3_DFU_VENDOR_ID};
 
@@ -23,8 +19,6 @@ fn shipped_rules_grant_access_to_the_dfu_device_the_flasher_opens() {
 
 #[test]
 fn the_dfu_rule_actually_grants_the_invoking_user_access() {
-    // MODE alone leaves the node owned by root:root. `uaccess` is what hands the device to the
-    // user on the active seat, which is the case the error message is about.
     let dfu_line = RULES
         .lines()
         .map(str::trim)

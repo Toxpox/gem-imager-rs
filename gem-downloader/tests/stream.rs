@@ -1,8 +1,3 @@
-//! Integration tests for `Downloader::download_to_stream`, the streaming download path that owns
-//! the two archive-side integrity gates of `instruction.md` §8.1, and for the transport rules of
-//! §8.2. Together with the unit tests in `src/lib.rs` (scheme and redirect rules) these cover the
-//! §8.4 matrix: wrong hash, short/long body, 404/500, redirect limit, cancellation leaving no
-//! partial cache, two concurrent downloads of one hash, and a Unicode cache path.
 
 use gem_downloader::{
     ArchiveIntegrity, DownloadError, Downloader, RedirectRefusal, TransportPolicy,
@@ -19,13 +14,10 @@ fn sha256(data: &[u8]) -> [u8; 32] {
     hasher.finalize().into()
 }
 
-/// A downloader allowed to talk to the local plaintext mock server. Every other limit is the
-/// shipping one.
 fn test_downloader(cache: &Path) -> Downloader {
     Downloader::with_policy(cache, TransportPolicy::plaintext_for_tests()).unwrap()
 }
 
-/// Every entry currently in the cache directory.
 fn entries(dir: &Path) -> Vec<PathBuf> {
     match std::fs::read_dir(dir) {
         Ok(dir) => dir.map(|e| e.unwrap().path()).collect(),
@@ -65,7 +57,6 @@ async fn download_to_stream_persists_on_sha_match() {
 
     let path = single_file(tmp.path()).expect("a file should be persisted");
     assert_eq!(std::fs::read(&path).unwrap(), content);
-    // Persisted under the SHA-derived cache name, with no scratch file left behind.
     assert_eq!(
         path.file_name().unwrap().to_str().unwrap(),
         const_hex::encode(sha)
@@ -80,7 +71,6 @@ async fn download_to_stream_rejects_sha_mismatch() {
     let downloader = test_downloader(tmp.path());
 
     let content = b"streamed payload bytes";
-    // A hash that cannot match the served content.
     let wrong_sha = [0u8; 32];
 
     let mock = server.mock(|when, then| {
@@ -107,8 +97,6 @@ async fn download_to_stream_rejects_sha_mismatch() {
     );
 }
 
-/// The archive size is an independent gate: an oversized body is refused mid-stream, before the
-/// digest is even known.
 #[tokio::test]
 async fn a_body_longer_than_the_declared_archive_size_is_refused() {
     let server = MockServer::start();
@@ -185,7 +173,6 @@ async fn a_404_body_is_never_mistaken_for_content() {
     let err = downloader
         .download_to_stream(
             server.url("/missing"),
-            // Deliberately the hash *of the error page*: only the status gate can catch this.
             ArchiveIntegrity::from_sha256(sha256(body)),
             writer,
         )
@@ -328,7 +315,6 @@ async fn two_concurrent_downloads_of_the_same_hash_hit_the_network_once() {
                     writer,
                 )
                 .await;
-            // Keep the reader half alive for the duration of the write.
             drop(reader);
             result
         }));
@@ -346,7 +332,6 @@ async fn two_concurrent_downloads_of_the_same_hash_hit_the_network_once() {
 async fn a_unicode_cache_path_works() {
     let server = MockServer::start();
     let tmp = TempDir::new().unwrap();
-    // Turkish dotless i and Japanese katakana: both outside ASCII, both legal path components.
     let cache = tmp.path().join("önbellek-ışık").join("キャッシュ");
     let downloader = test_downloader(&cache);
 
@@ -372,8 +357,6 @@ async fn a_unicode_cache_path_works() {
     assert_eq!(std::fs::read(&path).unwrap(), content);
 }
 
-/// A second request for an already-cached hash must not touch the network, and must still deliver
-/// the bytes to the caller's stream.
 #[tokio::test]
 async fn a_cached_archive_is_replayed_without_a_second_request() {
     let server = MockServer::start();

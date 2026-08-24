@@ -1,47 +1,16 @@
-//! Turkish and English user-facing strings for the T3 Gemstone Imager.
-//!
-//! # Why this is a compile-time table and not a resource loader
-//!
-//! The rest of this codebase refuses silent degradation: a catalog that parses to zero images is
-//! not a success, an archive whose hash does not match is not "probably fine". A localisation
-//! layer that falls back to the key name — or to English — when a translation is missing is the
-//! same failure in a different costume, and it fails in exactly the place where it hurts most:
-//! the destructive-action confirmation that the user is reading in their own language.
-//!
-//! So [`Msg`] and the lookup table are generated together by one macro. Adding a variant without
-//! a Turkish string does not compile. There is no runtime path that can produce a missing string,
-//! which is also why there is no `Result` in this API.
-//!
-//! # Strings with values in them
-//!
-//! Anything that interpolates lives in [`fmt`] as a function taking typed arguments, rather than
-//! as a template the caller fills in positionally. That keeps argument order from drifting
-//! between languages — Turkish word order routinely differs from English — and makes each
-//! message individually snapshot-testable in both languages.
-//!
-//! # Scope
-//!
-//! Keys for flows that are not built yet (DFU, WinUSB/Zadig, udev permissions) are present.
-//! `instruction.md` §11.2 asks for the resources to exist *before* the UI text grows, so Faz 8
-//! finds them ready instead of adding English literals it would have to revisit.
 
 #![forbid(unsafe_code)]
 
-/// A language the interface can be displayed in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum Lang {
-    /// English. The default when the system locale is anything other than Turkish.
     #[default]
     En,
-    /// Turkish.
     Tr,
 }
 
 impl Lang {
-    /// Every supported language, in the order a picker should show them.
     pub const ALL: [Lang; 2] = [Lang::En, Lang::Tr];
 
-    /// The ISO 639-1 code, as stored in the persisted GUI configuration.
     pub const fn code(self) -> &'static str {
         match self {
             Lang::En => "en",
@@ -49,10 +18,7 @@ impl Lang {
         }
     }
 
-    /// Parse a stored or system code. Returns `None` for anything unsupported, so the caller
-    /// decides what to do rather than being handed a silent default.
     pub fn from_code(code: &str) -> Option<Self> {
-        // Accepts "tr", "tr_TR", "tr-TR.UTF-8" and the same shapes for English.
         let primary = code
             .split(['_', '-', '.'])
             .next()
@@ -66,8 +32,6 @@ impl Lang {
         }
     }
 
-    /// The language's own name, for the language picker. Never translated: a user looking for
-    /// their language finds it written the way they write it.
     pub const fn native_name(self) -> &'static str {
         match self {
             Lang::En => "English",
@@ -82,27 +46,18 @@ impl std::fmt::Display for Lang {
     }
 }
 
-/// Generates [`Msg`] and the lookup table from one list, so the two cannot drift apart.
-///
-/// A variant declared without a `tr:` arm is a syntax error; a variant added to `Msg` by hand
-/// would leave the `match` in `text` non-exhaustive. Either way the build stops.
 macro_rules! catalog {
     ($( $(#[$meta:meta])* $key:ident { en: $en:literal, tr: $tr:literal } ),* $(,)?) => {
-        /// A user-facing string with no interpolated values.
-        ///
-        /// Messages that carry values are functions in [`fmt`] instead.
         #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
         pub enum Msg {
             $( $(#[$meta])* $key ),*
         }
 
         impl Msg {
-            /// Every message, for the test that asserts no string was left untranslated.
             pub const ALL: &'static [Msg] = &[ $( Msg::$key ),* ];
         }
 
         impl Lang {
-            /// The message, in this language.
             pub const fn text(self, msg: Msg) -> &'static str {
                 match (self, msg) {
                     $(
@@ -116,7 +71,6 @@ macro_rules! catalog {
 }
 
 catalog! {
-    // ---- Navigation and shared controls -------------------------------------------------
     Back { en: "BACK", tr: "GERİ" },
     Next { en: "NEXT", tr: "İLERİ" },
     Reset { en: "RESET", tr: "SIFIRLA" },
@@ -126,7 +80,6 @@ catalog! {
     Support { en: "SUPPORT", tr: "DESTEK" },
     Language { en: "Language", tr: "Dil" },
 
-    // ---- Board, image and destination selection -----------------------------------------
     SelectBoardPrompt { en: "Please Select a Board", tr: "Lütfen bir kart seçin" },
     SelectOsPrompt { en: "Please Select an OS", tr: "Lütfen bir işletim sistemi seçin" },
     SelectDestinationPrompt { en: "Please Select a Destination", tr: "Lütfen bir hedef seçin" },
@@ -142,7 +95,6 @@ catalog! {
     },
     FileDoesNotExist { en: "File does not exist", tr: "Dosya bulunamadı" },
 
-    // ---- Review -------------------------------------------------------------------------
     ReviewTitle { en: "Write Image", tr: "İmajı yaz" },
     ReviewSubtitle {
         en: "Review your choices before flashing",
@@ -158,20 +110,16 @@ catalog! {
     WriteAction { en: "WRITE", tr: "YAZ" },
     DownloadSize { en: "Download Size", tr: "İndirme boyutu" },
 
-    // ---- Data-loss confirmation (`instruction.md` §11.2) --------------------------------
     EraseConfirmTitle { en: "Erase all data?", tr: "Tüm veriler silinsin mi?" },
     EraseConfirmAccept { en: "Erase and write", tr: "Sil ve yaz" },
     EraseConfirmReject { en: "Keep my data", tr: "Vazgeç" },
 
-    // ---- Progress -----------------------------------------------------------------------
     Preparing { en: "Preparing ...", tr: "Hazırlanıyor ..." },
     Downloading { en: "Downloading ...", tr: "İndiriliyor ..." },
     FlashingImage { en: "Flashing Image ...", tr: "İmaj yazılıyor ..." },
     VerifyingWrittenData { en: "Verifying written data ...", tr: "Yazılan veri doğrulanıyor ..." },
     Customizing { en: "Customizing ...", tr: "Özelleştiriliyor ..." },
     TimeRemaining { en: "Time Remaining", tr: "Kalan süre" },
-    // DFU phases. The eMMC flow has no single "flashing" step, and naming the phases separately is
-    // what lets the user tell a board that is busy from a board that has stopped responding.
     PreparingImage { en: "Preparing image ...", tr: "İmaj hazırlanıyor ..." },
     ResolvingBootArtifacts {
         en: "Verifying boot files ...",
@@ -192,7 +140,6 @@ catalog! {
         tr: "Kart üzerinde tamamlanıyor, bağlantıyı kesmeyin ..."
     },
 
-    // ---- Terminal states ----------------------------------------------------------------
     Failed { en: "Failed", tr: "Başarısız" },
     Cancelled { en: "Cancelled", tr: "İptal edildi" },
     CancelledByUser {
@@ -207,7 +154,6 @@ catalog! {
     Restart { en: "Restart", tr: "Yeniden başla" },
     Logs { en: "Logs", tr: "Günlükler" },
 
-    // ---- Integrity failures (`instruction.md` §11.2) ------------------------------------
     IntegrityFailedTitle { en: "The image is damaged", tr: "İmaj bozuk" },
     IntegrityFailedBody {
         en: "The downloaded image does not match the checksum published for it. Nothing was written to your card. Check your connection and download it again.",
@@ -219,7 +165,6 @@ catalog! {
         tr: "Karttan geri okunan veri imajdan farklı. Kart arızalı veya sahte olabilir. Bu karttan açılış yapmayın — başka bir kart deneyin."
     },
 
-    // ---- Destination safety (`instruction.md` §11.2) ------------------------------------
     SystemDiskRefusedTitle { en: "This is your system disk", tr: "Bu, sisteminizin diski" },
     SystemDiskRefusedBody {
         en: "Writing here would destroy the operating system you are running. This destination is not available.",
@@ -241,7 +186,6 @@ catalog! {
         tr: "Seçilen hedef, algılanan çıkarılabilir aygıtlar arasında değil; bu yüzden yazmadan önce denetlenemiyor. Kartı yeniden takın, listede tekrar görünmesini bekleyin ve yeniden deneyin."
     },
 
-    // ---- Catalog freshness (`instruction.md` §11.2) -------------------------------------
     CatalogOfflineTitle { en: "Showing a saved image list", tr: "Kayıtlı imaj listesi gösteriliyor" },
     CatalogOfflineBody {
         en: "The image list could not be fetched, so the last one that was known good is being shown. It may be out of date.",
@@ -254,14 +198,12 @@ catalog! {
         tr: "İmaj listesine ulaşıldı ancak içindeki hiçbir kayıt kullanılamadı. Bu, kurulumunuzla değil listeyle ilgili bir sorun — lütfen bildirin."
     },
 
-    // ---- Linux permissions (`instruction.md` §11.2) -------------------------------------
     UdevPermissionTitle { en: "Permission denied for this disk", tr: "Bu disk için izin verilmedi" },
     UdevPermissionBody {
         en: "Your user is not allowed to write to the card directly. Install the udev rules that ship with this application, then unplug the card and plug it back in.",
         tr: "Kullanıcınızın karta doğrudan yazma izni yok. Bu uygulamayla gelen udev kurallarını kurun, ardından kartı çıkarıp yeniden takın."
     },
 
-    // ---- DFU / eMMC, wired up in Faz 8 (`instruction.md` §11.2) -------------------------
     DfuSwitchToBootModeTitle { en: "Put the board in boot mode", tr: "Kartı boot moduna alın" },
     DfuSwitchToBootModeBody {
         en: "Power the board off, move the boot switch to the boot-mode position, then connect the USB cable. The board should appear as a DFU device.",
@@ -318,11 +260,6 @@ catalog! {
         en: "No board in DFU mode is connected. Move the switches on the board to the DFU position.",
         tr: "DFU ile cihazınız bağlı görünmüyor. Lütfen kart üzerindeki switchleri DFU'ya alınız."
     },
-    /// Title of the stand-in row shown where a DFU board would be listed when none is connected.
-    ///
-    /// A real DFU row titles itself with the board's USB product string and puts
-    /// [`Msg::DfuDestinationSubtitle`] underneath, so the placeholder keeps that shape: the title
-    /// slot says which board, the subtitle slot says what storage.
     DfuPlaceholderRowTitle { en: "No board connected", tr: "Bağlı kart yok" },
     StagingSpaceTitle { en: "Not enough disk space", tr: "Yeterli disk alanı yok" },
     StagingSpaceBody {
@@ -363,7 +300,6 @@ catalog! {
     },
     WinusbDriverClose { en: "CLOSE", tr: "KAPAT" },
 
-    // ---- Customization ------------------------------------------------------------------
     SetHostname { en: "Set Hostname", tr: "Makine adı belirle" },
     SetPassword { en: "Set Password", tr: "Parola belirle" },
     Password { en: "Password", tr: "Parola" },
@@ -447,7 +383,6 @@ catalog! {
     SshKeyConfigured { en: "• SSH key configured", tr: "• SSH anahtarı yapılandırıldı" },
     UsbDhcpEnabled { en: "• USB DHCP enabled", tr: "• USB DHCP etkinleştirildi" },
 
-    // ---- Notifications and generic failures -------------------------------------------
     FlashCancelledNotification { en: "Flashing cancelled by user", tr: "Yazma kullanıcı tarafından iptal edildi" },
     DownloadCancelledNotification { en: "Download cancelled by user", tr: "İndirme kullanıcı tarafından iptal edildi" },
     FlashFailedNotification { en: "Flashing failed", tr: "Yazma başarısız" },
@@ -459,21 +394,13 @@ catalog! {
         tr: "İşlem tamamlanamadı. Kartın hâlâ bağlı ve yazılabilir olduğunu denetleyip yeniden deneyin. Teknik ayrıntılar Günlükler bölümündedir."
     },
 
-    // ---- Application info ---------------------------------------------------------------
     CacheDirectory { en: "Cache Directory", tr: "Önbellek dizini" },
     LogFile { en: "Log File", tr: "Günlük dosyası" },
 }
 
-/// Messages that carry values.
-///
-/// Each is a function rather than a format template so the argument order can differ per
-/// language without the call site knowing, and so every one can be snapshot-tested.
 pub mod fmt {
     use super::Lang;
 
-    /// The confirmation shown before a write destroys whatever is on the destination.
-    ///
-    /// `destination` is the human-readable name of the disk, e.g. `"SDXC Card (31.9 GB)"`.
     pub fn erase_confirm_body(lang: Lang, destination: &str) -> String {
         match lang {
             Lang::En => format!(
@@ -485,7 +412,6 @@ pub mod fmt {
         }
     }
 
-    /// Shown when the destination is smaller than the image needs.
     pub fn destination_too_small_body(lang: Lang, needed: &str, available: &str) -> String {
         match lang {
             Lang::En => format!(
@@ -497,7 +423,6 @@ pub mod fmt {
         }
     }
 
-    /// Shown on the app-info screen and in the window title.
     pub fn version_line(lang: Lang, app_name: &str, version: &str) -> String {
         match lang {
             Lang::En => format!("{app_name} v{version}"),
@@ -505,7 +430,6 @@ pub mod fmt {
         }
     }
 
-    /// Shown when a newer release is available.
     pub fn update_available(lang: Lang, version: &str) -> String {
         match lang {
             Lang::En => format!("A new version of the application is available: {version}"),
@@ -513,7 +437,6 @@ pub mod fmt {
         }
     }
 
-    /// Shown while the saved catalog is in use, with how old it is.
     pub fn catalog_age(lang: Lang, age: &str) -> String {
         match lang {
             Lang::En => format!("Saved image list, {age} old"),
@@ -521,9 +444,6 @@ pub mod fmt {
         }
     }
 
-    /// The one-line summary of where a failed write stopped.
-    ///
-    /// `stage` is already localised — pass `lang.text(Msg::FlashingImage)` and friends.
     pub fn failed_during(lang: Lang, stage: &str) -> String {
         match lang {
             Lang::En => format!("Stopped during: {stage}"),
@@ -538,9 +458,6 @@ mod tests {
 
     #[test]
     fn every_message_has_both_languages() {
-        // The macro guarantees a Turkish arm exists, but not that it differs from the English one. The
-        // exceptions are strings genuinely identical in both languages -- acronyms and proper nouns --
-        // so listing them here makes adding one a deliberate act.
         const IDENTICAL_BY_DESIGN: &[Msg] = &[Msg::Ssid];
 
         for &msg in Msg::ALL {
@@ -583,17 +500,11 @@ mod tests {
 
     #[test]
     fn unsupported_locales_are_reported_rather_than_defaulted() {
-        // `from_code` must not quietly answer "English" — the caller decides what an unknown
-        // locale means, and today that decision is "use the default and log it".
         assert_eq!(Lang::from_code("de_DE"), None);
         assert_eq!(Lang::from_code(""), None);
         assert_eq!(Lang::from_code("nonsense"), None);
     }
 
-    /// Snapshot of every interpolated message in both languages (`instruction.md` §11.2).
-    ///
-    /// Spelled out rather than generated, so a wording change has to be made deliberately in the
-    /// test as well as the catalog, and a swapped argument in one language shows up as a diff.
     #[test]
     fn interpolated_messages_snapshot() {
         assert_eq!(
@@ -651,10 +562,6 @@ mod tests {
         );
     }
 
-    /// Every value handed to an interpolated message must survive into the output.
-    ///
-    /// A translation that drops its `{}` still compiles and still reads plausibly; this catches
-    /// the case where the Turkish sentence was rewritten and the value fell out of it.
     #[test]
     fn interpolated_messages_never_drop_their_values() {
         for lang in Lang::ALL {
@@ -676,10 +583,6 @@ mod tests {
         }
     }
 
-    /// The destructive-action confirmation must name the destination in both languages.
-    ///
-    /// This is the one message where a generic "are you sure?" is a real hazard: it is the last
-    /// thing between the user and an erased disk, so it has to say *which* disk.
     #[test]
     fn erase_confirmation_names_the_destination_in_both_languages() {
         for lang in Lang::ALL {

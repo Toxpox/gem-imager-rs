@@ -1,4 +1,3 @@
-//! Abstractions to parse and generate distros.json file.
 
 use std::collections::HashSet;
 
@@ -6,27 +5,16 @@ use serde::{Deserialize, Serialize};
 use serde_with::{Map, VecSkipError, serde_as};
 use url::Url;
 
-/// [BeagleBoard.org] distros.json abstraction.
-///
-/// [BeagleBoard.org]: https://www.beagleboard.org/
 #[serde_as]
 #[derive(Deserialize, Serialize, Debug, Clone, Default, PartialEq, Eq)]
 pub struct Config {
     #[serde(default)]
     pub imager: Imager,
     #[serde_as(as = "VecSkipError<_>")]
-    /// List of OS images for the boards
     pub os_list: Vec<OsListItem>,
 }
 
 impl Config {
-    /// Number of images in [`Self::os_list`], counting through sub-lists.
-    ///
-    /// `os_list.len()` counts *entries*, which stopped meaning "images" once a list could nest.
-    /// Reporting the entry count as an image count is how a shrinking catalog starts looking like a
-    /// normal, smaller list.
-    ///
-    /// [`OsListItem::RemoteSubList`] contributes nothing: its images have not been fetched yet.
     pub fn image_count(&self) -> usize {
         fn count(items: &[OsListItem]) -> usize {
             items
@@ -43,94 +31,52 @@ impl Config {
     }
 }
 
-/// Contains information regarding BeagleBoard Images version and a list of [BeagleBoard.org]
-/// boards along with information regarding each board.
-///
-/// [BeagleBoard.org]: https://www.beagleboard.org/
 #[serde_as]
 #[derive(Deserialize, Serialize, Debug, Clone, Default, PartialEq, Eq)]
 pub struct Imager {
-    /// A list of remote config files
     #[serde(default)]
     pub remote_configs: Vec<Url>,
     #[serde_as(as = "VecSkipError<_>")]
     #[serde(default)]
-    /// List of BeagleBoard.org boards
     pub devices: Vec<Device>,
 }
 
-/// Structure describing [BeagleBoard.org] board
-///
-/// [BeagleBoard.org]: https://www.beagleboard.org/
 #[serde_as]
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq)]
 pub struct Device {
-    /// Board Name
     pub name: String,
-    /// Board tags are used to match OS images with boards
     pub tags: HashSet<String>,
-    /// Board image URL
     pub icon: Option<Url>,
-    /// Board description
     pub description: String,
-    /// The default [`Flasher`] for the board. This will be used when flasher type is not present
-    /// in the OS image.
     pub flasher: Flasher,
-    /// Whether this board can be written over USB DFU to its onboard eMMC.
-    ///
-    /// [`Flasher`] cannot express this: it names *one* way to write an image, while a T3 board
-    /// accepts the same image over SD **and** over DFU (`instruction.md` §6.3). The destination
-    /// list is an intersection of board capability, image compatibility and platform backend
-    /// availability, and this field carries the first of the three. Defaults to `false`, so a
-    /// catalog that says nothing never grows a destination that erases onboard storage.
     #[serde(default)]
     pub emmc_dfu: bool,
-    /// Link to board documentation
     pub documentation: Option<Url>,
-    /// Special Instructions for flashing board.
     pub instructions: Option<String>,
     #[serde(default)]
     #[serde_as(as = "Map<_, _>")]
-    /// Board Specification. With order preserved
     pub specification: Vec<(String, String)>,
-    /// OSHW details for the device.
     pub oshw: Option<String>,
 }
 
-/// Types of customization Initialization formats
 #[derive(Deserialize, Serialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
 #[non_exhaustive]
 #[serde(rename_all = "lowercase")]
 pub enum InitFormat {
     #[default]
     None,
-    /// Sysconfig based customization
     Sysconf,
-    /// Armbian base customization
     Armbian,
-    /// Cloud Init based customization
     CloudInit,
-    /// T3 GemStone `config.ini`, consumed by `gem-first-boot`.
-    ///
-    /// Distinct from [`InitFormat::Sysconf`] on purpose: that is BeagleBoard's `sysconf.txt`, read
-    /// by a different consumer with a different key set. Mapping one onto the other would make the
-    /// application write a file the board never reads.
     GemInit,
-    /// T3 GemStone `config.ini` on a desktop image, which additionally offers the VNC fields.
-    ///
-    /// This is a separate variant rather than a flag because the front-end selects its
-    /// customization screen from this value, and the desktop screen offers a different field set
-    /// (`instruction.md` §10.1).
     GemInitDesktop,
 }
 
 impl InitFormat {
-    /// Whether this image is customized through the T3 `config.ini` writer.
     pub const fn is_gem_init(self) -> bool {
         matches!(self, Self::GemInit | Self::GemInitDesktop)
     }
 
-    /// Whether the VNC fields may be offered for this image.
     pub const fn supports_vnc(self) -> bool {
         matches!(self, Self::GemInitDesktop)
     }
@@ -181,110 +127,60 @@ impl std::fmt::Display for InitFormat {
     }
 }
 
-/// Os List can contain multiple types of items depending on the situation.
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq)]
 #[serde(untagged)]
 #[allow(clippy::large_enum_variant)]
 pub enum OsListItem {
-    /// Single Os Image
     Image(OsImage),
-    /// SubList which itself can contain a list of [`OsListItem`].
-    ///
-    /// This is used to define Testing and other images which do not need to be present at the top
-    /// level.
     SubList(OsSubList),
-    /// SubList stored in a remote location.
-    ///
-    /// This is used to define images managed/hosted outside of the normal [BeagleBoard.org] image
-    /// infrastructure, such as from CI, etc.
-    ///
-    /// [BeagleBoard.org]: https://www.beagleboard.org/
     RemoteSubList(OsRemoteSubList),
 }
 
-/// [`OsListItem`] which itself can contain a list of [`OsListItem`].
 #[serde_as]
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq)]
 pub struct OsSubList {
-    /// Sublist name
     pub name: String,
-    /// Sublist description
     pub description: String,
-    /// Sublist icon URL
     pub icon: Url,
-    /// Flasher type for all top level Os Images in the sublist
     #[serde(default)]
     pub flasher: Flasher,
-    /// List of items
     #[serde_as(as = "VecSkipError<_>")]
     pub subitems: Vec<OsListItem>,
 }
 
-/// Sublists stored in a remote location
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq)]
 pub struct OsRemoteSubList {
-    /// Remote Sublist name
     pub name: String,
-    /// Remote Sublist description
     pub description: String,
-    /// Remote Sublist icon URL
     pub icon: Url,
-    /// Flasher type for all top level Os Images in the sublist
     #[serde(default)]
     pub flasher: Flasher,
-    /// Union of devices the OsImages in the SubList can be used with
     pub devices: HashSet<String>,
-    /// Url to the Remote list
     pub subitems_url: Url,
 }
 
-/// A singular Os Image for board(s)
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq)]
 pub struct OsImage {
-    /// Os Image name
     pub name: String,
-    /// Os Image description
     pub description: String,
-    /// Os Image icon
     pub icon: Url,
-    /// Os Image download URL
     pub url: Url,
-    /// Os Image size before download
     pub image_download_size: Option<u64>,
-    /// Os Image sha256 (before extraction)
     #[serde(with = "const_hex")]
     pub image_download_sha256: [u8; 32],
-    /// Os Image size after extraction
     pub extract_size: u64,
-    /// Os Image sha256 *after* extraction, when the catalog publishes it.
-    ///
-    /// The T3 catalog always publishes this; the legacy BeagleBoard schema never did, which is why
-    /// it is optional here. Together with [`Self::extract_size`] it forms the extracted-side pair
-    /// of the four independent integrity gates in `instruction.md` §8.1 — the pair that decides
-    /// what is allowed to reach the board.
     #[serde(default, with = "hex_option")]
     pub extract_sha256: Option<[u8; 32]>,
-    /// Os Image release date
     pub release_date: chrono::NaiveDate,
-    /// Devices the Os Image can be used with
     pub devices: HashSet<String>,
-    /// Os Image tags
     #[serde(default)]
     pub tags: HashSet<String>,
-    /// Initialization Format. Currently only used by SD Card Images
     #[serde(default)]
     pub init_format: InitFormat,
-    /// Special Instructions for flashing board.
     pub info_text: Option<String>,
-    /// URL to support page for image. This is where issues should be reported.
     pub support: Option<Url>,
 }
 
-/// Hex serde for an optional 32-byte digest.
-///
-/// `const_hex`'s serde support covers `[u8; 32]` but not `Option<[u8; 32]>`, and an absent
-/// `extract_sha256` has to stay distinguishable from a present one — treating "missing" as
-/// "all zeroes" would turn a missing gate into a gate that always fails.
 mod hex_option {
     use serde::{Deserialize as _, Deserializer, Serializer};
 
@@ -311,11 +207,9 @@ mod hex_option {
     }
 }
 
-/// Types of flashers Os Image(s) support
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Deserialize, Serialize)]
 pub enum Flasher {
     #[default]
-    /// Image needs to be written to SD Card
     SdCard,
 }
 

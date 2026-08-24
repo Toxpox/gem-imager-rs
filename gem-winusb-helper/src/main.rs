@@ -26,5 +26,4 @@ fn main() {
 
 #[cfg(not(windows))]
 fn main() {
-    // The package remains cross-compilable for workspace CI, but it has no non-Windows action.
 }

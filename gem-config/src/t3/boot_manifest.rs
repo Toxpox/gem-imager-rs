@@ -1,13 +1,3 @@
-//! Strict parsing of the T3 boot artifact manifest (`instruction.md` §8.3).
-//!
-//! The manifest at `boot/t3-gem-o1/list.json` decides which bytes are written to the board before
-//! it can boot at all. The rule for it is stricter than for the image catalog: there is no
-//! "warn and continue" path. If the manifest cannot be fetched, cannot be parsed, is missing an
-//! artifact, or carries a hash that does not decode, DFU does not start.
-//!
-//! Which artifacts are required is *not* taken from the manifest. It comes from the verified stage
-//! contract in [`crate::t3::canonical::DfuProfile`], so a server that quietly drops or renames a
-//! stage produces a refusal instead of a shorter boot chain.
 
 use std::collections::BTreeMap;
 use std::fmt;
@@ -16,39 +6,26 @@ use serde::Deserialize;
 
 use crate::t3::sha256::Sha256;
 
-/// One artifact the manifest publishes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BootArtifact {
-    /// File name, as published.
     pub name: String,
-    /// SHA-256 of the raw artifact.
     pub sha256: Sha256,
 }
 
-/// A manifest that carries every required artifact with a usable hash.
-///
-/// Construction is the verification: there is no way to build one of these from a manifest that is
-/// missing a stage.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VerifiedBootManifest {
     artifacts: Vec<BootArtifact>,
 }
 
 impl VerifiedBootManifest {
-    /// The artifacts, in the order the stage contract requires them.
     pub fn artifacts(&self) -> &[BootArtifact] {
         &self.artifacts
     }
 
-    /// Look up one artifact by name.
     pub fn artifact(&self, name: &str) -> Option<&BootArtifact> {
         self.artifacts.iter().find(|a| a.name == name)
     }
 
-    /// Rebuild a manifest from storage.
-    ///
-    /// Used by the last-known-good cache, which may only hand back a manifest that was verified
-    /// when it was stored *and* is still complete for the required stage list.
     pub fn from_stored(
         stored: impl IntoIterator<Item = BootArtifact>,
         required: &[&str],
@@ -62,22 +39,14 @@ impl VerifiedBootManifest {
     }
 }
 
-/// Why a manifest was refused.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BootManifestError {
-    /// The document was not the JSON this parser expects.
     Malformed(String),
-    /// A required artifact was absent.
     MissingArtifact(String),
-    /// An artifact's hash was not 32 hex-encoded bytes.
     InvalidHash {
-        /// Artifact the bad hash belonged to.
         artifact: String,
-        /// What was wrong with it.
         reason: String,
     },
-    /// The same artifact name appeared more than once. Even identical duplicates are ambiguous
-    /// publication errors and are rejected before DFU starts.
     ConflictingArtifact(String),
 }
 
@@ -117,11 +86,6 @@ struct RawArtifact {
     sha256: String,
 }
 
-/// Parse and verify a boot manifest against the artifacts the stage contract requires.
-///
-/// Artifacts the manifest publishes but the contract does not need are ignored rather than
-/// rejected: the server may add a future stage this build has no profile for, and that must not
-/// disable a board that works today. The reverse — a *missing* stage — is always fatal.
 pub fn parse_boot_manifest(
     body: &[u8],
     required: &[&str],
@@ -176,7 +140,6 @@ mod tests {
 
     const LIVE_MANIFEST: &[u8] = include_bytes!("../../tests/fixtures/t3/boot_manifest.json");
 
-    /// The real stage contract, not a list re-typed in the test.
     fn with_required<R>(f: impl FnOnce(&[&str]) -> R) -> R {
         let profile = DfuProfile::t3_gem_o1();
         f(&profile.required_artifacts())
@@ -220,7 +183,6 @@ mod tests {
             with_required(|req| parse_boot_manifest(b"not json at all", req)),
             Err(BootManifestError::Malformed(_))
         ));
-        // An HTML error page served with a 200 is the realistic version of this.
         assert!(matches!(
             with_required(|req| parse_boot_manifest(b"<html><body>404</body></html>", req)),
             Err(BootManifestError::Malformed(_))

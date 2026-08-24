@@ -24,8 +24,6 @@ impl ParitionType {
     where
         T: Write + Seek + Read + std::fmt::Debug,
     {
-        // Partition detection reads from wherever the stream is, so start from the top: without this the
-        // read-back pass reads whatever follows and reports a corrupt partition table.
         dst.rewind()?;
         let part_table = PartitionTable::detect_partition_table(&mut dst)?;
         dst.rewind()?;
@@ -73,11 +71,9 @@ enum PartitionTable {
 
 impl PartitionTable {
     fn detect_partition_table(mut reader: impl Read) -> Result<PartitionTable> {
-        // Enough for MBR + GPT header.
         let mut buf = [0u8; 1024];
         reader.read_exact(&mut buf)?;
 
-        // GPT signature at LBA1.
         if &buf[512..520] == b"EFI PART" {
             return Ok(PartitionTable::Gpt);
         }
@@ -95,11 +91,6 @@ pub enum ContentType<'a> {
     Reader(Box<dyn Read + 'a>),
     File(Box<std::path::Path>),
     DataAppend(Box<[u8]>),
-    /// Replace the file with exactly these bytes, then read them back off the device and compare.
-    ///
-    /// This is the mode for files whose absence or corruption stays invisible until the board is
-    /// booted — a first-boot configuration that silently did not land looks like a successful flash
-    /// right up to the moment the user cannot log in.
     VerifiedData(Box<[u8]>),
 }
 
@@ -125,11 +116,6 @@ impl<'a, I> Customization<I>
 where
     I: Iterator<Item = (Box<str>, ContentType<'a>)>,
 {
-    /// Write the customization files, then read back the ones that asked to be verified.
-    ///
-    /// The read-back re-opens the FAT filesystem from scratch rather than reusing the handle that
-    /// did the writing, so it goes through the same path the board will: a file that only exists in
-    /// a cache the writer still holds is not a file the board can read.
     pub(crate) fn customize(
         self,
         mut dst: impl Write + Seek + Read + std::fmt::Debug,
@@ -190,7 +176,6 @@ where
 }
 
 impl ParitionType {
-    /// Re-open the partition and confirm each file holds exactly the bytes that were written.
     pub(crate) fn verify<T>(self, dst: T, expected: &[(Box<str>, Box<[u8]>)]) -> Result<()>
     where
         T: Write + Seek + Read + std::fmt::Debug,
@@ -205,7 +190,6 @@ impl ParitionType {
                     .map_err(|_| Error::CustomizationReadBackMismatch { file: path.clone() })?
                     .read_to_end(&mut got)?;
 
-                // A plain inequality, not a diff: the buffer can hold a password hash.
                 if got.as_slice() != want.as_ref() {
                     return Err(Error::CustomizationReadBackMismatch { file: path.clone() });
                 }

@@ -6,128 +6,90 @@ use clap::{Parser, Subcommand, ValueEnum};
 #[command(version, about)]
 pub struct Opt {
     #[command(subcommand)]
-    /// Specifies the subcommand to execute.
     pub command: Commands,
     #[arg(long)]
-    /// Enable more logging.
     pub verbose: bool,
 }
 
 #[derive(Subcommand, Debug)]
 pub enum Commands {
-    /// Command to flash an image to a specific destination.
     Flash {
         #[command(subcommand)]
-        /// Type of BeagleBoard to flash
         target: Box<TargetCommands>,
 
         #[arg(long)]
-        /// Suppress standard output messages for a quieter experience.
         quiet: bool,
     },
 
-    /// Command to list available destinations for flashing based on the selected target.
     ListDestinations {
-        /// Specifies the target type for listing destinations.
         target: DestinationsTarget,
 
         #[arg(long)]
-        /// Only print paths seperated by newline
         no_frills: bool,
 
         #[arg(long)]
-        /// Show all possible destinations without any sanity filters. Can be used when a device is
-        /// not visible due to incorrect reporting by OS.
         no_filter: bool,
     },
 
-    /// Command to format SD Card
     Format {
-        /// The destination device (e.g., `/dev/sdX` or specific device identifiers).
         dst: PathBuf,
 
         #[arg(long)]
-        /// Suppress standard output messages for a quieter experience.
         quiet: bool,
     },
 
-    /// Command to generate shell completion
     GenerateCompletion {
-        /// Specifies the target shell type for completion
         shell: clap_complete::Shell,
     },
 }
 
 #[derive(Subcommand, Debug)]
 pub enum TargetCommands {
-    /// Flash an SD card with customizable settings for T3 Gemstone devices.
     Sd {
-        /// Local path to image file. Can be compressed (xz) or extracted file
         img: Box<Path>,
 
-        /// The destination device (e.g., `/dev/sdX` or specific device identifiers).
         dst: PathBuf,
 
         #[arg(long)]
-        /// Set a custom hostname for the device (e.g., "gemstone").
         hostname: Option<Box<str>>,
 
         #[arg(long)]
-        /// Set the timezone for the device (e.g., "America/New_York").
         timezone: Option<Box<str>>,
 
         #[arg(long)]
-        /// Set the keyboard layout/keymap (e.g., "us" for the US layout).
         keymap: Option<Box<str>>,
 
         #[arg(long, requires = "user_password", verbatim_doc_comment)]
-        /// Set a username for the default user. Cannot be `root`. Requires `user_password`.
-        /// Required to enter GUI session due to regulatory requirements.
         user_name: Option<Box<str>>,
 
         #[arg(long, requires = "user_name", verbatim_doc_comment)]
-        /// Set a password for the default user. Requires `user_name`.
-        /// Required to enter GUI session due to regulatory requirements.
         user_password: Option<Box<str>>,
 
         #[arg(long, requires = "wifi_password")]
-        /// Configure a Wi-Fi SSID for network access. Requires `wifi_password`.
         wifi_ssid: Option<Box<str>>,
 
         #[arg(long, requires = "wifi_ssid")]
-        /// Set the password for the specified Wi-Fi SSID. Requires `wifi_ssid`.
         wifi_password: Option<Box<str>>,
 
         #[arg(long)]
-        /// Set SSH public key for authentication
         ssh_key: Option<Box<str>>,
 
         #[arg(long)]
-        /// Enable USB DHCP
         usb_enable_dhcp: bool,
 
         #[arg(long)]
-        /// Generate clound-init config.
         cloud_init: bool,
 
         #[arg(long)]
-        /// Generate sysconfig. Currently, sysconfig will be generated regardless if this flag is
-        /// provides. However, this will change in future. So best to explicitly set the flag.
         sysconfig: bool,
 
-        /// The destination is a file instead of SD Card
         #[arg(long)]
         file_destination: bool,
     },
     #[cfg(feature = "dfu")]
     Dfu {
-        /// Identifier format: `{bus}:{physical-port-path}:{vendor}:{product}` in hexadecimal.
-        /// A hub path is dot-separated, for example `03:02.07:0451:6165`.
         identifier: String,
-        /// Extracted/customized raw image to stream to eMMC. Boot artifacts are resolved from the
-        /// verified T3 manifest and must not be supplied manually.
         image: PathBuf,
-        /// Override the persistent content-addressed DFU cache (primarily for parity testing).
         #[arg(long)]
         cache_dir: Option<PathBuf>,
     },
@@ -135,9 +97,7 @@ pub enum TargetCommands {
 
 #[derive(ValueEnum, Clone, Copy, Debug)]
 pub enum DestinationsTarget {
-    /// SD card targets.
     Sd,
-    /// USB DFU Target
     #[cfg(feature = "dfu")]
     Dfu,
 }
@@ -147,8 +107,6 @@ mod tests {
     use super::*;
     use clap::CommandFactory;
 
-    /// clap's own recommended smoke test: validates the entire derived command
-    /// tree (no duplicate args, well-formed `requires`/`conflicts`, etc.).
     #[test]
     fn cli_definition_is_valid() {
         Opt::command().debug_assert();
@@ -204,9 +162,6 @@ mod tests {
         }
     }
 
-    /// `--help` is the CLI's public identity. Descriptions and value hints live in doc comments,
-    /// so upstream's product name and example hostnames survived the rebrand here long after the
-    /// packaging surfaces were fixed, and no test looked at rendered help text.
     #[test]
     fn no_help_text_advertises_the_upstream_product() {
         fn assert_clean(cmd: &clap::Command) {
@@ -259,7 +214,6 @@ mod tests {
 
     #[test]
     fn user_name_requires_password() {
-        // `--user-name` declares `requires = "user_password"`.
         assert!(
             Opt::try_parse_from([
                 "gem-imager-cli",
@@ -381,7 +335,6 @@ mod tests {
 
     #[test]
     fn sd_boot_update_is_no_longer_a_subcommand() {
-        // The boot-archive path went away with `SdCardBootfs`; the old invocation must fail to parse.
         assert!(
             Opt::try_parse_from([
                 "gem-imager-cli",

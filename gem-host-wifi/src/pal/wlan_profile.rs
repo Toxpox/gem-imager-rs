@@ -1,18 +1,6 @@
-//! Parsing of the Windows Native Wi-Fi profile XML.
-//!
-//! `WlanGetProfile` returns a `WLANProfile` document describing one saved network. Two things are
-//! read out of it: the SSID (to match the profile against the connected network, §7.2) and, when
-//! the plaintext flag was granted, the credential itself (§7.3).
-//!
-//! This module holds no Windows types, so the whole fixture matrix runs in the normal test suite on
-//! any host. Element names are matched by *local* name and the namespace URI is not pinned, because
-//! Microsoft revises the schema (v1, v2, v3) and some tools emit no namespace at all; the parser is
-//! still namespace-aware, so prefixed documents resolve correctly rather than being string-matched
-//! (§7.5, which also forbids regex extraction).
 
 use crate::model::SecurityKind;
 
-/// What a saved Windows profile says about one network.
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) struct WlanProfile {
     pub ssid: ProfileSsid,
@@ -20,19 +8,14 @@ pub(crate) struct WlanProfile {
     pub credential: ProfileCredential,
 }
 
-/// How a profile identifies its network: Windows writes either a literal name or a hex encoding of
-/// the SSID bytes, and both have to be matchable against a detected SSID (§7.2).
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum ProfileSsid {
     Name(String),
-    /// The raw SSID bytes, decoded from the `<hex>` form.
     Bytes(Vec<u8>),
     Missing,
 }
 
 impl ProfileSsid {
-    /// Whether this profile is for `ssid`, comparing bytes so the hex and name forms agree.
-    /// Matching is exact: a near match is not a match (§7.2).
     pub fn matches(&self, ssid: &str) -> bool {
         match self {
             Self::Name(name) => name == ssid,
@@ -42,25 +25,14 @@ impl ProfileSsid {
     }
 }
 
-/// The credential state of a profile.
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum ProfileCredential {
-    /// A plaintext key was present and is shaped like something the image can use.
     Plaintext(String),
-    /// A key is present but still encrypted, because the plaintext flag was not granted (§7.4).
     Encrypted,
-    /// The profile has no `sharedKey` at all: an open network, or an enterprise profile whose
-    /// credentials live elsewhere.
     None,
-    /// A key was present but cannot be used: an unusable length, or a hex key type whose material
-    /// is not hexadecimal.
     Unusable,
 }
 
-/// The `<security>` fields that decide whether one portable passphrase can exist (§7.3).
-///
-/// Matched case-insensitively: Windows writes `WPA2PSK`, but other tools and older Windows versions
-/// differ in case.
 fn classify_authentication(auth: &str) -> SecurityKind {
     let auth = auth.trim().to_ascii_uppercase();
     match auth.as_str() {
@@ -68,16 +40,13 @@ fn classify_authentication(auth: &str) -> SecurityKind {
         "WPA" | "WPA2" | "WPA3" | "WPA3ENTERPRISE" | "WPA3ENTERPRISE192" => {
             SecurityKind::Enterprise
         }
-        // OWE gives encryption without any passphrase to carry.
         "OWE" => SecurityKind::Open,
         "OPEN" => SecurityKind::Open,
-        // Static WEP: secured, but not with something the image can take.
         "SHARED" => SecurityKind::UnsupportedSecurity,
         _ => SecurityKind::Unknown,
     }
 }
 
-/// Find the first descendant with this local name, ignoring the namespace URI.
 fn find_text<'a>(node: roxmltree::Node<'a, '_>, local_name: &str) -> Option<&'a str> {
     node.descendants()
         .find(|n| n.is_element() && n.tag_name().name() == local_name)
@@ -85,7 +54,6 @@ fn find_text<'a>(node: roxmltree::Node<'a, '_>, local_name: &str) -> Option<&'a 
         .map(str::trim)
 }
 
-/// Find the first descendant element with this local name.
 fn find_element<'a, 'input>(
     node: roxmltree::Node<'a, 'input>,
     local_name: &str,
@@ -94,8 +62,6 @@ fn find_element<'a, 'input>(
         .find(|n| n.is_element() && n.tag_name().name() == local_name)
 }
 
-/// Decode the `<hex>` form of an SSID. Returns `None` for anything that is not an even-length run
-/// of hex digits, so a malformed profile is skipped rather than matched against a corrupted name.
 fn decode_hex_ssid(hex: &str) -> Option<Vec<u8>> {
     let hex = hex.trim();
     if hex.is_empty() || !hex.len().is_multiple_of(2) || !hex.bytes().all(|b| b.is_ascii_hexdigit())
@@ -108,15 +74,9 @@ fn decode_hex_ssid(hex: &str) -> Option<Vec<u8>> {
         .collect()
 }
 
-/// Parse a `WLANProfile` document.
-///
-/// `None` means the document is not well-formed XML or is not a WLAN profile at all. A document
-/// that parses but is missing pieces is described through the returned value instead, because a
-/// profile can legitimately lack a `sharedKey` while still being the right profile.
 pub(crate) fn parse(xml: &str) -> Option<WlanProfile> {
     let doc = roxmltree::Document::parse(xml).ok()?;
     let root = doc.root_element();
-    // Guard against being handed some other document entirely.
     if root.tag_name().name() != "WLANProfile" {
         return None;
     }
@@ -134,12 +94,10 @@ pub(crate) fn parse(xml: &str) -> Option<WlanProfile> {
     })
 }
 
-/// Read the SSID from `<SSIDConfig>`, preferring the literal name and falling back to the hex form.
 fn parse_ssid(root: roxmltree::Node<'_, '_>) -> ProfileSsid {
     let Some(config) = find_element(root, "SSIDConfig") else {
         return ProfileSsid::Missing;
     };
-    // Scoped to <SSID> so the sibling <name>, which holds the *profile* name, is never taken for the SSID.
     let scope = find_element(config, "SSID").unwrap_or(config);
 
     if let Some(name) = find_text(scope, "name")
@@ -153,13 +111,11 @@ fn parse_ssid(root: roxmltree::Node<'_, '_>) -> ProfileSsid {
     ProfileSsid::Missing
 }
 
-/// Read `<sharedKey>`, honouring `<protected>` and `<keyType>` (§7.3).
 fn parse_credential(root: roxmltree::Node<'_, '_>) -> ProfileCredential {
     let Some(shared_key) = find_element(root, "sharedKey") else {
         return ProfileCredential::None;
     };
 
-    // `protected` means DPAPI-encrypted material the caller has no plaintext rights to; decrypting is forbidden (§7.7).
     let protected = find_text(shared_key, "protected")
         .map(|v| v.eq_ignore_ascii_case("true"))
         .unwrap_or(false);
@@ -174,8 +130,6 @@ fn parse_credential(root: roxmltree::Node<'_, '_>) -> ProfileCredential {
         return ProfileCredential::Encrypted;
     }
 
-    // `networkKey` is a 64-hex-digit PSK, `passPhrase` the 8..=63 byte form. Both are checked against
-    // the T3 serializer's contract, so an unusable value is reported rather than pushed on (§3.1).
     let key_type = find_text(shared_key, "keyType").unwrap_or_default();
     if key_type.eq_ignore_ascii_case("networkKey")
         && !(material.len() == 64 && material.bytes().all(|b| b.is_ascii_hexdigit()))
@@ -258,7 +212,6 @@ mod tests {
 
     #[test]
     fn a_networkkey_that_is_not_hex_is_unusable() {
-        // A passphrase-shaped value under networkKey is a malformed profile, not a credential.
         let xml = profile_xml(
             "<SSID><name>HomeNet</name></SSID>",
             r#"<authEncryption><authentication>WPA2PSK</authentication></authEncryption>
@@ -346,7 +299,6 @@ mod tests {
 
     #[test]
     fn the_hex_ssid_form_is_decoded_and_matches_the_same_network() {
-        // "HomeNet" in hex.
         let xml = profile_xml(
             "<SSID><hex>486F6D654E6574</hex></SSID>",
             r#"<authEncryption><authentication>WPA2PSK</authentication></authEncryption>"#,
@@ -356,7 +308,6 @@ mod tests {
         assert!(parsed.ssid.matches("HomeNet"));
         assert!(!parsed.ssid.matches("HomeNet2"));
 
-        // Odd length and non-hex content are rejected rather than partially decoded.
         for bad in ["486F6D654E657", "zzzz", ""] {
             let xml = profile_xml(
                 &format!("<SSID><hex>{bad}</hex></SSID>"),
@@ -368,7 +319,6 @@ mod tests {
 
     #[test]
     fn ssid_matching_is_exact_and_never_uses_the_profile_name() {
-        // The <name> directly under WLANProfile is the *profile* name (§7.2); only SSIDConfig/SSID counts.
         let xml = profile_xml(
             "<SSID><name>ActualSsid</name></SSID>",
             r#"<authEncryption><authentication>WPA2PSK</authentication></authEncryption>"#,
@@ -380,7 +330,6 @@ mod tests {
 
     #[test]
     fn a_prefixed_namespace_is_resolved_not_string_matched() {
-        // The same document written with an explicit prefix must parse identically.
         let xml = r#"<?xml version="1.0"?>
 <p:WLANProfile xmlns:p="http://www.microsoft.com/networking/WLAN/profile/v1">
   <p:name>Profile</p:name>
@@ -403,7 +352,6 @@ mod tests {
 
     #[test]
     fn a_later_schema_revision_still_parses() {
-        // Microsoft revises the schema URI; pinning to v1 would break on a v3 document.
         let xml = wpa2_personal("hunter2-pass").replace("/v1", "/v3");
         let parsed = parse(&xml).expect("parses");
         assert_eq!(parsed.security, SecurityKind::Personal);
@@ -445,7 +393,6 @@ mod tests {
         assert!(parse("not xml at all <<<").is_none());
         assert!(parse("<WLANProfile><unclosed></WLANProfile>").is_none());
         assert!(parse("").is_none());
-        // Well-formed XML that is not a profile must not be mined for fields.
         assert!(parse(r#"<?xml version="1.0"?><SomethingElse><keyMaterial>x</keyMaterial></SomethingElse>"#).is_none());
     }
 
@@ -460,7 +407,6 @@ mod tests {
                 bad.len()
             );
         }
-        // An empty keyMaterial is "no key", not an unusable one.
         let parsed = parse(&wpa2_personal("")).expect("parses");
         assert_eq!(parsed.credential, ProfileCredential::None);
     }

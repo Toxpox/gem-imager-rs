@@ -1,21 +1,6 @@
-//! POSIX shell literal quoting — the single place a user-supplied value becomes `config.ini` text.
-//!
-//! The T3 SDK's `gem-first-boot` **`source`s** `config.ini`, so the file is not data: it is a shell
-//! script running as root on first boot. An ordinary INI writer is therefore not safe here. Every
-//! value in the file goes through [`quote`], and nothing else in this crate is allowed to build a
-//! `key=value` line by concatenation.
 
 use super::T3GemInitError;
 
-/// Wrap a value in a POSIX single-quoted literal.
-///
-/// Inside single quotes the shell interprets nothing at all, so `$(...)`, backticks, `$VAR`, `"`,
-/// `\` and `;` are inert. The one character that cannot appear is `'` itself, which is emitted as
-/// the standard `'\''` splice: close the literal, escape a bare quote, reopen it.
-///
-/// Newlines are *not* handled by quoting. A quoted newline is legal shell, but `gem-first-boot`
-/// also greps and `sed`s this file line-by-line, so a value that spans lines would corrupt the
-/// file's line structure even though it could never execute. It is rejected instead.
 pub(super) fn quote(field: &'static str, value: &str) -> Result<String, T3GemInitError> {
     if let Some(byte) = value.bytes().find(|b| matches!(b, b'\0' | b'\r' | b'\n')) {
         return Err(T3GemInitError::ControlCharacter { field, byte });
@@ -39,7 +24,6 @@ pub(super) fn quote(field: &'static str, value: &str) -> Result<String, T3GemIni
 mod tests {
     use super::*;
 
-    /// The injection payloads from `instruction.md` §10.5. None of them may leave the literal.
     #[test]
     fn shell_metacharacters_stay_inside_the_literal() {
         for payload in [
@@ -59,7 +43,6 @@ mod tests {
         ] {
             let quoted = quote("test", payload).unwrap();
             assert!(quoted.starts_with('\'') && quoted.ends_with('\''));
-            // No unescaped quote can appear in the middle, which is what would end the literal early.
             assert_eq!(quoted, format!("'{payload}'"));
         }
     }
@@ -67,7 +50,6 @@ mod tests {
     #[test]
     fn single_quote_is_spliced_not_dropped() {
         assert_eq!(quote("test", "it's").unwrap(), r#"'it'\''s'"#);
-        // The classic break-out attempt: close the quote and append a command.
         assert_eq!(
             quote("test", "x'; id; echo '").unwrap(),
             r#"'x'\''; id; echo '\'''"#
@@ -76,7 +58,6 @@ mod tests {
 
     #[test]
     fn unicode_passes_through_unchanged() {
-        // Turkish SSIDs and hostnames are a first-class case, not an edge case.
         assert_eq!(quote("test", "Ağ-Çekirdek").unwrap(), "'Ağ-Çekirdek'");
     }
 

@@ -1,8 +1,3 @@
-//! Layer 2 of the T3 catalog adapter: enforce the `instruction.md` §6.2 invariants.
-//!
-//! Every rejection produces a typed diagnostic carrying a JSON path, and the caller is told how
-//! many entries were dropped. Nothing is skipped silently — `VecSkipError` is deliberately absent
-//! from this module.
 
 use std::collections::BTreeSet;
 use std::fmt;
@@ -18,66 +13,44 @@ use crate::t3::diagnostic::T3Diagnostic;
 use crate::t3::raw::{RawDevice, RawOsListItem, RawT3Catalog};
 use crate::t3::sha256::Sha256;
 
-/// Where a catalog came from, so a cached copy can be attributed later (`instruction.md` §6.4).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CatalogProvenance {
-    /// URL the document was fetched from.
     pub source_url: String,
-    /// `imager.latest_version` as published, advisory only.
     pub latest_version: Option<String>,
 }
 
-/// A catalog that has passed every §6.2 invariant.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ValidatedT3Catalog {
-    /// Boards that parsed cleanly, including those outside the product scope.
     pub boards: Vec<Board>,
-    /// Images that parsed cleanly.
     pub images: Vec<Image>,
-    /// Where this catalog came from.
     pub provenance: CatalogProvenance,
 }
 
 impl ValidatedT3Catalog {
-    /// Boards the product surface may show.
     pub fn boards_in_scope(&self) -> impl Iterator<Item = &Board> {
         self.boards.iter().filter(|board| board.in_product_scope)
     }
 
-    /// Images that declare support for the mandatory T3 board.
     pub fn t3_images(&self) -> impl Iterator<Item = &Image> {
         self.images.iter().filter(|image| image.is_t3())
     }
 }
 
-/// Result of a successful parse, including everything that was dropped along the way.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct T3CatalogParse {
-    /// The validated catalog.
     pub catalog: ValidatedT3Catalog,
-    /// Every finding, in document order.
     pub diagnostics: Vec<T3Diagnostic>,
-    /// How many image entries were dropped.
     pub rejected_images: usize,
-    /// How many device entries were dropped.
     pub rejected_boards: usize,
 }
 
-/// Why a catalog could not be used at all.
 #[derive(Debug)]
 pub enum T3CatalogError {
-    /// The document was not valid JSON, or did not match the T3 shape.
     Json(serde_json::Error),
-    /// No device entry survived validation.
     NoBoards {
-        /// How many device entries were dropped.
         rejected: usize,
     },
-    /// No image entry survived validation.
-    ///
-    /// `instruction.md` §6.2: a completely empty result must never be reported as success.
     NoUsableImages {
-        /// How many image entries were dropped.
         rejected: usize,
     },
 }
@@ -111,7 +84,6 @@ impl From<serde_json::Error> for T3CatalogError {
     }
 }
 
-/// Parse and validate a T3 catalog document.
 pub fn parse_catalog(
     bytes: &[u8],
     scope: ProductScope,
@@ -121,7 +93,6 @@ pub fn parse_catalog(
     validate_catalog(raw, scope, source_url)
 }
 
-/// Validate an already-deserialized raw catalog.
 pub fn validate_catalog(
     raw: RawT3Catalog,
     scope: ProductScope,
@@ -205,7 +176,6 @@ fn validate_board(
 
     let tags: BTreeSet<String> = raw.tags.iter().cloned().collect();
     if tags.is_empty() {
-        // The catalog's tagless "No filtering" pseudo-device can never match an image, so it is not a board here.
         return Err(vec![T3Diagnostic::BoardWithoutTags {
             path: path.to_owned(),
             board: name,
@@ -242,10 +212,6 @@ fn validate_board(
     ))
 }
 
-/// Derive write capability from `emmc` plus the compile-time verified DFU profile.
-///
-/// `instruction.md` §6.2: `emmc: true` may only produce a *verified* T3 DFU profile. A non-T3
-/// board claiming eMMC keeps SD and loses DFU, because no boot manifest exists for it.
 fn board_capabilities(
     emmc: bool,
     tags: &BTreeSet<String>,
@@ -253,7 +219,6 @@ fn board_capabilities(
     path: &str,
     notes: &mut Vec<T3Diagnostic>,
 ) -> BoardCapabilities {
-    // Every board in the T3 catalog boots from SD; the schema has no per-board SD flag.
     let mut capabilities = BoardCapabilities::sd_only();
 
     if !emmc {
@@ -272,7 +237,6 @@ fn board_capabilities(
     capabilities
 }
 
-/// Outcome of validating one image entry: either the image plus retained notes, or the rejections.
 type ImageResult = Result<(Image, Vec<T3Diagnostic>), Vec<T3Diagnostic>>;
 
 fn validate_images(
@@ -348,7 +312,6 @@ fn validate_image(
     let release_date = require_release_date(raw.release_date.as_deref(), path, &mut rejections);
     let devices = require_device_tags(&raw.devices, path, known_tags, &mut rejections);
 
-    // Every `None` above pushed a rejection, so this destructuring cannot panic and needs no `unwrap`.
     let (
         Some(name),
         Some(url),
@@ -476,8 +439,6 @@ fn parse_https_url(raw: &str, path: &str, field: &'static str) -> Result<Url, T3
     Ok(url)
 }
 
-/// Icons are cosmetic: a bad icon drops the icon and keeps the entry, rather than removing a
-/// flashable image or board over a decorative field.
 fn optional_icon(
     raw: Option<&str>,
     path: &str,

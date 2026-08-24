@@ -1,6 +1,5 @@
 #![cfg(feature = "store")]
 
-//! Persistence and migration tests for the T3 catalog store (`instruction.md` §6.4, §6.5).
 
 use chrono::NaiveDate;
 use gem_config::t3::store::{CURRENT_SCHEMA_VERSION, HttpValidators, StoreError, T3CatalogStore};
@@ -51,7 +50,6 @@ fn the_whole_catalog_round_trips_including_board_capabilities() {
     assert_eq!(loaded.boards.len(), original.boards.len());
     assert_eq!(loaded.images.len(), original.images.len());
     assert_eq!(loaded.provenance, original.provenance);
-    // Boards and images are stored and reloaded in document order.
     assert_eq!(loaded.boards, original.boards);
     assert_eq!(loaded.images, original.images);
 }
@@ -115,7 +113,6 @@ fn all_four_integrity_gates_are_stored_separately() {
             before.integrity.extracted_size,
             after.integrity.extracted_size
         );
-        // The two digests must not have collapsed into one column.
         assert_ne!(
             after.integrity.archive_sha256,
             after.integrity.extracted_sha256
@@ -125,7 +122,6 @@ fn all_four_integrity_gates_are_stored_separately() {
 
 #[test]
 fn large_extracted_sizes_survive_the_signed_integer_boundary() {
-    // The live catalog's desktop images are ~4 GiB, well past u32.
     let original = live_catalog(ProductScope::T3Only);
     let biggest = original
         .images
@@ -152,8 +148,6 @@ fn large_extracted_sizes_survive_the_signed_integer_boundary() {
 
 #[test]
 fn the_same_url_may_legitimately_appear_under_more_than_one_group() {
-    // The live catalog lists the four Ubuntu images twice, at the top level and inside "Ubuntu
-    // Images". Both are real listings, so an image is identified by (url, group), not url alone.
     let catalog = live_catalog(ProductScope::T3AndBeagleY);
 
     let mut urls: Vec<&str> = catalog.images.iter().map(|i| i.url.as_str()).collect();
@@ -218,7 +212,6 @@ fn reopening_an_existing_store_preserves_its_rows_and_does_not_recreate_the_sche
             .expect("save succeeds");
     }
 
-    // A second open runs the migrator again; it must be a no-op, not a DROP-and-recreate.
     let store = T3CatalogStore::open(&path).expect("store reopens");
     assert_eq!(
         store.schema_version().expect("version readable"),
@@ -252,7 +245,6 @@ fn a_database_from_a_newer_build_is_refused_with_a_diagnostic() {
         }
         other => panic!("expected FutureSchema, got {other:?}"),
     }
-    // The message has to be actionable, not just "database error".
     assert!(err.to_string().contains("newer build"));
 }
 
@@ -263,7 +255,6 @@ fn a_file_that_is_not_a_database_fails_with_a_controlled_error() {
     std::fs::write(&path, b"this is definitely not a sqlite database").expect("write garbage");
 
     let err = T3CatalogStore::open(&path).expect_err("a corrupt file must not open silently");
-    // The point is that it is a typed error rather than a panic or a silent empty catalog.
     assert!(matches!(err, StoreError::Sqlite(_)));
 }
 
@@ -300,15 +291,11 @@ fn a_corrupt_hash_column_is_reported_instead_of_being_silently_accepted() {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Last-known-good behaviour (`instruction.md` §8.3)
-// ---------------------------------------------------------------------------
 
 const LIVE_BOOT_MANIFEST: &[u8] = include_bytes!("fixtures/t3/boot_manifest.json");
 const BOOT_MANIFEST_URL: &str = "https://packages.t3gemstone.org/images/boot/t3-gem-o1/list.json";
 
 fn required_artifacts() -> Vec<&'static str> {
-    // The stage contract, not a hand-typed list.
     ["tiboot3.bin", "tispl.bin", "u-boot.img"].to_vec()
 }
 
@@ -355,8 +342,6 @@ fn a_catalog_saved_without_validators_reports_none_rather_than_empty_strings() {
     assert!(validators.is_empty());
 }
 
-/// The point of the cache: a machine that starts up offline still has the catalog it validated
-/// last time, on disk, across a restart.
 #[test]
 fn a_saved_catalog_survives_reopening_the_database() {
     let dir = tempfile::TempDir::new().expect("temp dir");
@@ -378,8 +363,6 @@ fn a_saved_catalog_survives_reopening_the_database() {
     assert_eq!(loaded.images, catalog.images);
 }
 
-/// A v1 database written by an older build must be carried forward, not discarded. If the upgrade
-/// dropped the rows, the first launch after an update would present an empty catalog offline.
 #[test]
 fn a_v1_database_is_migrated_forward_with_its_rows_intact() {
     let dir = tempfile::TempDir::new().expect("temp dir");
@@ -387,7 +370,6 @@ fn a_v1_database_is_migrated_forward_with_its_rows_intact() {
     let catalog = live_catalog(ProductScope::T3Only);
 
     {
-        // Build a v1 database by hand: schema v1 SQL, user_version pinned to 1.
         let conn = rusqlite::Connection::open(&path).expect("sqlite opens");
         conn.execute_batch(gem_config::t3::store::MIGRATIONS[0].1)
             .expect("v1 schema applies");
@@ -396,7 +378,6 @@ fn a_v1_database_is_migrated_forward_with_its_rows_intact() {
     }
 
     {
-        // The current build opens it, migrates to v2, and writes a catalog.
         let mut store = T3CatalogStore::open(&path).expect("store migrates");
         assert_eq!(
             store.schema_version().expect("version readable"),
@@ -455,8 +436,6 @@ fn a_board_with_no_stored_manifest_yields_nothing_to_start_dfu_with() {
     );
 }
 
-/// If the stage contract grows an artifact the cached manifest never carried, the cache must fail
-/// closed rather than hand back a boot chain that is one stage short.
 #[test]
 fn a_stored_manifest_that_no_longer_covers_the_stage_contract_is_refused() {
     let mut store = T3CatalogStore::open_in_memory().expect("store opens");

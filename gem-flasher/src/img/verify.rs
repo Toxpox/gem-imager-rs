@@ -1,50 +1,24 @@
-//! The extracted-side integrity gates (`instruction.md` §8.1).
-//!
-//! The downloader proves the *archive* is the archive the catalog published. That says nothing
-//! about the bytes that come out of the decoder, which are the bytes that actually reach the board.
-//! `extract_size` and `extract_sha256` are two further independent gates, and neither one's success
-//! stands in for the other's: a truncated XZ stream can stop early at a byte boundary the digest
-//! would never have reached, and a stream with trailing garbage can carry the right prefix.
-//!
-//! The verification therefore runs *inside* the reader, over exactly the bytes handed to the
-//! writer, and fires when the decoder reports EOF.
 
 use std::io;
 
 use sha2::{Digest as _, Sha256};
 
-/// What the catalog promises about an image after extraction.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ExtractedIntegrity {
-    /// Byte count the decoder must produce, exactly.
     pub size: u64,
-    /// SHA-256 over those bytes.
     pub sha256: [u8; 32],
 }
 
 impl ExtractedIntegrity {
-    /// Build the pair. Both values are mandatory; the T3 catalog adapter rejects an entry missing
-    /// either of them, so there is no "size only" construction on purpose.
     pub const fn new(size: u64, sha256: [u8; 32]) -> Self {
         Self { size, sha256 }
     }
 }
 
-/// Whether the extracted bytes can be checked against a published expectation.
-///
-/// This is an explicit argument at every call site rather than an `Option`, so that choosing *not*
-/// to verify has to be spelled out and can be found with a single grep.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExtractGate {
-    /// The catalog published both extracted values. A mismatch is fatal — never a warning.
     Declared(ExtractedIntegrity),
-    /// The user picked a file from their own disk. There is nothing to compare it against.
     LocalFile,
-    /// The image came from a catalog entry that predates the extracted-digest contract.
-    ///
-    /// Only the legacy BeagleBoard `config.json` schema reaches this; the T3 adapter always
-    /// declares both values. This variant exists so the gap is visible instead of implicit, and it
-    /// is expected to disappear when the front-ends move onto the canonical T3 model.
     UndeclaredLegacyCatalog,
 }
 
@@ -56,14 +30,11 @@ impl ExtractGate {
         }
     }
 
-    /// Whether the extracted bytes will actually be verified.
     pub const fn is_enforced(self) -> bool {
         matches!(self, Self::Declared(_))
     }
 }
 
-/// Counts and hashes the extracted stream, and fails the read that reaches EOF if either gate is
-/// not satisfied.
 #[derive(Debug)]
 pub(crate) struct ExtractVerifier {
     expected: Option<ExtractedIntegrity>,
@@ -82,7 +53,6 @@ impl ExtractVerifier {
         }
     }
 
-    /// Feed the bytes a `read` produced. An empty chunk means the decoder hit EOF.
     pub(crate) fn observe(&mut self, chunk: &[u8]) -> io::Result<()> {
         let Some(expected) = self.expected else {
             return Ok(());
@@ -94,7 +64,6 @@ impl ExtractVerifier {
 
         self.seen += chunk.len() as u64;
 
-        // Fail as soon as the stream is provably too long, rather than decompressing gigabytes.
         if self.seen > expected.size {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -110,9 +79,7 @@ impl ExtractVerifier {
         Ok(())
     }
 
-    /// EOF reached: both gates must hold.
     fn settle(&mut self, expected: ExtractedIntegrity) -> io::Result<()> {
-        // A caller may keep reading after EOF; only the first settle does the work.
         if self.settled {
             return Ok(());
         }
@@ -204,7 +171,6 @@ mod tests {
         assert_eq!(err.kind(), io::ErrorKind::InvalidData);
     }
 
-    /// The size gate passing must not be taken as the digest gate passing.
     #[test]
     fn a_stream_of_the_right_length_with_the_wrong_content_fails() {
         let payload = b"exactly these bytes";

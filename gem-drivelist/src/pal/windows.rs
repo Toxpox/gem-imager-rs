@@ -345,16 +345,16 @@ const fn get_bus_type(bus_type: i32) -> &'static str {
         BusTypeScsi => "SCSI",
         BusTypeAtapi => "ATAPI",
         BusTypeAta => "ATA",
-        BusType1394 => "1394", // IEEE 1394
+        BusType1394 => "1394",
         BusTypeSsa => "SSA",
         BusTypeFibre => "FIBRE",
         BusTypeUsb => "USB",
         BusTypeRAID => "RAID",
         BusTypeiScsi => "iSCSI",
-        BusTypeSas => "SAS", // Serial-Attached SCSI
+        BusTypeSas => "SAS",
         BusTypeSata => "SATA",
-        BusTypeSd => "SDCARD", // Secure Digital (SD)
-        BusTypeMmc => "MMC",   // Multimedia card
+        BusTypeSd => "SDCARD",
+        BusTypeMmc => "MMC",
         BusTypeVirtual => "VIRTUAL",
         BusTypeFileBackedVirtual => "FILEBACKEDVIRTUAL",
         BusTypeNvme => "NVME",
@@ -592,7 +592,6 @@ fn get_device_path(
 fn to_u16_str(arr: &[u8]) -> &[u16] {
     assert_eq!(arr.len() % 2, 0);
     let len = arr.len() / std::mem::size_of::<u16>();
-    // Strip NULL
     let len = if arr[(arr.len() - 2)..] == [0, 0] {
         len - 1
     } else {
