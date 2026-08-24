@@ -273,6 +273,11 @@ fn evaluate_target(dev: Option<&crate::Device>) -> Result<Option<u64>> {
 /// Many users might switch task after starting the flashing process, which would make it
 /// frustrating if the prompt occured after downloading.
 ///
+/// The resolver is also the non-destructive integrity boundary. It must not return until every
+/// source-side validation that can fail at end-of-stream, such as archive and extracted-image
+/// hashes, has completed. Once it succeeds and the capacity/cancellation checks pass, flashing may
+/// hide the destination's existing partition layout before reading from the returned reader.
+///
 /// # Progress
 ///
 /// Each [`Status`] stage carries its own 0..1 progress; the stages do not share one bar.
@@ -327,7 +332,17 @@ where
     C: Iterator<Item = (Box<str>, crate::ContentType<'a>)> + Send,
 {
     tracing::info!("Resolving Image");
-    let (img, img_size) = img()?;
+
+    let chan = chan.as_ref();
+    chan_send(chan, Status::Preparing);
+    check_cancel(cancel.as_ref())?;
+
+    let (img, img_size) = match img() {
+        Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {
+            return Err(crate::Error::Aborted);
+        }
+        result => result?,
+    };
 
     // Checked before the first write: a card that runs out halfway wastes an hour first.
     if let Some(available) = capacity
@@ -339,8 +354,6 @@ where
         });
     }
 
-    let chan = chan.as_ref();
-    chan_send(chan, Status::Preparing);
     check_cancel(cancel.as_ref())?;
 
     // Everything above this line can still fail without touching the destination: image resolution

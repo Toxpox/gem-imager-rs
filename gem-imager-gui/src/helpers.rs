@@ -1,13 +1,11 @@
-use std::io;
+use std::io::{self, Read as _, Seek as _, Write as _};
 use std::{borrow::Cow, fmt::Display, path::PathBuf, sync::LazyLock, time::Duration};
 
 use crate::{GemImagerMessage, PACKAGE_QUALIFIER, constants};
 use gem_config::config;
 use gem_flasher::img::OsImage;
 use gem_flasher::{DownloadFlashingStatus, GemFlasherTarget};
-use gem_helper::file_stream::ReaderFileStream;
 use std::sync::mpsc;
-use tokio_util::task::AbortOnDropHandle;
 use url::Url;
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -358,59 +356,172 @@ impl RemoteImage {
         self.url.path_segments().unwrap().next_back().unwrap()
     }
 
-    fn open<C, P, R>(self, f_cache: C, f_pipe: P) -> impl FnOnce() -> io::Result<R>
-    where
-        C: FnOnce(&std::path::Path) -> io::Result<R>,
-        P: FnOnce(ReaderFileStream, AbortOnDropHandle<io::Result<()>>, u64) -> io::Result<R>,
-    {
-        let rt = tokio::runtime::Handle::current();
-        move || {
-            let downloader = self.downloader.clone();
-            // The cache is addressed by the *archive* hash, because the archive is what is stored.
-            let cache = downloader.check_cache_from_sha(self.archive_sha256);
-
-            if let Some(path) = cache {
-                tracing::info!("Found the remote image in cache");
-                return f_cache(&path);
-            }
-
-            tracing::info!("Remote image not found in cache. Downloading");
-            let (tx_stream, rx) = gem_helper::file_stream::file_stream()?;
-            let downloader = self.downloader.clone();
-            let url = self.url.clone();
-            let integrity = gem_downloader::ArchiveIntegrity {
-                sha256: self.archive_sha256,
-                size: self.archive_size,
-            };
-
-            let t: tokio::task::JoinHandle<io::Result<()>> = rt.spawn(async move {
-                downloader
-                    .download_to_stream(*url, integrity, tx_stream)
-                    .await
-                    .map_err(|e| {
-                        let msg = format!("Error while downloading Os Image: {e}");
-                        tracing::error!("{}", &msg);
-                        io::Error::other(msg)
-                    })?;
-                tracing::info!("Image download finished");
-                Ok(())
-            });
-
-            f_pipe(rx, AbortOnDropHandle::new(t), self.extract_size)
+    /// Bytes a cache miss can add to the filesystem before the extracted staging file is written.
+    fn archive_cache_growth_estimate(&self) -> u64 {
+        if self
+            .downloader
+            .check_cache_from_sha(self.archive_sha256)
+            .is_some()
+        {
+            0
+        } else {
+            self.archive_size
+                .unwrap_or(self.downloader.policy().max_stream_body)
         }
     }
 
-    fn into_image_fn(self) -> impl FnOnce() -> io::Result<(OsImage, u64)> {
-        let extract_size = self.extract_size;
-        // Captured before `self` is consumed; the gate is the same for cache and network.
-        let gate = self.extract_gate();
-        self.open(
-            move |p| Ok((OsImage::from_path(p, gate)?, extract_size)),
-            move |rx, abort, es| {
-                let img = OsImage::from_piped(rx, abort, es, gate)?;
-                Ok((img, es))
-            },
-        )
+    /// Resolve, verify and decode the complete remote image before returning a reader.
+    ///
+    /// The SD writer destroys the destination's old partition metadata immediately after its image
+    /// resolver succeeds. Returning the live download stream here therefore made archive and
+    /// extracted-digest failures destructive: both gates finish only at EOF. Materialising the
+    /// verified extracted bytes in the private staging area keeps every integrity refusal on the
+    /// non-destructive side of that boundary.
+    fn into_image_fn(
+        self,
+        cancel: gem_helper::cancel::CancellationToken,
+    ) -> impl FnOnce() -> io::Result<(Box<dyn io::Read + Send>, u64)> + Send {
+        let rt = tokio::runtime::Handle::current();
+        move || {
+            if cancel.is_cancelled() {
+                return Err(io::Error::new(
+                    io::ErrorKind::Interrupted,
+                    "flash cancelled",
+                ));
+            }
+
+            let downloader = self.downloader.clone();
+            let cached_path = downloader.check_cache_from_sha(self.archive_sha256);
+            let archive_growth = if cached_path.is_some() {
+                0
+            } else {
+                self.archive_size
+                    .unwrap_or(downloader.policy().max_stream_body)
+            };
+            // Check the complete peak working set before downloading. The archive is persisted on
+            // the same cache filesystem and remains there while the extracted image is staged.
+            let staging = crate::staging::StagingImage::create(
+                self.extract_size.saturating_add(archive_growth),
+            )
+            .map_err(io::Error::other)?;
+
+            // The cache is addressed by the *archive* hash, because the archive is what is stored.
+            let path = if let Some(path) = cached_path {
+                tracing::info!("Found the remote image in cache");
+                path
+            } else {
+                tracing::info!("Remote image not found in cache. Downloading before flashing");
+                let (writer, _reader) = gem_helper::file_stream::file_stream()?;
+                let integrity = gem_downloader::ArchiveIntegrity {
+                    sha256: self.archive_sha256,
+                    size: self.archive_size,
+                };
+
+                rt.block_on(async {
+                    let download =
+                        downloader.download_to_stream(*self.url.clone(), integrity, writer);
+                    tokio::pin!(download);
+
+                    loop {
+                        tokio::select! {
+                            result = &mut download => {
+                                break result.map_err(|e| {
+                                    let msg = format!("Error while downloading Os Image: {e}");
+                                    tracing::error!("{}", &msg);
+                                    io::Error::other(msg)
+                                });
+                            }
+                            () = tokio::time::sleep(Duration::from_millis(100)) => {
+                                if cancel.is_cancelled() {
+                                    break Err(io::Error::new(
+                                        io::ErrorKind::Interrupted,
+                                        "flash cancelled",
+                                    ));
+                                }
+                            }
+                        }
+                    }
+                })?;
+
+                downloader
+                    .check_cache_from_sha(self.archive_sha256)
+                    .ok_or_else(|| {
+                        io::Error::other("verified image was not published to the cache")
+                    })?
+            };
+
+            // The extracted gate observes EOF, so the resolver must consume the entire decoder
+            // before it may tell the raw writer that the image is ready.
+            let mut image = OsImage::from_path(&path, self.extract_gate())?;
+            let mut file = std::fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .create_new(true)
+                .open(staging.path())?;
+            let mut written = 0u64;
+            let mut buf = vec![0u8; 1024 * 1024];
+            loop {
+                if cancel.is_cancelled() {
+                    return Err(io::Error::new(
+                        io::ErrorKind::Interrupted,
+                        "flash cancelled",
+                    ));
+                }
+                let count = image.read(&mut buf)?;
+                if count == 0 {
+                    break;
+                }
+                let next_written = written.saturating_add(count as u64);
+                if next_written > self.extract_size {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        format!(
+                            "extracted image size mismatch: expected {}, got at least {next_written}",
+                            self.extract_size
+                        ),
+                    ));
+                }
+                file.write_all(&buf[..count])?;
+                written = next_written;
+            }
+            if written != self.extract_size {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!(
+                        "extracted image size mismatch: expected {}, got {written}",
+                        self.extract_size
+                    ),
+                ));
+            }
+            file.flush()?;
+            file.sync_all()?;
+            file.rewind()?;
+
+            Ok((
+                Box::new(StagedRemoteImage {
+                    _staging: staging,
+                    file,
+                }) as Box<dyn io::Read + Send>,
+                self.extract_size,
+            ))
+        }
+    }
+}
+
+/// Reader for a fully verified extracted image. The guard removes the staging file on every exit.
+struct StagedRemoteImage {
+    // Fields drop in declaration order. Close the handle before the guard removes its path, which
+    // is required on Windows where an open file cannot be unlinked.
+    file: std::fs::File,
+    _staging: crate::staging::StagingImage,
+}
+
+type ImageReader = Box<dyn io::Read + Send>;
+type ImageResolver = Box<dyn FnOnce() -> io::Result<(ImageReader, u64)> + Send>;
+
+impl io::Read for StagedRemoteImage {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.file.read(buf)
     }
 }
 
@@ -436,18 +547,33 @@ impl SelectedImage {
         }
     }
 
-    /// See [`BoardImage::staging_size_estimate`].
+    /// Peak cache-filesystem growth for the remote DFU path.
     fn staging_size_estimate(&self) -> u64 {
         match self {
-            Self::RemoteImage(x) => x.extract_size,
+            // Remote DFU holds the cached archive and verified extracted source while the SD writer
+            // creates the separately customized destination image. Reserve all three before the
+            // download starts.
+            Self::RemoteImage(x) => x
+                .extract_size
+                .saturating_mul(2)
+                .saturating_add(x.archive_cache_growth_estimate()),
             Self::LocalImage(x) => std::fs::metadata(x.path()).map(|m| m.len()).unwrap_or(0),
         }
     }
 
-    fn into_image_fn(self) -> Box<dyn FnOnce() -> io::Result<(OsImage, u64)> + Send> {
+    fn into_image_fn(self, cancel: gem_helper::cancel::CancellationToken) -> ImageResolver {
         match self {
-            SelectedImage::LocalImage(x) => Box::new(x.into_image_fn()),
-            SelectedImage::RemoteImage(x) => Box::new((*x).into_image_fn()),
+            SelectedImage::LocalImage(x) => Box::new(move || {
+                if cancel.is_cancelled() {
+                    return Err(io::Error::new(
+                        io::ErrorKind::Interrupted,
+                        "flash cancelled",
+                    ));
+                }
+                let (image, size) = x.into_image_fn()()?;
+                Ok((Box::new(image) as ImageReader, size))
+            }),
+            SelectedImage::RemoteImage(x) => Box::new((*x).into_image_fn(cancel)),
         }
     }
 }
@@ -502,17 +628,17 @@ pub(crate) async fn flash(
         #[cfg(all(feature = "dfu", feature = "sd"))]
         (BoardImage::Image { img, .. }, customization, Destination::T3Dfu(target)) => {
             let identifier = target.identifier().into_owned();
-            let estimate = img.staging_size_estimate();
             let customization = customization.sd_customization()?;
 
             tokio::task::spawn_blocking(move || {
                 // Before the first byte is downloaded, not after.
+                let estimate = img.staging_size_estimate();
                 let staging = crate::staging::StagingImage::create(estimate)?;
                 // The cache path commonly holds the account name and must not accompany a secret-bearing image.
                 tracing::info!("Staging the customized image in the private application cache");
 
                 gem_flasher::sd::Flasher::with_file_dest(
-                    img.into_image_fn(),
+                    img.into_image_fn(cancel_sync.clone()),
                     staging.path().to_path_buf(),
                     customization,
                 )
@@ -550,7 +676,7 @@ pub(crate) async fn flash(
         {
             tokio::task::spawn_blocking(move || {
                 gem_flasher::sd::Flasher::with_file_dest(
-                    img.into_image_fn(),
+                    img.into_image_fn(cancel_sync.clone()),
                     f,
                     customization.sd_customization()?,
                 )
@@ -565,7 +691,7 @@ pub(crate) async fn flash(
         {
             tokio::task::spawn_blocking(move || {
                 gem_flasher::sd::Flasher::new(
-                    img.into_image_fn(),
+                    img.into_image_fn(cancel_sync.clone()),
                     t,
                     customization.sd_customization()?,
                 )
@@ -902,7 +1028,8 @@ impl FlashingCustomization {
 
     pub(crate) fn validate(&self) -> bool {
         match self {
-            FlashingCustomization::LinuxSdSysconfig(sd_customization) => {
+            FlashingCustomization::LinuxSdSysconfig(sd_customization)
+            | FlashingCustomization::LinuxSdCloudInit(sd_customization) => {
                 sd_customization.validate_user()
             }
             // Valid exactly when the file can be produced, so ask the serializer instead of restating its rules.
@@ -1470,9 +1597,224 @@ mod tests {
         assert!(
             FlashingCustomization::LinuxSdSysconfig(SdSysconfCustomization::default()).validate()
         );
-        let root = SdSysconfCustomization::default()
-            .update_user(Some(SdCustomizationUser::new("root".into(), "p")));
-        assert!(!FlashingCustomization::LinuxSdSysconfig(root).validate());
+        for invalid in ["root", "", "   "] {
+            let customization = || {
+                SdSysconfCustomization::default()
+                    .update_user(Some(SdCustomizationUser::new(invalid.into(), "p")))
+            };
+            assert!(
+                !FlashingCustomization::LinuxSdSysconfig(customization()).validate(),
+                "sysconfig accepted invalid username {invalid:?}"
+            );
+            assert!(
+                !FlashingCustomization::LinuxSdCloudInit(customization()).validate(),
+                "cloud-init accepted invalid username {invalid:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn staged_remote_reader_closes_its_handle_before_removing_the_file() {
+        let staging = crate::staging::StagingImage::create(0).unwrap();
+        let path = staging.path().to_path_buf();
+        let file = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create_new(true)
+            .open(&path)
+            .unwrap();
+        let reader = StagedRemoteImage {
+            file,
+            _staging: staging,
+        };
+
+        drop(reader);
+
+        assert!(
+            !path.exists(),
+            "the staging guard tried to remove a still-open remote image"
+        );
+    }
+
+    #[test]
+    fn remote_dfu_preflight_includes_archive_cache_growth() {
+        let cache = tempfile::tempdir().unwrap();
+        let remote = RemoteImage::new(
+            "uncached image".into(),
+            "https://example.invalid/image.xz"
+                .parse::<url::Url>()
+                .unwrap()
+                .into(),
+            [7u8; 32],
+            Some(7),
+            None,
+            11,
+            gem_downloader::Downloader::new(cache.path()).unwrap(),
+        );
+
+        assert_eq!(SelectedImage::from(remote).staging_size_estimate(), 29);
+    }
+
+    /// The raw SD writer treats a successful resolver as the point of no return. Both the archive
+    /// and extracted gates therefore have to fail here, before a reader is returned to that writer.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn remote_resolver_finishes_every_integrity_gate_before_returning() {
+        use httpmock::{Method::GET, MockServer};
+        use sha2::{Digest as _, Sha256};
+        use std::io::Read as _;
+
+        let server = MockServer::start();
+        let cache = tempfile::tempdir().unwrap();
+        let downloader = gem_downloader::Downloader::with_policy(
+            cache.path(),
+            gem_downloader::TransportPolicy::plaintext_for_tests(),
+        )
+        .unwrap();
+        let content = b"complete extracted image";
+        let archive_sha256: [u8; 32] = Sha256::digest(content).into();
+        let url: url::Url = server.url("/image").parse().unwrap();
+
+        server.mock(|when, then| {
+            when.method(GET).path("/image");
+            then.status(200).body(content);
+        });
+
+        let wrong_archive = RemoteImage::new(
+            "bad archive".into(),
+            url.clone().into(),
+            [0u8; 32],
+            Some(content.len() as u64),
+            Some(archive_sha256),
+            content.len() as u64,
+            downloader.clone(),
+        );
+        let archive_err = match tokio::task::spawn_blocking(move || {
+            wrong_archive.into_image_fn(gem_helper::cancel::CancellationToken::default())()
+        })
+        .await
+        .unwrap()
+        {
+            Ok(_) => panic!("archive mismatch returned a reader to the raw writer"),
+            Err(error) => error,
+        };
+        assert!(archive_err.to_string().contains("sha256"));
+
+        let wrong_extract = RemoteImage::new(
+            "bad extract".into(),
+            url.into(),
+            archive_sha256,
+            Some(content.len() as u64),
+            Some([1u8; 32]),
+            content.len() as u64,
+            downloader,
+        );
+        let extract_err = match tokio::task::spawn_blocking(
+            wrong_extract.into_image_fn(gem_helper::cancel::CancellationToken::default()),
+        )
+        .await
+        .unwrap()
+        {
+            Ok(_) => panic!("extracted mismatch returned a reader to the raw writer"),
+            Err(error) => error,
+        };
+        assert!(extract_err.to_string().contains("sha256"));
+
+        let wrong_legacy_size = RemoteImage::new(
+            "bad legacy size".into(),
+            server.url("/image").parse::<url::Url>().unwrap().into(),
+            archive_sha256,
+            Some(content.len() as u64),
+            None,
+            content.len() as u64 + 1,
+            gem_downloader::Downloader::with_policy(
+                cache.path(),
+                gem_downloader::TransportPolicy::plaintext_for_tests(),
+            )
+            .unwrap(),
+        );
+        let size_err = match tokio::task::spawn_blocking(
+            wrong_legacy_size.into_image_fn(gem_helper::cancel::CancellationToken::default()),
+        )
+        .await
+        .unwrap()
+        {
+            Ok(_) => panic!("legacy size mismatch returned a reader to the raw writer"),
+            Err(error) => error,
+        };
+        assert!(size_err.to_string().contains("size mismatch"));
+
+        let oversized_legacy = RemoteImage::new(
+            "oversized legacy image".into(),
+            server.url("/image").parse::<url::Url>().unwrap().into(),
+            archive_sha256,
+            Some(content.len() as u64),
+            None,
+            content.len() as u64 - 1,
+            gem_downloader::Downloader::with_policy(
+                cache.path(),
+                gem_downloader::TransportPolicy::plaintext_for_tests(),
+            )
+            .unwrap(),
+        );
+        let oversized_err = match tokio::task::spawn_blocking(
+            oversized_legacy.into_image_fn(gem_helper::cancel::CancellationToken::default()),
+        )
+        .await
+        .unwrap()
+        {
+            Ok(_) => panic!("oversized legacy image returned a reader to the raw writer"),
+            Err(error) => error,
+        };
+        assert!(oversized_err.to_string().contains("size mismatch"));
+
+        let valid = RemoteImage::new(
+            "valid image".into(),
+            server.url("/image").parse::<url::Url>().unwrap().into(),
+            archive_sha256,
+            Some(content.len() as u64),
+            Some(archive_sha256),
+            content.len() as u64,
+            gem_downloader::Downloader::with_policy(
+                cache.path(),
+                gem_downloader::TransportPolicy::plaintext_for_tests(),
+            )
+            .unwrap(),
+        );
+        let (mut reader, size) = tokio::task::spawn_blocking(
+            valid.into_image_fn(gem_helper::cancel::CancellationToken::default()),
+        )
+        .await
+        .unwrap()
+        .expect("matching archive and extracted hashes must return a reader");
+        let mut actual = Vec::new();
+        reader.read_to_end(&mut actual).unwrap();
+        assert_eq!(size, content.len() as u64);
+        assert_eq!(actual, content);
+        drop(reader);
+
+        let cancelled = RemoteImage::new(
+            "cancelled image".into(),
+            server.url("/image").parse::<url::Url>().unwrap().into(),
+            archive_sha256,
+            Some(content.len() as u64),
+            Some(archive_sha256),
+            content.len() as u64,
+            gem_downloader::Downloader::with_policy(
+                cache.path(),
+                gem_downloader::TransportPolicy::plaintext_for_tests(),
+            )
+            .unwrap(),
+        );
+        let token = gem_helper::cancel::CancellationToken::default();
+        drop(token.drop_guard());
+        let cancelled_err = match tokio::task::spawn_blocking(cancelled.into_image_fn(token))
+            .await
+            .unwrap()
+        {
+            Ok(_) => panic!("cancelled resolver returned a reader to the raw writer"),
+            Err(error) => error,
+        };
+        assert_eq!(cancelled_err.kind(), io::ErrorKind::Interrupted);
     }
 
     #[test]

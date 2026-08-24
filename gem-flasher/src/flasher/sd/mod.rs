@@ -394,9 +394,10 @@ impl<I> Flasher<I> {
     }
 }
 
-impl<I> Flasher<I>
+impl<I, R> Flasher<I>
 where
-    I: FnOnce() -> std::io::Result<(crate::img::OsImage, u64)> + Send,
+    I: FnOnce() -> std::io::Result<(R, u64)> + Send,
+    R: std::io::Read + Send,
 {
     pub fn flash(
         self,

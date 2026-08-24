@@ -1,10 +1,10 @@
-//! Staging area for the DFU/eMMC write path.
+//! Private staging area for verified images and the DFU/eMMC write path.
 //!
-//! The SD path streams the extracted image straight at the card. DFU cannot do that: the boot
-//! chain has to be transferred first, the raw eMMC stage needs a known byte count up front, and the
-//! T3 first-boot file is written into the image's FAT partition rather than onto a device. So the
-//! DFU path materialises one **staging image** — the extracted, customized, read-back-verified
-//! bytes — and then streams that file to the board.
+//! Remote catalog images are fully downloaded, decoded and verified here before an SD card's old
+//! partition table is touched. Local images can still stream straight from their selected file.
+//! DFU additionally materialises a customized, read-back-verified staging image because the boot
+//! chain has to be transferred first and the T3 first-boot file is written into the image's FAT
+//! partition rather than directly onto a device.
 //!
 //! Two failure modes are handled here rather than discovered halfway through:
 //!
@@ -17,6 +17,7 @@
 use std::{
     io,
     path::{Path, PathBuf},
+    sync::atomic::{AtomicU64, Ordering},
 };
 
 /// Extra room demanded beyond the image itself.
@@ -29,12 +30,15 @@ const HEADROOM: u64 = 256 * 1024 * 1024;
 /// nothing else.
 const PREFIX: &str = "t3-staging-";
 
+/// Distinguishes the verified-source and DFU destination staging images when both are live.
+static STAGING_NONCE: AtomicU64 = AtomicU64::new(0);
+
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum StagingError {
     #[cfg_attr(test, allow(dead_code))]
-    #[error("no application cache directory is available for the DFU staging image")]
+    #[error("no application cache directory is available for image staging")]
     NoCacheDir,
-    #[error("failed to prepare the DFU staging directory: {source}")]
+    #[error("failed to prepare the image staging directory: {source}")]
     Io {
         #[source]
         source: io::Error,
@@ -42,7 +46,7 @@ pub(crate) enum StagingError {
     /// Worded so the operator learns the number that matters, and matched by
     /// `message::localized_flash_error` on the word "staging".
     #[error(
-        "not enough free space for the DFU staging image: {required} bytes required, \
+        "not enough free space for image staging: {required} bytes required, \
          {available} bytes available"
     )]
     InsufficientSpace { required: u64, available: u64 },
@@ -100,8 +104,13 @@ impl StagingImage {
             });
         }
 
-        // Unique among live processes only; the sweep cleans up whatever an earlier one left behind.
-        let path = dir.join(format!("{PREFIX}{}.img", std::process::id()));
+        // A remote DFU write can hold the verified source image while creating the customized DFU
+        // destination image, so process id alone is not unique enough.
+        let path = dir.join(format!(
+            "{PREFIX}{}-{}.img",
+            std::process::id(),
+            STAGING_NONCE.fetch_add(1, Ordering::Relaxed)
+        ));
         Ok(Self { path })
     }
 
@@ -113,11 +122,11 @@ impl StagingImage {
 impl Drop for StagingImage {
     fn drop(&mut self) {
         match std::fs::remove_file(&self.path) {
-            Ok(()) => tracing::info!("Removed the DFU staging image"),
+            Ok(()) => tracing::info!("Removed the staging image"),
             // The common case: the write failed before the file was created.
             Err(e) if e.kind() == io::ErrorKind::NotFound => {}
             // Worth a warning because the file holds user secrets, though it cannot fail a finished flash.
-            Err(e) => tracing::warn!("Failed to remove the DFU staging image: {e}"),
+            Err(e) => tracing::warn!("Failed to remove the image staging file: {e}"),
         }
     }
 }
@@ -140,8 +149,8 @@ pub(crate) fn cleanup_stale() {
             continue;
         }
         match std::fs::remove_file(entry.path()) {
-            Ok(()) => tracing::info!("Removed a stale DFU staging image from a previous run"),
-            Err(e) => tracing::warn!("Failed to remove a stale DFU staging image: {e}"),
+            Ok(()) => tracing::info!("Removed a stale staging image from a previous run"),
+            Err(e) => tracing::warn!("Failed to remove a stale image staging file: {e}"),
         }
     }
 }
@@ -224,6 +233,13 @@ mod tests {
 
         drop(staging);
         assert!(!path.exists(), "a staging image outlived its guard");
+    }
+
+    #[test]
+    fn concurrent_staging_images_never_share_a_path() {
+        let first = StagingImage::create(0).unwrap();
+        let second = StagingImage::create(0).unwrap();
+        assert_ne!(first.path(), second.path());
     }
 
     /// The case no `Drop` can cover: the process was killed while a staging image existed.

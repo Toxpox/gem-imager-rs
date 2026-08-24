@@ -311,6 +311,31 @@ mod mock_card {
         );
     }
 
+    #[test]
+    fn a_cancelled_image_resolve_is_aborted_without_touching_the_card() {
+        let card = MockSd::new();
+        let probe = card.as_file().try_clone().unwrap();
+        let before = layout_block(&probe);
+
+        let err = flash_internal(
+            || -> std::io::Result<(Cursor<Box<[u8]>>, u64)> {
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::Interrupted,
+                    "download cancelled",
+                ))
+            },
+            crate::helpers::SdCardWrapper::new(card),
+            None,
+            None,
+            no_customizations(),
+            None,
+        )
+        .expect_err("an interrupted resolver must abort the flash");
+
+        assert!(matches!(err, crate::Error::Aborted), "got {err:?}");
+        assert_eq!(layout_block(&probe), before);
+    }
+
     /// Same contract for the user pressing cancel: nothing irreversible before the first
     /// cancellation point.
     #[test]
