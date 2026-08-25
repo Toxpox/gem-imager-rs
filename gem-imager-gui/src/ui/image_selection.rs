@@ -92,7 +92,6 @@ fn os_list_pane<'a>(state: &'a crate::state::ChooseOsState) -> Element<'a, GemIm
             })
             .map(Into::into);
 
-        // Nested sublists get a row to walk back up to their parent.
         let back: Vec<Element<GemImagerMessage>> = if state.pos.is_none() {
             Vec::new()
         } else {

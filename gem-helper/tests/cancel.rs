@@ -23,7 +23,7 @@ fn test_drop_guard_cancels() {
             !token.is_cancelled(),
             "Token should not be cancelled while guard is alive"
         );
-    } // _guard is dropped here
+    }
 
     assert!(
         token.is_cancelled(),

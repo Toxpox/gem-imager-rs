@@ -1,10 +1,3 @@
-//! Debug aid: dump every descriptor the T3 board publishes in DFU mode.
-//!
-//! Run with the board attached in DFU mode:
-//!     cargo run -p gem-flasher-dfu --example dump_dfu_descriptors
-//!
-//! It answers one question: where does this device put its DFU functional descriptor (0x21)?
-
 use rusb::UsbContext as _;
 
 const DFU_CLASS: u8 = 0xfe;
@@ -18,7 +11,6 @@ fn hex(bytes: &[u8]) -> String {
         .join(" ")
 }
 
-/// Walk a descriptor blob and report any DFU functional descriptor inside it.
 fn scan(label: &str, mut extra: &[u8]) {
     println!("  {label}: {} bytes [{}]", extra.len(), hex(extra));
     while extra.len() >= 2 {
@@ -39,7 +31,6 @@ fn scan(label: &str, mut extra: &[u8]) {
     }
 }
 
-/// Whether any interface of this device presents the DFU class.
 fn has_dfu_interface(device: &rusb::Device<rusb::Context>, configs: u8) -> bool {
     (0..configs).any(|index| {
         device.config_descriptor(index).is_ok_and(|config| {
@@ -66,7 +57,6 @@ fn main() -> rusb::Result<()> {
             && descriptor.product_id() == gem_flasher_dfu::T3_DFU_PRODUCT_ID;
         let is_dfu = has_dfu_interface(&device, descriptor.num_configurations());
 
-        // One line for everything, so an empty result is never ambiguous.
         println!(
             " - {:04x}:{:04x} bus {}{}{}",
             descriptor.vendor_id(),
@@ -91,7 +81,6 @@ fn main() -> rusb::Result<()> {
             descriptor.max_packet_size()
         );
 
-        // Opening can fail (no WinUSB driver); only the human-readable alt-setting names are lost.
         let handle = match device.open() {
             Ok(handle) => Some(handle),
             Err(e) => {
@@ -107,12 +96,10 @@ fn main() -> rusb::Result<()> {
         });
 
         if let Some(handle) = handle.as_ref() {
-            // `rusb::Version` assumes valid BCD digits, and some T3 boot stages have appeared as `REV_7>94`,
-            // so keep the raw bcdDevice word as evidence rather than only the parsed value.
             let mut raw_device_descriptor = [0u8; 18];
             match handle.read_control(
-                0x80, // standard device-to-host request for the device recipient
-                0x06, // GET_DESCRIPTOR
+                0x80,
+                0x06,
                 0x0100,
                 0,
                 &mut raw_device_descriptor,

@@ -1,8 +1,3 @@
-//! The AUR PKGBUILDs are not built by CI, so nothing here fails when they drift from the tree they
-//! package. Both invariants below were real breakages found while first building these packages:
-//! without an LFS fetch the icons install as text stubs, and a stale `.SRCINFO` is what the AUR
-//! actually shows and resolves dependencies from, so it silently misrepresents the package.
-
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
@@ -17,8 +12,6 @@ fn packages() -> Vec<(String, String, String)> {
     let mut found: Vec<_> = std::fs::read_dir(aur_dir())
         .expect("packaging/aur exists")
         .map(|e| e.expect("readable entry").path())
-        // makepkg leaves src/, pkg/ and working clones next to the authored packages (see
-        // packaging/aur/.gitignore), so a dir only counts as a package if it has a PKGBUILD.
         .filter(|p| p.is_dir() && p.join("PKGBUILD").is_file())
         .map(|dir| {
             let name = dir
@@ -38,9 +31,6 @@ fn packages() -> Vec<(String, String, String)> {
     found
 }
 
-/// The assets the GUI embeds live in Git LFS. A plain `git` source only checks out pointer files,
-/// which compile fine and then fail at runtime as undecodable images, so the fetch must be
-/// explicit and the filters must be installed in the throwaway clone for it to take effect.
 #[test]
 fn every_pkgbuild_materialises_git_lfs_assets() {
     let lfs_tracked = std::fs::read_to_string(
@@ -73,9 +63,6 @@ fn every_pkgbuild_materialises_git_lfs_assets() {
     }
 }
 
-/// `.SRCINFO` is generated, and the AUR trusts it over the PKGBUILD for metadata and dependency
-/// resolution. Regenerating it is easy to forget, which leaves users installing against fields
-/// that no longer describe the package.
 #[test]
 fn every_srcinfo_agrees_with_its_pkgbuild() {
     for (name, pkgbuild, srcinfo) in packages() {
@@ -87,8 +74,6 @@ fn every_srcinfo_agrees_with_its_pkgbuild() {
                 acc
             });
 
-        // Every runtime dependency the PKGBUILD lists has to survive into the generated file;
-        // a missing one becomes a package that installs without the library it needs.
         let depends_block = pkgbuild
             .split_once("depends=(")
             .map(|(_, rest)| rest.split_once(')').expect("closed depends array").0)
@@ -115,10 +100,6 @@ fn every_srcinfo_agrees_with_its_pkgbuild() {
     }
 }
 
-/// The packages clone whatever `url` names, so if the project moves and a PKGBUILD is left behind
-/// it keeps building the old fork's `main` under the new project's package name: users get stale
-/// software from an address nobody is maintaining, and nothing in the build fails. Pinning both to
-/// the workspace `repository` makes the move a single edit that this test then enforces.
 #[test]
 fn every_pkgbuild_points_at_the_workspace_repository() {
     let manifest = std::fs::read_to_string(
@@ -151,8 +132,6 @@ fn every_pkgbuild_points_at_the_workspace_repository() {
             "{name}: .SRCINFO still records a different url; regenerate it with \
              `makepkg --printsrcinfo > .SRCINFO`"
         );
-        // The clone address is what actually decides which tree is packaged; the display url
-        // above can agree while the source silently keeps fetching the old fork.
         assert!(
             srcinfo
                 .lines()
@@ -161,4 +140,28 @@ fn every_pkgbuild_points_at_the_workspace_repository() {
             "{name}: .SRCINFO source clones a repository other than {repository}"
         );
     }
+}
+
+#[test]
+fn gui_pkgbuild_declares_its_dlopened_x11_libraries_without_forcing_a_zlib_provider() {
+    let (_, pkgbuild, srcinfo) = packages()
+        .into_iter()
+        .find(|(name, _, _)| name == "gem-imager-gui-git")
+        .expect("GUI AUR package exists");
+
+    for dependency in ["libxcursor", "libxi", "zlib"] {
+        assert!(
+            pkgbuild.contains(&format!("'{dependency}'")),
+            "GUI PKGBUILD is missing runtime dependency {dependency}"
+        );
+        assert!(
+            srcinfo
+                .lines()
+                .any(|line| line.trim() == format!("depends = {dependency}")),
+            "GUI .SRCINFO is missing runtime dependency {dependency}"
+        );
+    }
+
+    assert!(!pkgbuild.contains("zlib-ng-compat"));
+    assert!(!srcinfo.contains("depends = zlib-ng-compat"));
 }

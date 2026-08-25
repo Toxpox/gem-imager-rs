@@ -1,38 +1,30 @@
-/// Exact ROM identity that is allowed to trigger an installation offer.
 pub const T3_DFU_HARDWARE_ID: &str = r"USB\VID_0451&PID_6165&REV_0200";
 
-/// Exact compatible ID observed on the T3 ROM DFU devnode.
 pub const T3_DFU_COMPATIBLE_ID: &str = r"USB\COMPAT_VID_0451&Class_FE&SubClass_01&Prot_02";
 
-/// Canonical read-only state consumed by the GUI and re-checked by the elevated helper.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum DriverState {
-    /// No present devnode has both the exact ROM hardware ID and exact DFU compatible ID.
     #[default]
     NoDevice,
-    /// The active function driver is WinUSB and the devnode has no PnP problem.
     ReadyWinUsb,
-    /// A non-WinUSB service owns a healthy device. It is never replaced automatically.
-    ReadyExternal { service: String },
-    /// Exactly one exact ROM devnode has no bound driver/service. Windows reports either Code 28
-    /// on a fresh host or problem code 0 after PnPUtil replaces an uninstalled package with the
-    /// NULL driver.
+    ReadyExternal {
+        service: String,
+    },
     NeedsInstall,
-    /// A present exact device has a driver or a problem that is not a safe driverless case.
     DriverConflict {
         service: Option<String>,
         problem_code: u32,
     },
-    /// More than one exact ROM devnode is present, so hardware-ID-wide mutation is refused.
-    MultipleCandidates { count: usize },
-    /// The host probe itself failed. A failed probe must never become an install offer.
-    ProbeFailed { win32_error: u32 },
-    /// This platform has no Windows driver state.
+    MultipleCandidates {
+        count: usize,
+    },
+    ProbeFailed {
+        win32_error: u32,
+    },
     Unsupported,
 }
 
 impl DriverState {
-    /// Only this state may enable the install action.
     pub const fn needs_install(&self) -> bool {
         matches!(self, Self::NeedsInstall)
     }
@@ -45,7 +37,6 @@ pub(crate) struct DeviceFacts {
     pub(crate) problem_code: u32,
 }
 
-/// Keep policy separate from SetupAPI mechanics so every safety decision is unit-testable.
 pub(crate) fn classify(devices: &[DeviceFacts]) -> DriverState {
     if devices.is_empty() {
         return DriverState::NoDevice;
@@ -56,8 +47,6 @@ pub(crate) fn classify(devices: &[DeviceFacts]) -> DriverState {
         .filter(|device| is_driverless(device))
         .count();
 
-    // libwdi's installer binds by hardware ID, not by SetupAPI instance, so a second exact ROM devnode
-    // makes the mutation ambiguous even when healthy -- refuse on more than one exact present target.
     if devices.len() > 1 {
         return DriverState::MultipleCandidates {
             count: devices.len(),
@@ -99,9 +88,6 @@ pub(crate) fn classify(devices: &[DeviceFacts]) -> DriverState {
 }
 
 fn is_driverless(device: &DeviceFacts) -> bool {
-    // A clean enumeration reports CM_PROB_FAILED_INSTALL (28), but PnPUtil's `/delete-driver
-    // ... /uninstall` installs the NULL driver and can leave the devnode stopped with CM_PROB_NONE (0).
-    // Empty service *and* empty driver key decide both cases; every other problem code stays non-mutating.
     matches!(device.problem_code, 0 | 28)
         && device.service.as_deref().is_none_or(str::is_empty)
         && device.driver_key.as_deref().is_none_or(str::is_empty)

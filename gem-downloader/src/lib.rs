@@ -1,24 +1,8 @@
-//! A downloader for applications that must be able to prove what they downloaded.
-//!
-//! # Features
-//!
-//! - Async.
-//! - Caches downloaded files in a directory on the filesystem, addressed by content hash.
-//! - Verifies both the byte count and the SHA-256 of an archive before it is published to the
-//!   cache, and publishes atomically (`instruction.md` §8.1, §8.2).
-//! - Refuses plaintext transports, non-2xx responses, unbounded bodies and unbounded redirect
-//!   chains by policy rather than by call site.
-//! - Collapses concurrent downloads of the same archive into a single transfer.
-
 mod error;
 mod helpers;
 mod policy;
 mod single_flight;
 
-/// Value sent as `User-Agent` on every request.
-///
-/// Product identity rather than crate identity: `packages.t3gemstone.org` sees the application
-/// that is asking, not the internal crate name that happens to hold the HTTP client.
 pub const USER_AGENT: &str = concat!("T3GemstoneImager/", env!("CARGO_PKG_VERSION"));
 
 use helpers::sha256_from_path;
@@ -38,28 +22,17 @@ pub use error::{DownloadError, RedirectRefusal};
 pub use policy::TransportPolicy;
 pub use reqwest::IntoUrl;
 
-/// What the catalog promises about a compressed archive.
-///
-/// Two of the four gates of `instruction.md` §8.1. The extracted-side gates live with the decoder
-/// in `gem-flasher`, because only the decoder sees the extracted bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ArchiveIntegrity {
-    /// SHA-256 of the compressed archive. Always known; the catalog adapter requires it.
     pub sha256: [u8; 32],
-    /// Byte count of the compressed archive, when the catalog publishes one.
-    ///
-    /// `Content-Length` is *not* used in its place: `instruction.md` §8.2 treats the header as an
-    /// auxiliary hint, never as proof.
     pub size: Option<u64>,
 }
 
 impl ArchiveIntegrity {
-    /// An archive whose size the catalog does not publish.
     pub const fn from_sha256(sha256: [u8; 32]) -> Self {
         Self { sha256, size: None }
     }
 
-    /// An archive with both values published.
     pub const fn new(sha256: [u8; 32], size: u64) -> Self {
         Self {
             sha256,
@@ -68,23 +41,9 @@ impl ArchiveIntegrity {
     }
 }
 
-/// Downloader that caches files in the provided directory.
-///
-/// # Cache identity
-///
-/// Archives are addressed by their SHA-256, so a cache hit is by construction a hash match. Assets
-/// with no published hash (board and image icons) are addressed by a digest *of their URL*; the two
-/// namespaces are not interchangeable, and a URL-addressed entry can only be invalidated by
-/// changing the URL.
-///
-/// # Thread safety
-///
-/// Clone freely: the HTTP clients and the in-flight table are shared internally.
 #[derive(Debug, Clone)]
 pub struct Downloader {
-    /// Bounded, wall-clock-capped client for catalogs, manifests and icons.
     metadata_client: reqwest::Client,
-    /// Long-lived client for archive streams; stalls are caught by the idle timeout.
     stream_client: reqwest::Client,
     cache_dir: PathBuf,
     policy: TransportPolicy,
@@ -92,12 +51,10 @@ pub struct Downloader {
 }
 
 impl Downloader {
-    /// Create a downloader with the shipping [`TransportPolicy`].
     pub fn new<P: Into<PathBuf>>(cache_dir: P) -> io::Result<Self> {
         Self::with_policy(cache_dir, TransportPolicy::default())
     }
 
-    /// Create a downloader with an explicit transport policy.
     pub fn with_policy<P: Into<PathBuf>>(
         cache_dir: P,
         policy: TransportPolicy,
@@ -124,15 +81,10 @@ impl Downloader {
         })
     }
 
-    /// The transport policy in force.
     pub const fn policy(&self) -> &TransportPolicy {
         &self.policy
     }
 
-    /// Check whether a file with a particular SHA-256 is already cached.
-    ///
-    /// The cached file is re-hashed rather than trusted by name, and a file that no longer matches
-    /// is evicted.
     pub fn check_cache_from_sha(&self, sha256: [u8; 32]) -> Option<PathBuf> {
         let file_path = self.path_from_sha(sha256);
 
@@ -149,10 +101,6 @@ impl Downloader {
         None
     }
 
-    /// Download a JSON document without caching it.
-    ///
-    /// The body is bounded by [`TransportPolicy::max_metadata_body`] before it is parsed, so a
-    /// hostile or broken server cannot exhaust memory.
     #[cfg(feature = "json")]
     pub async fn download_json_no_cache<T, U>(&self, url: U) -> Result<T, DownloadError>
     where
@@ -171,11 +119,6 @@ impl Downloader {
         })
     }
 
-    /// Fetch a URL-addressed asset, returning the cached path.
-    ///
-    /// Used for assets the catalog publishes no hash for (icons). Because there is no hash to
-    /// verify, this path proves nothing about the content beyond "the server sent it"; it is
-    /// deliberately not used for anything that gets written to a board.
     pub async fn download<U: reqwest::IntoUrl>(&self, url: U) -> Result<PathBuf, DownloadError> {
         let url = self.check_url(url)?;
         let file_path = self.path_from_url(&url);
@@ -194,16 +137,6 @@ impl Downloader {
         Ok(file_path)
     }
 
-    /// Download an archive, verify it against `integrity`, and stream it to `writer` as it arrives.
-    ///
-    /// The caller can start decoding before the download finishes, which is why verification cannot
-    /// be a post-hoc check on a finished file: the byte count and digest are computed over the same
-    /// bytes that are handed to the reader, and a mismatch fails the whole operation. The verified
-    /// content is only published to the cache after both gates pass, and the publish itself is
-    /// atomic (`instruction.md` §8.2).
-    ///
-    /// Concurrent calls for the same digest are serialized; the loser of the race copies the
-    /// now-cached bytes instead of fetching them again.
     pub async fn download_to_stream<U: reqwest::IntoUrl>(
         &self,
         url: U,
@@ -220,7 +153,6 @@ impl Downloader {
         let _slot = self.in_flight.acquire(integrity.sha256).await;
         let file_path = self.path_from_sha(integrity.sha256);
 
-        // Re-checked inside the single-flight slot: another task may have published these exact bytes.
         if let Some(cached) = self.check_cache_from_sha(integrity.sha256) {
             tracing::info!("Serving archive from cache instead of downloading again");
             return copy_cached_to_writer(&cached, &mut writer).await;
@@ -307,7 +239,6 @@ impl Downloader {
             .map_err(|source| DownloadError::io("publishing the download to the cache", source))
     }
 
-    /// Reject a URL the policy forbids before a single packet is sent.
     fn check_url<U: reqwest::IntoUrl>(&self, url: U) -> Result<reqwest::Url, DownloadError> {
         let url = url
             .into_url()
@@ -322,7 +253,6 @@ impl Downloader {
         Ok(url)
     }
 
-    /// Issue the request and accept only a 2xx answer.
     async fn send(
         &self,
         client: &reqwest::Client,
@@ -344,7 +274,6 @@ impl Downloader {
         Ok(response)
     }
 
-    /// Read a whole body into memory, refusing to grow past `limit`.
     async fn collect_bounded(
         &self,
         url: &reqwest::Url,
@@ -391,7 +320,6 @@ impl Downloader {
     }
 }
 
-/// Build a client that enforces the policy's transport limits.
 fn build_client(
     policy: &TransportPolicy,
     total_timeout: std::time::Duration,
@@ -413,10 +341,6 @@ fn build_client(
         .map_err(io::Error::other)
 }
 
-/// Decide whether a redirect hop is allowed (`instruction.md` §8.2).
-///
-/// Split out of the client builder so both rules are directly testable: a live plaintext mock
-/// server cannot produce an https-to-http hop, and a rule with no test is a rule that erodes.
 fn refuse_redirect(
     previous: &[reqwest::Url],
     next: &reqwest::Url,
@@ -434,7 +358,6 @@ fn refuse_redirect(
     downgraded.then_some(RedirectRefusal::Downgrade)
 }
 
-/// Write `body` to `path` through a scratch file, so `path` never names a partial document.
 async fn publish_bytes(path: &Path, body: Vec<u8>) -> Result<(), DownloadError> {
     let scratch = path.with_extension(format!("part-{}", std::process::id()));
     let scratch_for_task = scratch.clone();
@@ -454,7 +377,6 @@ async fn publish_bytes(path: &Path, body: Vec<u8>) -> Result<(), DownloadError> 
     result.map_err(|source| DownloadError::io("publishing the download to the cache", source))
 }
 
-/// Feed an already-verified cache entry to a waiting reader.
 async fn copy_cached_to_writer(
     cached: &Path,
     writer: &mut gem_helper::file_stream::WriterFileStream,
@@ -507,13 +429,11 @@ mod tests {
 
         assert!(downloader.check_cache_from_sha(sha).is_none());
 
-        // Scenario B: Manually populate valid file into cache
         std::fs::write(&expected_path, content).unwrap();
 
         let cached_path = downloader.check_cache_from_sha(sha).unwrap();
         assert_eq!(cached_path, expected_path);
 
-        // Scenario C: Corrupt the file to trigger invalidation
         std::fs::write(&expected_path, b"Tampered/Corrupted data").unwrap();
 
         assert!(downloader.check_cache_from_sha(sha).is_none());
@@ -544,7 +464,6 @@ mod tests {
         let icon = downloader.path_from_url(&"https://example.com/icons/t3.png".parse().unwrap());
         assert_eq!(icon.extension().unwrap(), "png");
 
-        // A hash-addressed entry has no extension, so the two namespaces cannot alias.
         let archive = downloader.path_from_sha([3u8; 32]);
         assert!(archive.extension().is_none());
         assert_ne!(icon, archive);
@@ -575,7 +494,6 @@ mod tests {
 
     #[test]
     fn a_plaintext_chain_is_not_treated_as_a_downgrade() {
-        // With `require_https` disabled an http entry point is legitimate; only losing https is a downgrade.
         let previous = ["http://localhost:8080/a".parse().unwrap()];
         let next = "http://localhost:8080/b".parse().unwrap();
 
@@ -601,7 +519,6 @@ mod tests {
         let tmp_dir = tempfile::TempDir::new().unwrap();
         let downloader = Downloader::new(tmp_dir.path()).unwrap();
 
-        // The pre-existing implementation panicked here.
         let path = downloader.path_from_url(&"https://example.com/icon".parse().unwrap());
         assert!(path.extension().is_none());
     }

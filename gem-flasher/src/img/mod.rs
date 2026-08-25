@@ -1,5 +1,3 @@
-//! Module to handle extraction of compressed firmware, auto detection of type of extraction, etc
-
 #[cfg(feature = "piped_image")]
 use gem_helper::file_stream::ReaderFileStream;
 use rc_zip_sync::ReadZipStreaming;
@@ -19,11 +17,6 @@ pub use verify::{ExtractGate, ExtractedIntegrity};
 
 const XZ_MAGIC: [u8; 6] = [0xfd, 0x37, 0x7a, 0x58, 0x5a, 0x00];
 
-/// A decoded OS image, gated on the extracted values the catalog published.
-///
-/// Every constructor takes an [`ExtractGate`]: whether the extracted bytes are checked is a
-/// decision the caller must make explicitly, not a flag that can be left unset (`instruction.md`
-/// §8.1).
 pub struct OsImage {
     size: u64,
     img: OsImageCompression<OsImageSource>,
@@ -80,11 +73,6 @@ impl OsImage {
 }
 
 impl Read for OsImage {
-    /// Reads decoded bytes and feeds them to the integrity gate on the way past.
-    ///
-    /// The gate is checked here rather than after the write, because this is the only place that
-    /// sees every extracted byte exactly once, in order, whether the source is a cached archive or
-    /// a download still in flight.
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let count = match &mut self.img {
             OsImageCompression::Xz(x) => x.read(buf),
@@ -93,7 +81,6 @@ impl Read for OsImage {
             OsImageCompression::QCow2(x) => x.read(buf),
         }?;
 
-        // A zero-length `buf` also yields `count == 0` without EOF, so it must not be taken for one.
         if !buf.is_empty() {
             self.gate.observe(&buf[..count])?;
         }

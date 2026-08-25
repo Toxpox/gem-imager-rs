@@ -1,64 +1,38 @@
-//! Staging area for the DFU/eMMC write path.
-//!
-//! The SD path streams the extracted image straight at the card. DFU cannot do that: the boot
-//! chain has to be transferred first, the raw eMMC stage needs a known byte count up front, and the
-//! T3 first-boot file is written into the image's FAT partition rather than onto a device. So the
-//! DFU path materialises one **staging image** — the extracted, customized, read-back-verified
-//! bytes — and then streams that file to the board.
-//!
-//! Two failure modes are handled here rather than discovered halfway through:
-//!
-//! * **Disk space.** A 4 GiB staging image on a full disk fails after the whole download. The
-//!   required size is known before the first byte is fetched, so it is checked first.
-//! * **Leftovers.** A staging image is a full copy of a bootable OS *including the user's Wi-Fi
-//!   PSK and password hash* (`instruction.md` §10.3). It is deleted when the write ends, on
-//!   cancellation, and — for the case no `Drop` can cover, a crash or a kill — swept at start-up.
-
 use std::{
     io,
     path::{Path, PathBuf},
+    sync::atomic::{AtomicU64, Ordering},
 };
 
-/// Extra room demanded beyond the image itself.
-///
-/// Filling a disk to the last byte breaks the rest of the system, and the SD writer needs room for
-/// its own bookkeeping while it applies customization.
 const HEADROOM: u64 = 256 * 1024 * 1024;
 
-/// Prefix every staging file shares, so the start-up sweep can recognise its own leftovers and
-/// nothing else.
 const PREFIX: &str = "t3-staging-";
+
+static STAGING_NONCE: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum StagingError {
     #[cfg_attr(test, allow(dead_code))]
-    #[error("no application cache directory is available for the DFU staging image")]
+    #[error("no application cache directory is available for image staging")]
     NoCacheDir,
-    #[error("failed to prepare the DFU staging directory: {source}")]
+    #[error("failed to prepare the image staging directory: {source}")]
     Io {
         #[source]
         source: io::Error,
     },
-    /// Worded so the operator learns the number that matters, and matched by
-    /// `message::localized_flash_error` on the word "staging".
     #[error(
-        "not enough free space for the DFU staging image: {required} bytes required, \
+        "not enough free space for image staging: {required} bytes required, \
          {available} bytes available"
     )]
     InsufficientSpace { required: u64, available: u64 },
 }
 
-/// Directory staging images live in.
 #[cfg(not(test))]
 pub(crate) fn staging_dir() -> Result<PathBuf, StagingError> {
     let dirs = crate::helpers::project_dirs().ok_or(StagingError::NoCacheDir)?;
     Ok(dirs.cache_dir().join("dfu-staging"))
 }
 
-/// Tests must not depend on the ACL or leftovers of the real per-user cache. A prior elevated GUI
-/// run can legitimately leave that directory administrator-owned; using it made ordinary
-/// asInvoker test binaries fail with `Access denied`. Each test thread gets an isolated path under
-/// the workspace target directory instead.
 #[cfg(test)]
 pub(crate) fn staging_dir() -> Result<PathBuf, StagingError> {
     use std::hash::{Hash, Hasher};
@@ -76,17 +50,12 @@ pub(crate) fn staging_dir() -> Result<PathBuf, StagingError> {
         )))
 }
 
-/// A staging image that deletes itself.
 #[derive(Debug)]
 pub(crate) struct StagingImage {
     path: PathBuf,
 }
 
 impl StagingImage {
-    /// Reserve a staging path for an image of `image_size` bytes.
-    ///
-    /// The space check happens here — before the caller starts downloading — because the whole
-    /// point is not to spend an hour on a write that cannot land.
     pub(crate) fn create(image_size: u64) -> Result<Self, StagingError> {
         let dir = staging_dir()?;
         std::fs::create_dir_all(&dir).map_err(|source| StagingError::Io { source })?;
@@ -100,8 +69,11 @@ impl StagingImage {
             });
         }
 
-        // Unique among live processes only; the sweep cleans up whatever an earlier one left behind.
-        let path = dir.join(format!("{PREFIX}{}.img", std::process::id()));
+        let path = dir.join(format!(
+            "{PREFIX}{}-{}.img",
+            std::process::id(),
+            STAGING_NONCE.fetch_add(1, Ordering::Relaxed)
+        ));
         Ok(Self { path })
     }
 
@@ -113,19 +85,13 @@ impl StagingImage {
 impl Drop for StagingImage {
     fn drop(&mut self) {
         match std::fs::remove_file(&self.path) {
-            Ok(()) => tracing::info!("Removed the DFU staging image"),
-            // The common case: the write failed before the file was created.
+            Ok(()) => tracing::info!("Removed the staging image"),
             Err(e) if e.kind() == io::ErrorKind::NotFound => {}
-            // Worth a warning because the file holds user secrets, though it cannot fail a finished flash.
-            Err(e) => tracing::warn!("Failed to remove the DFU staging image: {e}"),
+            Err(e) => tracing::warn!("Failed to remove the image staging file: {e}"),
         }
     }
 }
 
-/// Delete staging images left behind by a previous run.
-///
-/// Best-effort and never fatal: it runs at start-up, where the only alternative to logging is
-/// refusing to start over a stale temporary file.
 pub(crate) fn cleanup_stale() {
     let Ok(dir) = staging_dir() else {
         return;
@@ -140,18 +106,16 @@ pub(crate) fn cleanup_stale() {
             continue;
         }
         match std::fs::remove_file(entry.path()) {
-            Ok(()) => tracing::info!("Removed a stale DFU staging image from a previous run"),
-            Err(e) => tracing::warn!("Failed to remove a stale DFU staging image: {e}"),
+            Ok(()) => tracing::info!("Removed a stale staging image from a previous run"),
+            Err(e) => tracing::warn!("Failed to remove a stale image staging file: {e}"),
         }
     }
 }
 
-/// Bytes still writable in the filesystem holding `dir`.
 #[cfg(windows)]
 fn available_space(dir: &Path) -> io::Result<u64> {
     use std::os::windows::ffi::OsStrExt as _;
 
-    // The quota-aware figure for the calling user, which is what decides whether this process can write.
     let mut wide: Vec<u16> = dir.as_os_str().encode_wide().collect();
     wide.push(0);
 
@@ -188,7 +152,6 @@ fn available_space(dir: &Path) -> io::Result<u64> {
         return Err(io::Error::last_os_error());
     }
 
-    // `f_bavail`, not `f_bfree`: root-reserved blocks would turn the pre-check into a false pass.
     Ok((stat.f_bavail as u64).saturating_mul(stat.f_frsize as u64))
 }
 
@@ -200,7 +163,6 @@ mod tests {
     fn available_space_reports_a_real_figure_for_the_temp_dir() {
         let dir = tempfile::tempdir().unwrap();
         let free = available_space(dir.path()).unwrap();
-        // Asserts that the platform call was made and parsed, not that the disk is large.
         assert!(free > 1024 * 1024, "implausible free space: {free}");
     }
 
@@ -211,7 +173,6 @@ mod tests {
             matches!(err, StagingError::InsufficientSpace { required, .. } if required == u64::MAX),
             "expected an insufficient-space refusal, got {err}"
         );
-        // The message has to name the shortage, because that is what the localized reducer keys on.
         assert!(err.to_string().contains("staging"));
     }
 
@@ -226,7 +187,13 @@ mod tests {
         assert!(!path.exists(), "a staging image outlived its guard");
     }
 
-    /// The case no `Drop` can cover: the process was killed while a staging image existed.
+    #[test]
+    fn concurrent_staging_images_never_share_a_path() {
+        let first = StagingImage::create(0).unwrap();
+        let second = StagingImage::create(0).unwrap();
+        assert_ne!(first.path(), second.path());
+    }
+
     #[test]
     fn stale_images_from_a_previous_run_are_swept() {
         let dir = staging_dir().unwrap();

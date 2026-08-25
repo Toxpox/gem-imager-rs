@@ -25,13 +25,10 @@ use objc2_foundation::{
     NSURLVolumeNameKey, NSVolumeEnumerationOptions, ns_string,
 };
 
-// Cached CFString for CFDictionary lookups, thread-local because CFString is not Sync.
 thread_local! {
     static IO_BUNDLE_RESOURCE_FILE: CFRetained<CFString> = CFString::from_static_str("IOBundleResourceFile");
 }
 
-/// Check if a given NSString matches any of the known SCSI type names.
-/// Uses ns_string! constants to avoid String allocation per call.
 fn scsi_type_matches(s: &NSString) -> bool {
     s.isEqualToString(ns_string!("SATA"))
         || s.isEqualToString(ns_string!("SCSI"))
@@ -40,8 +37,6 @@ fn scsi_type_matches(s: &NSString) -> bool {
         || s.isEqualToString(ns_string!("PCI"))
 }
 
-/// Check if a BSD name matches the partition pattern (e.g., "disk0s1", "disk1s2").
-/// Replaces NSPredicate regex with pure Rust for better performance.
 fn is_partition_name(name: &NSString) -> bool {
     let s = name.to_string();
     let Some(rest) = s.strip_prefix("disk") else {
@@ -50,7 +45,6 @@ fn is_partition_name(name: &NSString) -> bool {
     let Some(s_pos) = rest.find('s') else {
         return false;
     };
-    // Must have digits before 's' and digits after 's'
     let before_s = &rest[..s_pos];
     let after_s = &rest[s_pos + 1..];
     !before_s.is_empty()
@@ -59,7 +53,6 @@ fn is_partition_name(name: &NSString) -> bool {
         && after_s.chars().all(|c| c.is_ascii_digit())
 }
 
-/// Extension trait for CFDictionary to get typed values
 trait CFDictionaryExt {
     fn get_cfdict(&self, key: &CFString) -> Option<CFRetained<CFDictionary>>;
     fn get_cfstring(&self, key: &CFString) -> Option<CFRetained<CFString>>;
@@ -123,7 +116,6 @@ impl CFDictionaryExt for CFDictionary {
     }
 }
 
-// Converts a *const c_char to Option<String>, None for a null pointer.
 trait CCharPtrExt {
     fn to_string(self) -> Option<String>;
 }
@@ -308,7 +300,6 @@ impl DeviceDescriptorFromDiskDescription for DeviceDescriptor {
 
         device.is_removable = is_removable || is_ejectable;
 
-        // The media icon is what identifies an SD card here.
         device.is_card = disk_description
             .get_cfdict(unsafe { kDADiskDescriptionMediaIconKey })
             .and_then(|media_icon_dict| {
@@ -340,7 +331,6 @@ pub(crate) fn drive_list() -> crate::Result<Vec<DeviceDescriptor>> {
     let mut device_map: HashMap<String, usize> = HashMap::with_capacity(disk_list.disks.len());
 
     for disk_bsd_name in &disk_list.disks {
-        // A Rust string check rather than an NSPredicate regex, for performance.
         if is_partition_name(&disk_bsd_name) {
             continue;
         }
@@ -364,7 +354,6 @@ pub(crate) fn drive_list() -> crate::Result<Vec<DeviceDescriptor>> {
 
         let device = DeviceDescriptor::from_disk_description(disk_name_string, &disk_description);
 
-        // Map device path to its index in device_list for O(1) lookups later.
         let next_idx = device_list.len();
         device_map.insert(device.device.clone(), next_idx);
 
@@ -394,7 +383,6 @@ pub(crate) fn drive_list() -> crate::Result<Vec<DeviceDescriptor>> {
             continue;
         };
 
-        // `strip_prefix` rather than slicing: an unexpected BSD name must not panic ("disk0s1" -> "disk0").
         let disk_bsdname = if let Some(rest) = partition_bsdname.strip_prefix("disk") {
             let disk_num_len = rest.find('s').unwrap_or(rest.len());
             format!("disk{}", &rest[..disk_num_len])

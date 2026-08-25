@@ -4,7 +4,6 @@ use gem_downloader::{DownloadError, Downloader, TransportPolicy};
 use httpmock::{Method::GET, MockServer};
 use tempfile::TempDir;
 
-/// A downloader allowed to talk to the local plaintext mock server.
 fn test_downloader(cache: &std::path::Path) -> Downloader {
     Downloader::with_policy(cache, TransportPolicy::plaintext_for_tests()).unwrap()
 }
@@ -22,14 +21,12 @@ fn test_downloader_new_fails_if_path_is_file() {
 
 #[tokio::test]
 async fn test_download_and_cache_by_url() {
-    // Start a standalone mock server
     let server = MockServer::start();
     let tmp_dir = TempDir::new().unwrap();
     let downloader = test_downloader(tmp_dir.path());
 
     let file_content = b"Hello from httpmock!";
 
-    // Setup the mock endpoint
     let download_mock = server.mock(|when, then| {
         when.method(GET).path("/file.txt");
         then.status(200)
@@ -41,7 +38,6 @@ async fn test_download_and_cache_by_url() {
 
     download_mock.assert_calls(0);
 
-    // 1. First download (Cache Miss) -> Hits the mock server
     let path = downloader.download(&url).await.unwrap();
     assert!(path.exists());
 
@@ -49,14 +45,11 @@ async fn test_download_and_cache_by_url() {
     assert_eq!(saved_content, file_content);
     download_mock.assert_calls(1);
 
-    // No scratch file survives the publish.
     assert_eq!(std::fs::read_dir(tmp_dir.path()).unwrap().count(), 1);
 
-    // 2. Second download (Cache Hit)
     let cached_path = downloader.download(&url).await.unwrap();
     assert_eq!(path, cached_path);
 
-    // The mock hits should STILL be 1, proving it was pulled completely from the cache
     download_mock.assert_calls(1);
 }
 
@@ -114,7 +107,6 @@ async fn test_download_json_no_cache() {
     );
     json_mock.assert_calls(1);
 
-    // Ensure nothing was cached to disk during no-cache execution
     let entries = std::fs::read_dir(tmp_dir.path()).unwrap().count();
     assert_eq!(entries, 0);
 }
@@ -150,8 +142,6 @@ async fn test_download_json_no_cache_rejects_malformed_json() {
     mock.assert_calls(1);
 }
 
-/// `instruction.md` §8.2 requires a maximum body size for catalog and manifest documents; without
-/// it a hostile or broken server can grow the client's memory without bound.
 #[cfg(feature = "json")]
 #[tokio::test]
 async fn an_oversized_catalog_body_is_refused_before_it_is_parsed() {
@@ -186,8 +176,6 @@ async fn an_oversized_catalog_body_is_refused_before_it_is_parsed() {
     ));
 }
 
-/// The shipping policy refuses plaintext outright, so a downgraded catalog URL cannot silently
-/// become the source of truth.
 #[tokio::test]
 async fn the_default_policy_refuses_plaintext_urls() {
     let server = MockServer::start();

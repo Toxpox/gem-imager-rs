@@ -72,7 +72,6 @@ fn flash_progress() {
         assert_eq!(data, mock_img_data);
     });
 
-    // 8. Verify progress track completeness
     let progress_updates: Vec<DownloadFlashingStatus> = rx.into_iter().collect();
     assert!(!progress_updates.is_empty());
     assert_eq!(

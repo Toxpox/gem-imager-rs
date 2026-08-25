@@ -30,7 +30,6 @@ pub(crate) fn view(state: &GemImager) -> iced::Element<'_, GemImagerMessage> {
         _ => panic!("Unexpected message"),
     };
 
-    // Inner layer: a missing WinUSB driver is the more actionable problem, so `driver_prompt` sits on top.
     let page = notice_modal::wrap(page, notice_for(state), state.common().lang());
 
     #[cfg(feature = "dfu-driver-mvp")]
@@ -40,16 +39,9 @@ pub(crate) fn view(state: &GemImager) -> iced::Element<'_, GemImagerMessage> {
     page
 }
 
-/// The illustrated notice the current screen wants, if any.
-///
-/// Deliberately keyed on the `GemImager` variant rather than on state fields alone:
-/// `FlashingCancel` and `FlashingSuccess` share one `FlashingFinishState`, so a field-only test
-/// would fire the "you are done, switch back to eMMC" notice on a cancelled write too.
 fn notice_for(state: &GemImager) -> Option<notice_modal::Notice> {
     match state {
         GemImager::ChooseDest(x) if x.dfu_notice => {
-            // A board in DFU mode with no driver bound enumerates as nothing, which looks like no board at
-            // all. Telling that user to move the switches is wrong; `driver_prompt` has the right answer.
             #[cfg(feature = "dfu-driver-mvp")]
             if state.common().dfu_driver.device_present() {
                 return None;
@@ -72,20 +64,12 @@ fn notice_for(state: &GemImager) -> Option<notice_modal::Notice> {
                 dismiss: GemImagerMessage::DismissNotice,
             })
         }
-        // Everything else, `AppInfo` included: an `AppInfo` overlay opened from the success screen still
-        // carries `OverlayData::FlashingSuccess`, and a notice over it would leave an undismissable scrim.
         _ => None,
     }
 }
 
 #[cfg(test)]
 mod tests {
-    /// Review guard for `instruction.md` §11.2.
-    ///
-    /// Data supplied by catalogs/devices and technical placeholders may remain dynamic, but
-    /// buttons, toggler labels, headings and detail labels owned by this application must go
-    /// through `gem-i18n`. This intentionally checks source text: a new English literal should
-    /// fail in the same change that introduces it, before anybody has to notice it visually.
     #[test]
     fn user_facing_ui_controls_do_not_embed_runtime_literals() {
         let files = [

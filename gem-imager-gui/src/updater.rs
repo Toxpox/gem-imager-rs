@@ -1,5 +1,3 @@
-//! Module to aid in providing update capabilities to the application.
-
 use std::io;
 
 use semver::Version;

@@ -22,8 +22,6 @@ pub(crate) fn view(state: &FlashingState) -> Element<'_, GemImagerMessage> {
 
 fn progress_view(state: &FlashingState) -> Element<'_, GemImagerMessage> {
     let lang = state.common.lang();
-    // One monotonic axis across every pass, with a spinner exactly where there is nothing to count.
-    // An invented percentage would sit still for minutes and then jump, looking like a hang.
     let phase = state.phase();
     let indicator: Element<'_, _> = match phase.fraction {
         Some(x) => progress_circle(x, 10.0f32, GEMSTONE_ROSE, FONT_BOLD).into(),

@@ -7,8 +7,6 @@ use std::sync::mpsc;
 
 use gem_helper::cancel::CancellationToken;
 
-/// Re-exported so front-ends can render the reason a listed board is unusable without depending on
-/// the backend crate directly.
 pub use gem_flasher_dfu::DeviceAccess;
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
@@ -42,10 +40,6 @@ impl Target {
         self.0.product_id
     }
 
-    /// Whether this board can be opened, and if not, what the user has to fix.
-    ///
-    /// A board that cannot be opened is still offered as a destination; the front-end turns this
-    /// into the WinUSB or udev instruction instead of silently hiding the hardware.
     pub const fn access(&self) -> gem_flasher_dfu::DeviceAccess {
         self.0.access
     }
@@ -60,9 +54,6 @@ impl std::fmt::Display for Target {
 impl GemFlasherTarget for Target {
     const FILE_TYPES: &[&str] = &[];
 
-    /// The flag is accepted for the trait's sake and deliberately ignored: see
-    /// [`gem_flasher_dfu::devices`]. There is no hidden-but-valid DFU device to reveal, only other
-    /// vendors' hardware to mis-offer.
     fn destinations(filter: bool) -> Vec<Self> {
         Self::destinations_internal(filter)
     }
@@ -82,12 +73,6 @@ impl GemFlasherTarget for Target {
     }
 }
 
-/// Where the raw eMMC image comes from.
-///
-/// The distinction is not cosmetic: a one-shot reader has to be spooled to scratch storage before
-/// it can be hashed and then written, while a file that already holds the finished image is hashed
-/// where it lies. Taking the stream path for a file would cost a second full copy of a
-/// multi-gigabyte image in wall-clock time and in free space.
 enum RawSource<R> {
     Stream(R),
     File(PathBuf),
@@ -100,11 +85,9 @@ pub struct Flasher<R> {
     cancel: Option<CancellationToken>,
 }
 
-/// The concrete source type for [`Flasher::from_staging_file`], which needs no reader at all.
 pub type NoStream = fn() -> io::Result<(crate::img::OsImage, u64)>;
 
 impl Flasher<NoStream> {
-    /// Flash an image that is already a file on disk, hashing it in place.
     pub fn from_staging_file(
         raw_image: impl Into<PathBuf>,
         id: &str,
@@ -141,7 +124,6 @@ impl<R> Flasher<R> {
     }
 }
 
-/// Split a destination identifier into the USB path it names and the cache directory to use.
 fn parse_identifier(id: &str) -> io::Result<(gem_flasher_dfu::UsbPath, PathBuf)> {
     let ids = id.split(':').map(str::trim).collect::<Vec<_>>();
     if ids.len() != 4 {
@@ -225,10 +207,6 @@ where
     }
 }
 
-/// Map a backend phase onto the shared front-end status.
-///
-/// One-to-one on purpose: the backend already decided which phases are measurable, and re-deriving
-/// that here is how the two ends drift apart.
 const fn translate_progress(value: gem_flasher_dfu::DfuProgress) -> DownloadFlashingStatus {
     match value {
         gem_flasher_dfu::DfuProgress::BootArtifacts => {
@@ -253,8 +231,6 @@ const fn translate_progress(value: gem_flasher_dfu::DfuProgress) -> DownloadFlas
 mod tests {
     use super::*;
 
-    /// Every backend phase must survive as its own front-end phase; a translation that collapsed
-    /// two of them would put the screen back to guessing.
     #[test]
     fn each_backend_phase_keeps_its_identity() {
         assert_eq!(

@@ -68,7 +68,6 @@ fn unmount_disk(path: &str) -> std::io::Result<()> {
     run_diskutil("unmountDisk", path)
 }
 
-// Darwin <sys/disk.h>: DKIOCSYNCHRONIZECACHE = _IO('d', 22).
 const DKIOCSYNCHRONIZECACHE: libc::c_ulong = 0x2000_6416;
 
 fn synchronize_disk_cache(file: &File) -> io::Result<()> {
@@ -174,7 +173,6 @@ pub(crate) fn open(dst: &Path) -> Result<MacOSFile> {
             .stdout(OwnedFd::from(pipe1))
             .spawn()?;
 
-        // Send authorization form
         let mut stdin = cmd.stdin.take().expect("Missing stdin");
         let form_bytes: Vec<u8> = form.bytes.into_iter().map(|x| x as u8).collect();
         stdin

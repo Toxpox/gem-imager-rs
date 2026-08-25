@@ -1,38 +1,3 @@
-//! Safe serializer for the T3 GemStone first-boot file, `config.ini`.
-//!
-//! # Why this is not an INI writer
-//!
-//! The consumer is `gem-first-boot` in the T3 SDK, and it **`source`s** the file. Every line is
-//! therefore shell code executed as root on the board's first boot. Two consequences shape this
-//! module:
-//!
-//! * **Keys are a closed set.** [`Key`] is a compile-time whitelist and no public API accepts a key
-//!   name, so no user input can ever become a variable name — or a command.
-//! * **Values go through exactly one quoting function.** [`shell::quote`] is the only way a value
-//!   becomes file text.
-//!
-//! # Why the field set is smaller than `gem-imager`'s
-//!
-//! `instruction.md` §10.1 restricts the file to what the current consumer actually reads.
-//! `cryptsetup`, `diskpasswd`, `writeimagetommc`, the USB gadget toggles and the SSH options are
-//! **not** written: `gem-first-boot` does not read them, so offering them would be a UI that claims
-//! to configure something it does not.
-//!
-//! # Wi-Fi values
-//!
-//! The first-boot script copies the Wi-Fi values into a NetworkManager key file. Passphrases stay
-//! unhashed so WPA3/SAE can use them, while ready-made 64-digit PSKs pass through unchanged.
-//! [`escape_for_keyfile`] preserves backslashes, tabs and leading spaces across the extra parse.
-//!
-//! # Known SDK defects
-//!
-//! `gem-first-boot` reads `vncpassword` but its cleanup pass deletes `vncpasswd=` — the names do
-//! not match, so the VNC secret survives on the boot partition after first boot. That is an SDK
-//! bug, not something this crate can fix, and [`T3GemInitConfig::vnc_secret_survives_first_boot`]
-//! exists so the UI can say so out loud instead of hiding it.
-//!
-//! The script also uses the SSID in the profile file name, so [`Ssid::parse`] rejects `/`.
-
 mod crypt;
 mod secret;
 mod shell;
@@ -42,35 +7,22 @@ pub use secret::Secret;
 use secret::DerivedSecret;
 use zeroize::Zeroizing;
 
-/// File name the consumer looks for on the FAT boot partition.
 pub const CONFIG_FILE_NAME: &str = "config.ini";
 
-/// Byte length of a WPA PSK written as hex.
 pub const WPA_PSK_HEX_LEN: usize = 64;
 
-/// Shortest WPA passphrase, per IEEE 802.11i.
 pub const WPA_PASSPHRASE_MIN_LEN: usize = 8;
 
-/// Longest WPA passphrase, per IEEE 802.11i.
 pub const WPA_PASSPHRASE_MAX_LEN: usize = 63;
 
-/// The legacy VNC protocol only carries eight password bytes.
 pub const VNC_PASSWORD_MAX_LEN: usize = 8;
 
-/// Longest single hostname label (RFC 1123 §2.1).
 const HOSTNAME_LABEL_MAX_LEN: usize = 63;
 
-/// Longest fully-qualified hostname (RFC 1123 §2.1).
 const HOSTNAME_MAX_LEN: usize = 253;
 
-/// Longest SSID, per IEEE 802.11.
 const SSID_MAX_LEN: usize = 32;
 
-/// Keyboard layouts the imager offers.
-///
-/// The consumer writes this straight into `XKBLAYOUT`, so an unrecognised value produces a board
-/// with an unusable keyboard. Only members of this list are accepted; it is kept sorted so callers
-/// can binary-search it.
 pub const KEYBOARD_LAYOUTS: &[&str] = &[
     "af", "al", "am", "ara", "at", "au", "az", "ba", "bd", "be", "bg", "br", "brai", "bt", "bw",
     "by", "ca", "cd", "ch", "cm", "cn", "cz", "de", "dk", "dz", "ee", "epo", "es", "et", "fi",
@@ -81,10 +33,6 @@ pub const KEYBOARD_LAYOUTS: &[&str] = &[
     "ua", "us", "uz", "vn", "za",
 ];
 
-/// Everything that can go wrong turning a customization into `config.ini`.
-///
-/// No variant carries a secret: these strings reach logs and error dialogs, and a
-/// "bad password: ..." message would defeat the redaction in [`Secret`].
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum T3GemInitError {
     #[error(
@@ -132,10 +80,6 @@ pub enum T3GemInitError {
     Csprng,
 }
 
-/// The closed set of keys `gem-first-boot` reads.
-///
-/// This enum is private on purpose: it is the mechanism that makes "the user cannot supply a key
-/// name" a property of the type system rather than a review comment.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Key {
     Firstboot,
@@ -167,15 +111,10 @@ impl Key {
     }
 }
 
-/// An RFC 1123 host name.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Hostname(String);
 
 impl Hostname {
-    /// Validate a host name.
-    ///
-    /// RFC 1123 §2.1 relaxes RFC 952 to allow a leading digit, which is why `3gem` is legal. A
-    /// leading or trailing hyphen is not, and neither is an empty label.
     pub fn parse(value: &str) -> Result<Self, T3GemInitError> {
         if value.is_empty() || value.len() > HOSTNAME_MAX_LEN {
             return Err(T3GemInitError::InvalidHostname);
@@ -203,16 +142,10 @@ impl Hostname {
     }
 }
 
-/// An ISO 3166-1 alpha-2 regulatory domain.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct WifiCountry([u8; 2]);
 
 impl WifiCountry {
-    /// Validate a country code.
-    ///
-    /// The value ends up in the kernel's 802.11 regulatory domain, which accepts exactly two
-    /// upper-case ASCII letters. Lower case input is upper-cased rather than rejected, because that
-    /// is a typing convention rather than a different value.
     pub fn parse(value: &str) -> Result<Self, T3GemInitError> {
         let bytes = value.as_bytes();
         if bytes.len() != 2 || !bytes.iter().all(u8::is_ascii_alphabetic) {
@@ -226,21 +159,14 @@ impl WifiCountry {
     }
 
     pub fn as_str(&self) -> &str {
-        // Only ASCII letters can reach the constructor.
         std::str::from_utf8(&self.0).expect("WifiCountry is ASCII by construction")
     }
 }
 
-/// An IANA time zone name.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Timezone(String);
 
 impl Timezone {
-    /// Validate a time zone against the IANA database compiled into the application.
-    ///
-    /// This is the "only from the application's validated list" rule of `instruction.md` §10.2: the
-    /// same database backs the GUI's time zone picker, so a value that passes here is one the user
-    /// could have selected.
     pub fn parse(value: &str) -> Result<Self, T3GemInitError> {
         value
             .parse::<chrono_tz::Tz>()
@@ -253,7 +179,6 @@ impl Timezone {
     }
 }
 
-/// An X11 keyboard layout from [`KEYBOARD_LAYOUTS`].
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct KeyboardLayout(&'static str);
 
@@ -270,20 +195,10 @@ impl KeyboardLayout {
     }
 }
 
-/// A wireless network name.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Ssid(String);
 
 impl Ssid {
-    /// Validate an SSID.
-    ///
-    /// The 802.11 limit is 32 **bytes**, not characters — a Turkish SSID reaches it sooner than an
-    /// ASCII one, and truncating it would join the wrong network.
-    ///
-    /// `/` is rejected because the current first-boot script uses the SSID in the profile path.
-    ///
-    /// Surrounding whitespace is **not** trimmed: an SSID is a byte string on the air, so a name
-    /// that really does end in a space has to stay reachable.
     pub fn parse(value: &str) -> Result<Self, T3GemInitError> {
         if value.is_empty() || value.len() > SSID_MAX_LEN {
             return Err(T3GemInitError::InvalidSsid);
@@ -301,28 +216,18 @@ impl Ssid {
     }
 }
 
-/// Wireless credentials, written to the card as the value NetworkManager's `psk=` field takes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WifiSettings {
     pub ssid: Ssid,
-    /// Either an 8..=63 byte passphrase or a 64-digit hex PSK; which one is decided by length.
-    ///
-    /// Passphrases remain available for WPA3/SAE; a ready-made PSK is a WPA2 credential.
     pub password: Secret,
     pub country: WifiCountry,
 }
 
-/// VNC settings, only offered on desktop images.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VncSettings {
     pub password: Secret,
 }
 
-/// A validated T3 first-boot customization.
-///
-/// Values are validated when they are set, so an instance of this type can always be serialized
-/// except for the two derivations that still depend on input length (Wi-Fi password and VNC
-/// password), which are checked in [`Self::serialize`].
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct T3GemInitConfig {
     hostname: Option<Hostname>,
@@ -344,8 +249,6 @@ impl T3GemInitConfig {
         self
     }
 
-    /// Set the account password. An empty password is rejected at serialization time rather than
-    /// silently producing an account with no password.
     #[must_use]
     pub fn with_user_password(mut self, password: Option<Secret>) -> Self {
         self.user_password = password;
@@ -376,22 +279,13 @@ impl T3GemInitConfig {
         self
     }
 
-    /// Whether this configuration leaves a secret on the boot partition after first boot.
-    ///
-    /// `gem-first-boot` reads `vncpassword` but scrubs `vncpasswd=`, so the VNC line survives. The
-    /// UI is required to surface this rather than quietly ship it.
     pub const fn vnc_secret_survives_first_boot(&self) -> bool {
         self.vnc.is_some()
     }
 
-    /// Render the file.
-    ///
-    /// `firstboot=1` is always the first line: it is the guard the consumer tests before doing
-    /// anything at all, and a file without it is inert.
     pub fn serialize(&self) -> Result<Zeroizing<Vec<u8>>, T3GemInitError> {
         let mut out = Writer::default();
 
-        // Unquoted on purpose: this is a literal the consumer compares against `1`, not user data.
         out.raw(Key::Firstboot, "1");
 
         if let Some(hostname) = &self.hostname {
@@ -410,7 +304,6 @@ impl T3GemInitConfig {
             let key = wifi_key(&wifi.password)?;
             out.quoted(Key::WifiName, &escape_for_keyfile(wifi.ssid.as_str()))?;
             out.quoted(Key::WifiPasswd, &escape_for_keyfile(&key))?;
-            // Two upper-case ASCII letters by construction, so nothing to escape.
             out.quoted(Key::WifiCountry, wifi.country.as_str())?;
         }
 
@@ -432,10 +325,6 @@ impl T3GemInitConfig {
     }
 }
 
-/// Produce the value copied into NetworkManager's `psk=` field.
-///
-/// An 8..=63-byte passphrase is preserved for WPA3/SAE. Exactly 64 hexadecimal digits are treated
-/// as a ready-made WPA2 PSK; other values are rejected.
 fn wifi_key(password: &Secret) -> Result<DerivedSecret, T3GemInitError> {
     match password.len() {
         WPA_PSK_HEX_LEN => crypt::normalize_psk_hex(password),
@@ -446,10 +335,6 @@ fn wifi_key(password: &Secret) -> Result<DerivedSecret, T3GemInitError> {
     }
 }
 
-/// Escape a value for the GLib key file `gem-first-boot` copies it into.
-///
-/// GLib strips leading whitespace and decodes backslash escapes. Newlines, carriage returns and
-/// NUL bytes are rejected earlier by [`shell::quote`].
 fn escape_for_keyfile(value: &str) -> DerivedSecret {
     let mut out = String::with_capacity(value.len());
     let mut leading_whitespace = true;
@@ -460,7 +345,6 @@ fn escape_for_keyfile(value: &str) -> DerivedSecret {
                 out.push_str(r"\\");
                 leading_whitespace = false;
             }
-            // A tab is whitespace, so the leading run continues; escaping a non-leading one is harmless.
             '\t' => out.push_str(r"\t"),
             ' ' if leading_whitespace => out.push_str(r"\s"),
             _ => {
@@ -473,12 +357,10 @@ fn escape_for_keyfile(value: &str) -> DerivedSecret {
     DerivedSecret::new(out)
 }
 
-/// Accumulates `config.ini` lines. The only way to add one is through a [`Key`].
 #[derive(Default)]
 struct Writer(Zeroizing<Vec<u8>>);
 
 impl Writer {
-    /// Write a value that is a compile-time literal, not user input.
     fn raw(&mut self, key: Key, value: &'static str) {
         self.0.extend_from_slice(key.as_str().as_bytes());
         self.0.push(b'=');
@@ -486,7 +368,6 @@ impl Writer {
         self.0.push(b'\n');
     }
 
-    /// Write a value through the shell literal serializer.
     fn quoted(&mut self, key: Key, value: &str) -> Result<(), T3GemInitError> {
         let quoted = Zeroizing::new(shell::quote(key.as_str(), value)?);
         self.0.extend_from_slice(key.as_str().as_bytes());
@@ -542,12 +423,9 @@ mod tests {
         assert!(out.contains("wificountry='TR'\n"));
         assert!(out.contains("timezone='Europe/Istanbul'\n"));
         assert!(out.contains("keyboardlayout='tr'\n"));
-        // Verbatim on purpose: WPA3 needs it, and the consumer scrubs the line after first boot.
         assert!(out.contains("wifipasswd='parola1234'\n"));
     }
 
-    /// Keys the current `gem-first-boot` does not read must not reach the file
-    /// (`instruction.md` §10.1). There is no API to set them, so this asserts the whole surface.
     #[test]
     fn unsupported_keys_can_never_appear() {
         let config = T3GemInitConfig::new()
@@ -575,8 +453,6 @@ mod tests {
         }
     }
 
-    /// The end-to-end injection test: a hostile value in every text field, and the file still has
-    /// exactly one line per key with the payload trapped inside a literal.
     #[test]
     fn injection_payloads_cannot_create_lines_or_keys() {
         let payload = "a$(id)`id`\\'\"; export EVIL=1; #";
@@ -592,7 +468,6 @@ mod tests {
         let parsed = parse_like_shell(&out);
         let keys: Vec<&str> = parsed.iter().map(|(k, _)| k.as_str()).collect();
 
-        // The payload creates no extra assignment and no extra line.
         assert_eq!(
             keys,
             [
@@ -603,20 +478,10 @@ mod tests {
                 "wificountry"
             ]
         );
-        // Survives as *data*: the SSID reads back exactly as typed once the key-file layer is decoded.
         assert_eq!(parse_like_keyfile(&parsed[2].1), payload);
-        // `EVIL` is not a variable the file defines: the literal text sits inside the SSID value.
         assert!(!keys.contains(&"EVIL"));
     }
 
-    /// Round-trip through an isolated parser that reads the file the way `source` would.
-    ///
-    /// `instruction.md` §10.5 asks for a shell round-trip in which only the expected variables
-    /// appear and no command runs. Spawning a real shell would make the test depend on the host
-    /// having one and on it never executing what it reads, so the parser is reimplemented here:
-    /// it understands exactly `key=value` and `key='literal'` with the `'\''` splice, and treats
-    /// anything else as a parse failure. If the serializer ever emitted something a shell would
-    /// *execute* rather than assign, this would not parse.
     fn parse_like_shell(content: &str) -> Vec<(String, String)> {
         content
             .lines()
@@ -630,7 +495,6 @@ mod tests {
 
                 let value = if let Some(inner) = raw.strip_prefix('\'') {
                     let inner = inner.strip_suffix('\'').expect("literal is closed");
-                    // The only escape a single-quoted literal can contain.
                     let unquoted = inner.replace("'\\''", "'");
                     assert!(
                         !unquoted.contains('\'') || inner.contains("'\\''"),
@@ -638,7 +502,6 @@ mod tests {
                     );
                     unquoted
                 } else {
-                    // Unquoted values are only ever compile-time literals like `1`.
                     assert!(
                         raw.bytes().all(|b| b.is_ascii_digit()),
                         "unquoted value {raw} is not a bare number"
@@ -651,7 +514,6 @@ mod tests {
             .collect()
     }
 
-    /// Every value the user typed comes back out of the file byte-identical.
     #[test]
     fn values_round_trip_through_the_shell_parser() {
         let config = T3GemInitConfig::new()
@@ -679,8 +541,6 @@ mod tests {
         assert_eq!(get("timezone"), "Europe/Istanbul");
     }
 
-    /// A newline is the one payload quoting cannot make safe for a line-oriented consumer, so the
-    /// whole serialization fails rather than writing a mangled file.
     #[test]
     fn a_newline_in_a_value_fails_the_whole_file() {
         let err = T3GemInitConfig::new()
@@ -738,13 +598,10 @@ mod tests {
         assert!(Ssid::parse(&"a".repeat(32)).is_ok());
         assert!(Ssid::parse(&"a".repeat(33)).is_err());
         assert!(Ssid::parse("").is_err());
-        // 16 two-byte characters is exactly the limit; 17 is over it even though it reads shorter.
         assert!(Ssid::parse(&"ç".repeat(16)).is_ok());
         assert!(Ssid::parse(&"ç".repeat(17)).is_err());
     }
 
-    /// A `/` is legal on the air but becomes a path separator in the consumer's file name, so it
-    /// has to fail here — where the user can still change it — rather than on the board.
     #[test]
     fn an_ssid_the_current_sdk_cannot_name_is_rejected() {
         for bad in ["Ağ/2", "/", "a/b/c"] {
@@ -754,7 +611,6 @@ mod tests {
             ));
         }
 
-        // Neighbouring characters stay legal: only `/` breaks the path.
         for good in ["Ağ-2", "Ağ_2", r"Ağ\2", "Ağ 2"] {
             assert!(Ssid::parse(good).is_ok(), "{good} should be valid");
         }
@@ -781,15 +637,12 @@ mod tests {
 
     #[test]
     fn wifi_password_length_selects_the_interpretation() {
-        // SAE needs the original passphrase.
         let passphrase = wifi_key(&Secret::new("ThisIsAPassword")).unwrap();
         assert_eq!(*passphrase, "ThisIsAPassword");
 
-        // A 64-hex PSK is a ready-made key: lower-cased, never hashed again.
         let psk = "0DC0D6EB90555ED6419756B9A15EC3E3209B63DF707DD508D14581F8982721AF";
         assert_eq!(*wifi_key(&Secret::new(psk)).unwrap(), psk.to_lowercase());
 
-        // A 64-byte value is reserved for hexadecimal PSKs.
         for bad in ["short", &"z".repeat(64)] {
             assert!(
                 matches!(
@@ -800,7 +653,6 @@ mod tests {
             );
         }
 
-        // 64 hex digits is a PSK even when it does not look like one.
         assert_eq!(
             *wifi_key(&Secret::new("a".repeat(64))).unwrap(),
             "a".repeat(64)
@@ -814,10 +666,8 @@ mod tests {
             (r"pa\ssword", r"pa\\ssword"),
             (" parola", r"\sparola"),
             ("  parola", r"\s\sparola"),
-            // Trailing whitespace is not stripped when the key file is read, so it is left alone.
             ("parola ", "parola "),
             ("\tparola", r"\tparola"),
-            // A backslash ends the leading run, so a space after it is a normal character.
             (r"\ parola", r"\\ parola"),
         ];
 
@@ -826,7 +676,6 @@ mod tests {
         }
     }
 
-    /// Decode the GLib key-file escapes used by these tests.
     fn parse_like_keyfile(raw: &str) -> String {
         let mut chars = raw.trim_start_matches([' ', '\t']).chars();
         let mut out = String::new();

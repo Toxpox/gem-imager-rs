@@ -1,5 +1,4 @@
 #[derive(Debug, Default, Clone)]
-/// Mountpoints of a drive
 pub struct MountPoint {
     pub path: String,
     pub label: Option<String>,
@@ -19,7 +18,6 @@ impl MountPoint {
 }
 
 #[derive(Debug, Clone)]
-/// Device Description
 pub struct DeviceDescriptor {
     pub enumerator: String,
     pub bus_type: Option<String>,
@@ -35,21 +33,13 @@ pub struct DeviceDescriptor {
     pub logical_block_size: u32,
     pub mountpoints: Vec<MountPoint>,
     pub mountpoint_labels: Vec<String>,
-    /// Device is read-only
     pub is_readonly: bool,
-    /// Device is a system drive
     pub is_system: bool,
-    /// Device is an SD-card
     pub is_card: bool,
-    /// Connected via the Small Computer System Interface (SCSI)
     pub is_scsi: bool,
-    /// Connected via Universal Serial Bus (USB)
     pub is_usb: bool,
-    /// Device is a virtual storage device
     pub is_virtual: bool,
-    /// Device is removable from the running system
     pub is_removable: bool,
-    /// Connected via the USB Attached SCSI (UAS)
     pub is_uas: Option<bool>,
 }
 

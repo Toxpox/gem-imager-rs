@@ -91,22 +91,16 @@ async fn invalid_negative_seek_fails() {
     .unwrap()
 }
 
-/// The core streaming contract: a blocking reader waits for the writer to
-/// produce data (the condvar path in `ReaderFileStream::read`) and observes EOF
-/// only once the writer is dropped. Correctness holds regardless of timing; the
-/// reader starts first to make it likely the blocking-wait branch is taken.
 #[tokio::test]
 async fn blocking_read_receives_all_data_then_eof_on_writer_drop() {
     let (mut writer, mut reader) = file_stream().unwrap();
 
     let reader_task = tokio::task::spawn_blocking(move || {
         let mut out = Vec::new();
-        // read_to_end blocks on each empty read until the writer closes.
         reader.read_to_end(&mut out).unwrap();
         out
     });
 
-    // Let the reader start and block on the initially-empty file.
     tokio::task::yield_now().await;
 
     for chunk in [b"hello ".as_slice(), b"world", b"!"] {
@@ -115,8 +109,6 @@ async fn blocking_read_receives_all_data_then_eof_on_writer_drop() {
         tokio::task::yield_now().await;
     }
 
-    // Dropping the writer flips the shared flag and notifies the reader,
-    // turning the next empty read into a clean EOF.
     drop(writer);
 
     let out = reader_task.await.unwrap();

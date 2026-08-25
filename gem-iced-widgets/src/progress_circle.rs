@@ -43,7 +43,6 @@ impl<Message> canvas::Program<Message> for ProgressCircle {
             let center = iced::Point::new(bounds.width / 2.0, bounds.height / 2.0);
             let radius = bounds.width.min(bounds.height) / 2.0 - self.thickness;
 
-            // Background ring
             let bg = canvas::Path::circle(center, radius);
             frame.stroke(
                 &bg,
@@ -52,7 +51,6 @@ impl<Message> canvas::Program<Message> for ProgressCircle {
                     .with_color(theme.palette().background),
             );
 
-            // Foreground arc
             let angle = self.progress.clamp(0.0, 1.0) * 2.0 * iced::Radians::PI;
 
             let arc = canvas::path::Arc {
@@ -71,7 +69,6 @@ impl<Message> canvas::Program<Message> for ProgressCircle {
                     .with_color(self.color),
             );
 
-            // Progress Report
             let prog = (self.progress.clamp(0.0, 1.0) * 100.0).floor();
             let prog_pretty = format!("{}%", prog);
             frame.fill_text(canvas::Text {

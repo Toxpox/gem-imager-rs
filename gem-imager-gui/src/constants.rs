@@ -2,24 +2,11 @@ use iced::color;
 
 pub(crate) const OSHW_BASE_URL: &str = "https://certification.oshwa.org";
 
-/// Provisional until the T3 release repository is created (Faz 9 owns the release wiring).
-/// The updater is feature-gated (`updater`) and is not enabled in the M1 preview packages.
 pub(crate) const LATEST_RELEASE_URL: &str =
     "https://api.github.com/repos/Toxpox/gem-imager-rs/releases/latest";
 
-/// The canonical application identity, reversed-domain style.
-///
-/// Deliberately **not** `org.t3gemstone.gem-imager`: the Qt reference application owns that
-/// identity, and a stable install of it must keep its own config/cache/data directories. This
-/// tuple is what `directories::ProjectDirs` derives those paths from, so sharing it would let
-/// the two applications overwrite each other's state.
 pub(crate) const PACKAGE_QUALIFIER: (&str, &str, &str) = ("org", "t3gemstone", "imager");
 
-/// The same identity flattened, for surfaces that want one string: the XDG notification
-/// application id and `mac_notification_sys`/`notify-rust`.
-///
-/// Windows names the application through the embedded executable manifest and the AppX identity
-/// instead, so nothing reads this there.
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 pub(crate) const APP_ID: &str = "org.t3gemstone.imager";
 
@@ -32,11 +19,6 @@ pub(crate) const APP_RELEASE: &str = if cfg!(feature = "pre-release") {
     env!("CARGO_PKG_VERSION")
 };
 pub(crate) const APP_DESC: &str = env!("CARGO_PKG_DESCRIPTION");
-/// Shown above the license on the info screen.
-///
-/// Upstream's notice stays. MIT requires the original copyright to travel with every copy, and a
-/// fork is a copy — dropping the line to make the About box look tidier would breach the licence
-/// this application ships under.
 pub(crate) const APP_COPYRIGHT: &str =
     "\u{a9} 2026 T3 Gemstone Devteam \u{b7} \u{a9} 2024 Ayush Singh (BeagleBoard.org)";
 pub(crate) const APP_LINCESE: &str = include_str!("../../LICENSE");
@@ -54,9 +36,6 @@ pub(crate) const INFO_ICON_BYTES: &[u8] = include_bytes!("../assets/icons/info.s
 pub(crate) const COPY_ICON_BYTES: &[u8] = include_bytes!("../assets/icons/content-copy.svg");
 pub(crate) const SEARCH_ICON_BYTES: &[u8] = include_bytes!("../assets/icons/search.svg");
 
-// Photographs rather than the catalog's Fritzing schematics, which do not tell a user holding the
-// hardware which board is which. Keyed by board tag, and bundled so the first screen renders
-// before the network answers.
 pub(crate) const BOARD_PHOTO_T3_GEM_O1_BYTES: &[u8] =
     include_bytes!("../assets/boards/t3-gem-o1.png");
 pub(crate) const BOARD_PHOTO_BEAGLEY_AI_BYTES: &[u8] =
@@ -66,8 +45,6 @@ pub(crate) const USB_DFU_BOOTMODE_BYTES: &[u8] =
     include_bytes!("../assets/icons/usb-dfu-bootmode.svg");
 pub(crate) const EMMC_BOOTMODE_BYTES: &[u8] = include_bytes!("../assets/icons/emmc-bootmode.svg");
 
-/// Width for modals that carry an illustration. The plain text dialog reads fine at 680, but the
-/// DIP switch labels in these diagrams do not.
 pub(crate) const ILLUSTRATED_DIALOG_WIDTH: f32 = 960.0;
 
 pub(crate) const FONT_REGULAR: iced::Font = iced::Font::with_name("Nunito");
@@ -82,15 +59,8 @@ pub(crate) const FONT_NORMAL_BYTES: &[u8] =
     include_bytes!("../assets/fonts/Nunito-Regular-subset.ttf");
 pub(crate) const FONT_BOLD_BYTES: &[u8] = include_bytes!("../assets/fonts/Nunito-Bold-subset.ttf");
 
-// Brand colours match the reference `gem-imager` application: `#18224f` surface, `#d15d7d`
-// accent. `SUCCESS_GREEN` and `DANGER_RED` are semantic rather than brand, so they keep the
-// upstream values and their meaning does not shift with a repaint.
-
-/// Brand accent — buttons, progress, selection.
 pub(crate) const GEMSTONE_ROSE: iced::Color = color!(0xd1, 0x5d, 0x7d);
-/// Brand surface — the window background.
 pub(crate) const GEMSTONE_NAVY: iced::Color = color!(0x18, 0x22, 0x4f);
-/// Brand surface, one step lighter — cards sitting on the background.
 pub(crate) const GEMSTONE_NAVY_CARD: iced::Color = color!(0x23, 0x2e, 0x63);
 pub(crate) const SUCCESS_GREEN: iced::Color = color!(142, 201, 105);
 pub(crate) const WARNING_AMBER: iced::Color = color!(0xe0, 0xa3, 0x3e);
@@ -110,8 +80,6 @@ pub(crate) const KEYMAP_LAYOUTS: &[&str] = &[
 mod tests {
     use super::{APP_NAME, KEYMAP_LAYOUTS, PACKAGE_QUALIFIER};
 
-    /// The keymap combo box looks up its selection with `binary_search`, so new
-    /// entries need to be inserted in byte order.
     #[test]
     fn keymap_layouts_sorted() {
         assert!(KEYMAP_LAYOUTS.is_sorted());

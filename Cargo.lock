@@ -2085,6 +2085,7 @@ dependencies = [
  "gem-i18n",
  "gem-iced-widgets",
  "gem-winusb",
+ "httpmock",
  "iana-time-zone",
  "iced",
  "iced_aw",
