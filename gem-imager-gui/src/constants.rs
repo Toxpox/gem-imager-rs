@@ -7,7 +7,7 @@ pub(crate) const LATEST_RELEASE_URL: &str =
 
 pub(crate) const PACKAGE_QUALIFIER: (&str, &str, &str) = ("org", "t3gemstone", "imager");
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(any(target_os = "linux", all(target_os = "macos", feature = "notify-rust")))]
 pub(crate) const APP_ID: &str = "org.t3gemstone.imager";
 
 pub(crate) const DEFAULT_CONFIG: &[u8] = include_bytes!("../../config.json");
