@@ -30,6 +30,7 @@ impl DriverState {
     }
 }
 
+#[cfg(any(windows, test))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct DeviceFacts {
     pub(crate) service: Option<String>,
@@ -37,6 +38,7 @@ pub(crate) struct DeviceFacts {
     pub(crate) problem_code: u32,
 }
 
+#[cfg(any(windows, test))]
 pub(crate) fn classify(devices: &[DeviceFacts]) -> DriverState {
     if devices.is_empty() {
         return DriverState::NoDevice;
@@ -87,6 +89,7 @@ pub(crate) fn classify(devices: &[DeviceFacts]) -> DriverState {
     }
 }
 
+#[cfg(any(windows, test))]
 fn is_driverless(device: &DeviceFacts) -> bool {
     matches!(device.problem_code, 0 | 28)
         && device.service.as_deref().is_none_or(str::is_empty)

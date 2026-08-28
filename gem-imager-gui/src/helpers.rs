@@ -278,6 +278,7 @@ pub(crate) fn detect_host_wifi() -> HostWifiPrefill {
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
+#[cfg_attr(not(feature = "sd"), allow(dead_code))]
 pub(crate) struct RemoteImage {
     name: Box<str>,
     url: Box<url::Url>,
@@ -312,6 +313,7 @@ impl RemoteImage {
         }
     }
 
+    #[cfg_attr(not(feature = "sd"), allow(dead_code))]
     fn extract_gate(&self) -> gem_flasher::img::ExtractGate {
         match self.extract_sha256 {
             Some(sha256) => gem_flasher::img::ExtractGate::Declared(
@@ -325,6 +327,7 @@ impl RemoteImage {
         self.url.path_segments().unwrap().next_back().unwrap()
     }
 
+    #[cfg_attr(not(feature = "dfu"), allow(dead_code))]
     fn archive_cache_growth_estimate(&self) -> u64 {
         if self
             .downloader
@@ -338,6 +341,7 @@ impl RemoteImage {
         }
     }
 
+    #[cfg_attr(not(feature = "sd"), allow(dead_code))]
     fn into_image_fn(
         self,
         cancel: gem_helper::cancel::CancellationToken,
@@ -464,12 +468,15 @@ impl RemoteImage {
     }
 }
 
+#[cfg_attr(not(feature = "sd"), allow(dead_code))]
 struct StagedRemoteImage {
     file: std::fs::File,
     _staging: crate::staging::StagingImage,
 }
 
+#[cfg_attr(not(feature = "sd"), allow(dead_code))]
 type ImageReader = Box<dyn io::Read + Send>;
+#[cfg_attr(not(feature = "sd"), allow(dead_code))]
 type ImageResolver = Box<dyn FnOnce() -> io::Result<(ImageReader, u64)> + Send>;
 
 impl io::Read for StagedRemoteImage {
@@ -498,6 +505,7 @@ impl SelectedImage {
         }
     }
 
+    #[cfg_attr(not(feature = "dfu"), allow(dead_code))]
     fn staging_size_estimate(&self) -> u64 {
         match self {
             Self::RemoteImage(x) => x
@@ -508,6 +516,7 @@ impl SelectedImage {
         }
     }
 
+    #[cfg_attr(not(feature = "sd"), allow(dead_code))]
     fn into_image_fn(self, cancel: gem_helper::cancel::CancellationToken) -> ImageResolver {
         match self {
             SelectedImage::LocalImage(x) => Box::new(move || {
@@ -744,6 +753,7 @@ impl WriteMethods {
 }
 
 pub(crate) fn destinations(methods: WriteMethods, filter: bool) -> Vec<Destination> {
+    #[cfg_attr(not(feature = "sd"), allow(unused_mut))]
     let mut out: Vec<Destination> = Vec::new();
 
     #[cfg(feature = "sd")]
@@ -774,7 +784,9 @@ pub(crate) fn keep_selected_destination(
 ) -> Option<Destination> {
     match selected {
         Some(Destination::LocalFile(p)) => Some(Destination::LocalFile(p)),
+        #[cfg_attr(not(any(feature = "sd", feature = "dfu")), allow(unreachable_patterns))]
         Some(dest) if available.contains(&dest) => Some(dest),
+        #[cfg_attr(not(any(feature = "sd", feature = "dfu")), allow(unreachable_patterns))]
         Some(dest) => {
             tracing::info!("Clearing the selected destination: {dest} is no longer present");
             None
