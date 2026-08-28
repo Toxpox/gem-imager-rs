@@ -396,7 +396,10 @@ jobs:
       - run: ls -laR artifacts
 
       - name: Create Pre-Release
-        if: github.ref_type != 'tag'
+        # Only the mainline publishes to the shared `continuous-release` tag. Builds from other
+        # branches still produce downloadable job artifacts, but must not overwrite the release
+        # that users download.
+        if: github.ref_type != 'tag' && github.ref_name == 'main'
         uses: softprops/action-gh-release@v3
         with:
           prerelease: true
@@ -413,14 +416,15 @@ jobs:
 
       # The three snap-store steps only run where store credentials exist. On a fork without
       # SNAP_STORE_LOGIN, `snapcraft upload` would abort the whole release job even though the
-      # GitHub release itself was published successfully.
+      # GitHub release itself was published successfully. They are also limited to the mainline
+      # and tags so that test builds from other branches cannot push to the snap store.
       - name: Install Snapcraft
-        if: env.SNAPCRAFT_STORE_CREDENTIALS != ''
+        if: env.SNAPCRAFT_STORE_CREDENTIALS != '' && (github.ref_name == 'main' || github.ref_type == 'tag')
         uses: samuelmeuli/action-snapcraft@v3
 
       # TODO: Publish CLI
       - name: Publish Snaps
-        if: env.SNAPCRAFT_STORE_CREDENTIALS != ''
+        if: env.SNAPCRAFT_STORE_CREDENTIALS != '' && (github.ref_name == 'main' || github.ref_type == 'tag')
         run: |
           for pkg in gui; do
             for file in artifacts/gem-imager-$pkg/dist/*.snap; do
@@ -429,7 +433,7 @@ jobs:
           done
 
       - name: Logout from snapcraft
-        if: env.SNAPCRAFT_STORE_CREDENTIALS != ''
+        if: env.SNAPCRAFT_STORE_CREDENTIALS != '' && (github.ref_name == 'main' || github.ref_type == 'tag')
         run: snapcraft logout
 
   publish-aur:
