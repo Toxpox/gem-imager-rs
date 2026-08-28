@@ -211,6 +211,60 @@ check-cli: _check_common _check_cli
 .PHONY: check-gui
 check-gui: _check_common _check_gui
 
+# Platform-gated code is invisible to a same-platform lint, so a `#[cfg(windows)]` block can carry
+# warnings for months and only surface when the Windows CI runner denies them. These crates have no
+# native C dependency, so they cross-lint from any host. PKG_CONFIG_ALLOW_CROSS lets libusb1-sys
+# resolve through pkg-config instead of demanding vcpkg, which is what blocks a plain cross build.
+#
+# Not part of `check`: it needs the target's std installed, so it stays opt-in. The crates left out
+# (gem-flasher, gem-imager-cli, gem-imager-gui, gem-config, gem-downloader, gem-flasher-dfu) pull
+# liblzma/aws-lc/sqlite, which need a real MSVC toolchain; CI's own Windows runner covers them.
+_CROSS_LINT_CRATES = gem-drivelist gem-flasher-sd gem-helper gem-host-wifi gem-iced-widgets \
+	gem-i18n gem-winusb gem-winusb-helper
+
+# Every `cfg` in those crates keys off the OS (target_os = "macos" / windows), never the
+# architecture, so one triple per gated OS covers all of it. Linting a single default target would
+# leave the other OS unchecked, which is the hole that let a macOS-only lint sit undetected.
+_CROSS_LINT_TARGETS = x86_64-pc-windows-msvc x86_64-apple-darwin
+
+## housekeeping: check-cross: Lint platform-gated code for every gated OS. CROSS_TARGET=<triple>
+.PHONY: check-cross
+check-cross:
+	@for t in $(or $(CROSS_TARGET),$(_CROSS_LINT_TARGETS)); do \
+		echo "Cross-linting platform-gated code for $$t"; \
+		rustup target list --installed | grep -qx "$$t" || { \
+			echo "error: rustup target add $$t" >&2; exit 1; }; \
+		for p in $(_CROSS_LINT_CRATES); do \
+			echo "  $$p"; \
+			PKG_CONFIG_ALLOW_CROSS=1 $(CARGO_PATH) clippy \
+				--target $$t \
+				--all-targets -p $$p --all-features -- -D warnings || exit 1; \
+		done; \
+	done
+
+## housekeeping: check-scripts: Run the packaging-verifier self-tests.
+.PHONY: check-scripts
+check-scripts: check-macos-dmg-selftest check-wix-prefetch
+
+## housekeeping: check-macos-dmg-selftest: Self-test the macOS dmg verifier against synthetic bundles.
+.PHONY: check-macos-dmg-selftest
+check-macos-dmg-selftest:
+	python3 scripts/verify-macos-dmg-selftest.py
+
+## housekeeping: check-wix-pin: Verify the release WIX constants still match cargo-packager.
+.PHONY: check-wix-pin
+check-wix-pin:
+	python3 scripts/verify-wix-pin.py
+
+## housekeeping: check-wix-prefetch: Replay the release WIX prefetch step without a Windows runner.
+.PHONY: check-wix-prefetch
+check-wix-prefetch:
+	@command -v pwsh >/dev/null || { \
+		echo "error: pwsh is required; see https://learn.microsoft.com/powershell/scripting/install" >&2; \
+		exit 1; }
+	pwsh -File scripts/verify-wix-prefetch.ps1
+
+
 ## housekeeping: test: Run tests on workspace
 .PHONY: test
 test:
