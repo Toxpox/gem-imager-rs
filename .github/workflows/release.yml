@@ -265,7 +265,76 @@ jobs:
 
     - name: Use caching
       uses: Swatinem/rust-cache@v2
-        
+
+    # cargo-packager fetches the WIX3 toolchain from GitHub on every run and has no retry, so a
+    # single dropped TLS connection fails the whole Windows release. Caching the extracted tools
+    # keeps later runs off the network entirely.
+    - name: Cache WIX toolset
+      id: wix-cache
+      uses: actions/cache@v4
+      with:
+        # cargo-packager resolves this as `dirs::cache_dir()/.cargo-packager/WixTools`, which is
+        # %LOCALAPPDATA% on Windows. Written with `~` because the `env` context only exposes
+        # variables declared in the workflow, not the runner's own environment.
+        path: ~\AppData\Local\.cargo-packager\WixTools
+        key: ${{ runner.os }}-wix3-3112rtm-2c1888d5
+
+    # Fetch the tools here instead of letting cargo-packager do it: this retries and verifies the
+    # published checksum, so a transient network error retries rather than aborting the build.
+    #
+    # This runs even on a cache hit, because it also validates the restored directory. A partial
+    # cache satisfies `cache-hit` but not cargo-packager, which then silently falls back to its
+    # own unretried download: the exact failure this step exists to prevent. The file list and
+    # checksum below mirror WIX_REQUIRED_FILES and WIX_SHA256 in cargo-packager 0.11.8.
+    - name: Prefetch and verify WIX toolset
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $url = 'https://github.com/wixtoolset/wix3/releases/download/wix3112rtm/wix311-binaries.zip'
+        $expected = '2c1888d5d1dba377fc7fa14444cf556963747ff9a0a289a3599cf09da03b9e2e'
+        $dest = "$env:LOCALAPPDATA\.cargo-packager\WixTools"
+        $zip = Join-Path $env:RUNNER_TEMP 'wix311-binaries.zip'
+        $required = @(
+          'candle.exe', 'candle.exe.config', 'darice.cub', 'light.exe', 'light.exe.config',
+          'wconsole.dll', 'winterop.dll', 'wix.dll', 'WixUIExtension.dll', 'WixUtilExtension.dll'
+        )
+
+        function Test-WixComplete {
+          $missing = $required | Where-Object { -not (Test-Path (Join-Path $dest $_)) }
+          if ($missing) {
+            Write-Host "WixTools is incomplete, missing: $($missing -join ', ')"
+            return $false
+          }
+          return $true
+        }
+
+        if (Test-WixComplete) {
+          Write-Host "WIX toolset restored from cache at $dest"
+          exit 0
+        }
+
+        # A partial directory makes cargo-packager delete and refetch without retries, so clear it
+        # here and let the retry loop below own the download.
+        if (Test-Path $dest) { Remove-Item -Recurse -Force $dest }
+
+        foreach ($attempt in 1..5) {
+          try {
+            Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing -TimeoutSec 120
+            $hash = (Get-FileHash -Path $zip -Algorithm SHA256).Hash.ToLower()
+            if ($hash -ne $expected) { throw "checksum mismatch: got $hash" }
+            New-Item -ItemType Directory -Force -Path $dest | Out-Null
+            Expand-Archive -Path $zip -DestinationPath $dest -Force
+            if (-not (Test-WixComplete)) { throw "archive did not contain the expected tools" }
+            Write-Host "WIX toolset ready at $dest"
+            exit 0
+          } catch {
+            Write-Host "attempt ${attempt} failed: $($_.Exception.Message)"
+            if ($attempt -eq 5) { throw }
+            if (Test-Path $dest) { Remove-Item -Recurse -Force $dest }
+            Start-Sleep -Seconds ([Math]::Pow(2, $attempt))
+          }
+        }
+
     - name: Build packages
       run: make setup-packaging-deps package-aarch64-pc-windows-msvc package-x86_64-pc-windows-msvc package-bundle-pc-windows-msvc
 
