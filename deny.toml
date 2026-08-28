@@ -51,12 +51,10 @@ ignore = [
     #"a-crate-that-is-yanked@0.1.1", # you can also ignore yanked crate versions if you wish
     #{ crate = "a-crate-that-is-yanked@0.1.1", reason = "you can specify why you are ignoring the yanked crate" },
     # https://github.com/gfx-rs/metal-rs/issues/349
-    { id = "RUSTSEC-2024-0436", reason = "metal has stated that paste is more or less complete with no real nead of replacement." },
-    { id = "RUSTSEC-2025-0141", reason = "Need to update mbrman" },
-    { id = "RUSTSEC-2026-0192", reason = "Needed by iced" },
-    { id = "RUSTSEC-2026-0195", reason = "Needed by iced" },
-    { id = "RUSTSEC-2026-0194", reason = "Needed by iced" },
-    { id = "RUSTSEC-2026-0206", reason = "Needed by iced" }
+    { id = "RUSTSEC-2024-0436", reason = "paste is unmaintained but feature-complete; it reaches us through image -> exr -> pulp" },
+    { id = "RUSTSEC-2025-0141", reason = "bincode 1.x is unmaintained; mbrman 0.6.1 (latest) still depends on it and there is no patched release" },
+    { id = "RUSTSEC-2026-0192", reason = "ttf-parser is unmaintained; it reaches us through iced -> cosmic-text -> fontdb and has no patched release" },
+    { id = "RUSTSEC-2026-0206", reason = "rustybuzz is unmaintained; it reaches us through iced -> resvg -> usvg and has no patched release" }
 ]
 # If this is true, then cargo deny will use the git executable to fetch advisory database.
 # If this is false, then it uses a built-in git library.
