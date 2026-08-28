@@ -2,7 +2,7 @@ name: Create Release artifacts
 
 on:
   push:
-    branches: [ "main", "alpha", "clean/alpha-release" ]
+    branches: [ "main", "alpha" ]
     tags: [ "[0-9]+.[0-9]+.[0-9]+" ]
   pull_request:
     branches: [ "main" ]
@@ -13,7 +13,13 @@ env:
   VERBOSE: 1
   PRE_RELEASE: ${{ github.ref_type != 'tag' && '1' || '0' }}
   VERSION: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
-  APPIMAGE_RELEASE_TAG: ${{ github.ref_type == 'tag' && 'latest' || (github.ref_name == 'main' && 'continuous-release' || 'alpha-release-clean') }}
+  APPIMAGE_RELEASE_TAG: ${{ github.ref_type == 'tag' && 'latest' || (github.ref_name == 'alpha' && 'alpha-release' || 'continuous-release') }}
+  APPIMAGE_RELEASE_OWNER: ${{ github.repository_owner }}
+  APPIMAGE_RELEASE_REPO: ${{ github.event.repository.name }}
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
 
 defaults:
   run:
@@ -56,10 +62,13 @@ jobs:
 
   linux-snap-job:
     strategy:
+      fail-fast: false
       matrix:
         platform: [ubuntu-24.04, ubuntu-24.04-arm]
-    name: Build Snaps - ${{ matrix.platform }}
+        package: [gui, cli]
+    name: Build ${{ matrix.package }} Snap - ${{ matrix.platform }}
     runs-on: ${{ matrix.platform }}
+    timeout-minutes: 90
     steps:
     - name: Checkout
       uses: actions/checkout@v7
@@ -72,22 +81,22 @@ jobs:
 
     - run: echo PRE_RELEASE=$PRE_RELEASE > .envrc
 
-    - run: ln -sf snapcraft.gui.yaml snapcraft.yaml
+    - run: ln -sf "snapcraft.${{ matrix.package }}.yaml" snapcraft.yaml
     - uses: snapcore/action-build@v1
-      id: build-gui
+      id: build
 
-    - run: ln -sf snapcraft.cli.yaml snapcraft.yaml
-    - uses: snapcore/action-build@v1
-      id: build-cli
+    - name: Report disk use
+      if: always()
+      run: |
+        df -h
+        sudo du -sh /var/snap/lxd/common/lxd/storage-pools/default 2>/dev/null || true
 
     # The built file is taken from the action's output rather than matched by a glob: the snap
     # is named after `name:` in the recipe, which is not the crate directory name.
     - name: Move to dist folders
       run: |
-        mkdir -p gem-imager-cli/dist/
-        mkdir -p gem-imager-gui/dist/
-        mv "${{ steps.build-cli.outputs.snap }}" gem-imager-cli/dist/
-        mv "${{ steps.build-gui.outputs.snap }}" gem-imager-gui/dist/
+        mkdir -p "gem-imager-${{ matrix.package }}/dist/"
+        mv "${{ steps.build.outputs.snap }}" "gem-imager-${{ matrix.package }}/dist/"
 
     # Do not do versioning for Pre-Release packages
     - name: Rename Pre-Release Packages
@@ -97,10 +106,8 @@ jobs:
     - name: Upload artifacts
       uses: actions/upload-artifact@v7
       with:
-        name: artifacts-snap-${{ matrix.platform }}
-        path: |
-          gem-imager-gui/dist/*
-          gem-imager-cli/dist/*
+        name: artifacts-snap-${{ matrix.package }}-${{ matrix.platform }}
+        path: gem-imager-${{ matrix.package }}/dist/*
 
   linux-snap-cross-job:
     strategy:
@@ -396,16 +403,35 @@ jobs:
           merge-multiple: true
       - run: ls -laR artifacts
 
+      - name: Prepare Pre-Release
+        if: github.ref_type != 'tag' && (github.ref_name == 'main' || github.ref_name == 'alpha')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name == 'main' && 'continuous-release' || 'alpha-release' }}
+        run: |
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" >/dev/null 2>&1; then
+            gh api --method PATCH "repos/$GITHUB_REPOSITORY/git/refs/tags/$RELEASE_TAG" -f sha="$GITHUB_SHA" -F force=true >/dev/null
+          else
+            gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$RELEASE_TAG" -f sha="$GITHUB_SHA" >/dev/null
+          fi
+          release_id=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" --jq .id 2>/dev/null || true)
+          if [ -n "$release_id" ]; then
+            gh api "repos/$GITHUB_REPOSITORY/releases/$release_id/assets" --jq '.[].id' |
+              while read -r asset_id; do
+                gh api --method DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$asset_id"
+              done
+          fi
+
       - name: Create Pre-Release
-        # The mainline owns the shared `continuous-release` tag. This branch publishes under its
-        # own tag so a hardening build can be downloaded and tested without replacing the release
-        # that users get from `main`.
-        if: github.ref_type != 'tag' && (github.ref_name == 'main' || github.ref_name == 'clean/alpha-release')
+        if: github.ref_type != 'tag' && (github.ref_name == 'main' || github.ref_name == 'alpha')
         uses: softprops/action-gh-release@v3
         with:
           prerelease: true
           name: ${{ github.ref_name == 'main' && 'Continuous Release' || 'Alpha Pre-Release' }}
-          tag_name: ${{ github.ref_name == 'main' && 'continuous-release' || 'alpha-release-clean' }}
+          tag_name: ${{ github.ref_name == 'main' && 'continuous-release' || 'alpha-release' }}
+          target_commitish: ${{ github.sha }}
+          fail_on_unmatched_files: true
+          make_latest: false
           files: artifacts/**
 
       - name: Create Release
@@ -424,14 +450,23 @@ jobs:
         uses: samuelmeuli/action-snapcraft@v3
 
       # TODO: Publish CLI
+      # `download-artifact` with `merge-multiple` flattens every artifact into `artifacts/`, so the
+      # per-crate `dist/` prefix is gone by this point. Select the GUI snap by its snap name
+      # (`t3gemstone-imager`) and exclude the CLI snap, which shares that prefix.
       - name: Publish Snaps
         if: env.SNAPCRAFT_STORE_CREDENTIALS != '' && (github.ref_name == 'main' || github.ref_type == 'tag')
         run: |
-          for pkg in gui; do
-            for file in artifacts/gem-imager-$pkg/dist/*.snap; do
-              snapcraft upload "$file" --release=$SNAP_CHANNEL;
-            done
+          set -euo pipefail
+          published=0
+          for file in artifacts/t3gemstone-imager_*.snap; do
+            [ -e "$file" ] || continue
+            snapcraft upload "$file" --release="$SNAP_CHANNEL"
+            published=$((published + 1))
           done
+          if [ "$published" -eq 0 ]; then
+            echo "No GUI snap found to publish" >&2
+            exit 1
+          fi
 
       - name: Logout from snapcraft
         if: env.SNAPCRAFT_STORE_CREDENTIALS != '' && (github.ref_name == 'main' || github.ref_type == 'tag')

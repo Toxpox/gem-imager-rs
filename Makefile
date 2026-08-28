@@ -81,6 +81,8 @@ NOTIFY_RUST ?= 1
 APPIMAGE_ARCH ?= $(_ARCH)
 ## variable: APPIMAGE_RELEASE_TAG: Release tag for update info
 APPIMAGE_RELEASE_TAG ?=
+APPIMAGE_RELEASE_OWNER ?= Toxpox
+APPIMAGE_RELEASE_REPO ?= gem-imager-rs
 
 # The reviewed libwdi runtime and helper are currently gated to Windows x64. ARM64 keeps building
 # without the provisioning feature until its native runtime and hardware matrix are complete.
@@ -134,7 +136,7 @@ ifeq ($(NOTIFY_RUST),1)
 endif
 
 ifneq ($(APPIMAGE_RELEASE_TAG),)
-	_APPIMAGETOOL_ARGS += -u "gh-releases-zsync|t3gemstone|imager|${APPIMAGE_RELEASE_TAG}|T3Gemstone_Imager-*-${APPIMAGE_ARCH}.AppImage.zsync"
+	_APPIMAGETOOL_ARGS += -u "gh-releases-zsync|${APPIMAGE_RELEASE_OWNER}|${APPIMAGE_RELEASE_REPO}|${APPIMAGE_RELEASE_TAG}|T3Gemstone_Imager-*-${APPIMAGE_ARCH}.AppImage.zsync"
 endif
 
 ## build: build: Build both CLI and GUI
