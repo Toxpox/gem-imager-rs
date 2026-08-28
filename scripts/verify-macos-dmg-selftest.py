@@ -366,13 +366,31 @@ CASES = [
     ),
     dict(
         name="cms-empty-blob",
-        why="an empty CMS blob wrapper carries no certificate and must not read as signed",
+        why=(
+            "`codesign --sign -` writes the CMS slot with an empty wrapper, which is what "
+            "every unsigned CI build ships. It carries no certificate, so it must not read "
+            "as Developer ID, but it launches, so a pre-release must not fail on it"
+        ),
         binary=lambda: clean_macho(cms=b""),
         bundled=FRAMEWORKS,
         info=plist(),
+        exit=0,
+        must=["ad-hoc only", "OK: bundle is self-contained"],
+        must_not=["FAIL", "Developer ID (CMS blob"],
+    ),
+    dict(
+        name="cms-empty-blob-release-gate",
+        why=(
+            "the same empty wrapper is not good enough for a tagged release: "
+            "--require-developer-id must reject it"
+        ),
+        binary=lambda: clean_macho(cms=b""),
+        bundled=FRAMEWORKS,
+        info=plist(),
+        args=["--require-developer-id"],
         exit=1,
-        must=["FAIL", "empty CMS blob"],
-        must_not=["Developer ID (CMS blob", "OK: bundle is self-contained"],
+        must=["FAIL", "ad-hoc", "CMS blob is empty", "Developer ID"],
+        must_not=["OK: bundle is self-contained"],
     ),
     dict(
         name="cms-not-der",

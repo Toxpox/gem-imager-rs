@@ -189,6 +189,20 @@ def check_bundle_relative(dylibs, rpaths, cputype, tag):
                 f"{rel}{tag} has no {CPU_NAMES.get(cputype, hex(cputype))} slice (provides: {have})")
 
 
+def report_adhoc(tag, detail):
+    """Report a seal that carries no certificate.
+
+    Ad-hoc is the expected state for a branch pre-release and a fatal one for a tagged
+    release, so the same finding is a note or a failure depending on the gate.
+    """
+    if require_developer_id:
+        failures.append(
+            f"signature{tag} is ad-hoc ({detail}); a release build must carry a "
+            f"Developer ID signature")
+    else:
+        print(f"   signature{tag}: ad-hoc only, Gatekeeper will warn (not fatal)")
+
+
 def check_signature(data, base, sig, tag):
     """Classify the code signature, verifying a claimed CMS blob really exists.
 
@@ -221,11 +235,7 @@ def check_signature(data, base, sig, tag):
         slots[slot] = off
 
     if CSSLOT_CMS_SIGNATURE not in slots:
-        if require_developer_id:
-            failures.append(
-                f"signature{tag} is ad-hoc; a release build must carry a Developer ID signature")
-        else:
-            print(f"   signature{tag}: ad-hoc only, Gatekeeper will warn (not fatal)")
+        report_adhoc(tag, "no CMS slot")
         return
 
     off = slots[CSSLOT_CMS_SIGNATURE]
@@ -244,9 +254,11 @@ def check_signature(data, base, sig, tag):
         return
     payload = sig_blob[off + 8:off + length]
     if not payload:
-        # An empty wrapper is what `codesign --sign -` leaves behind on some toolchains: the
-        # slot exists, the certificate does not.
-        failures.append(f"signature{tag} has an empty CMS blob; nothing is actually signed")
+        # `codesign --sign -` writes the CMS slot with an empty wrapper: the slot exists, the
+        # certificate does not. That is exactly an ad-hoc seal, so it must be classified as
+        # one. Failing outright here broke every unsigned branch build, which is the normal
+        # state for a fork or a pre-release without signing secrets.
+        report_adhoc(tag, "the CMS blob is empty")
         return
     # A CMS SignedData is DER: a constructed SEQUENCE. Anything else is not a signature.
     if payload[0] != 0x30:
