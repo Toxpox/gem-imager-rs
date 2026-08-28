@@ -125,6 +125,7 @@ mod tests {
                         assert_eq!(img.as_ref(), Path::new("img.xz"));
                         assert_eq!(dst, PathBuf::from("/dev/sdX"));
                     }
+                    #[cfg(feature = "dfu")]
                     other => panic!("expected Sd, got {other:?}"),
                 }
             }
@@ -206,6 +207,7 @@ mod tests {
                     assert!(usb_enable_dhcp);
                     assert!(file_destination);
                 }
+                #[cfg(feature = "dfu")]
                 other => panic!("expected Sd, got {other:?}"),
             },
             other => panic!("expected Flash, got {other:?}"),

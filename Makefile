@@ -8,7 +8,13 @@ _RUST_ARGS = ${_RUST_ARGS_BASE}
 _RUST_ARGS_CLI = ${_RUST_ARGS} --features dfu
 _RUST_ARGS_GUI = ${_RUST_ARGS} --features sd,dfu
 _PACKAGER_ARGS = -r -vvv --verbose
-_CARGO_CHECK ?= $(CARGO_PATH) $(if $(shell cargo clippy --version >/dev/null 2>&1 && echo yes),clippy,check)
+# Clippy is the canonical check engine: always clippy, never a silent
+# fallback to `check`, so CI and contributors run the same gate.
+_CARGO_CHECK ?= $(CARGO_PATH) clippy
+# A warning that does not fail the build is a warning nobody fixes. Deny them, but only
+# when the engine really is clippy: `check` is reused with `test` and `llvm-cov`
+# overrides, and those would forward `-D warnings` to the test harness instead.
+_CARGO_CHECK_ARGS = $(if $(findstring clippy,$(_CARGO_CHECK)),-- -D warnings,)
 _ARCH = $(firstword $(subst -, ,$(TARGET)))
 _APPIMAGETOOL_ARGS =
 _DEST_VERSION = $(VERSION)
@@ -162,16 +168,24 @@ endif
 
 _check_common:
 	$(_CARGO_CHECK) --all-targets --all-features --workspace ${_RUST_ARGS_BASE} \
-		--exclude gem-flasher --exclude gem-imager-gui --exclude gem-imager-cli
-	$(_CARGO_CHECK) --all-targets -p gem-flasher ${_RUST_ARGS_BASE} -F dfu,static,piped_image,sd
+		--exclude gem-flasher --exclude gem-imager-gui --exclude gem-imager-cli \
+		${_CARGO_CHECK_ARGS}
+	$(_CARGO_CHECK) --all-targets -p gem-flasher ${_RUST_ARGS_BASE} -F dfu,static,piped_image,sd \
+		${_CARGO_CHECK_ARGS}
 
+# Both binaries are checked with and without their write-path features: the feature-rich
+# build is what ships, but the default build is what `cargo clippy` gives a contributor,
+# and a variant that only exists in one of the two is exactly where dead code hides.
 _check_cli:
-	$(_CARGO_CHECK) --all-targets -p gem-imager-cli ${_RUST_ARGS_CLI}
+	$(_CARGO_CHECK) --all-targets -p gem-imager-cli ${_RUST_ARGS_BASE} ${_CARGO_CHECK_ARGS}
+	$(_CARGO_CHECK) --all-targets -p gem-imager-cli ${_RUST_ARGS_CLI} ${_CARGO_CHECK_ARGS}
 
 _check_gui:
-	$(_CARGO_CHECK) --all-targets -p gem-imager-gui ${_RUST_ARGS_BASE}
-	$(_CARGO_CHECK) --all-targets -p gem-imager-gui ${_RUST_ARGS_GUI} -F updater,pre-release
-	
+	$(_CARGO_CHECK) --all-targets -p gem-imager-gui ${_RUST_ARGS_BASE} ${_CARGO_CHECK_ARGS}
+	$(_CARGO_CHECK) --all-targets -p gem-imager-gui ${_RUST_ARGS} --features sd ${_CARGO_CHECK_ARGS}
+	$(_CARGO_CHECK) --all-targets -p gem-imager-gui ${_RUST_ARGS_GUI} -F updater,pre-release \
+		${_CARGO_CHECK_ARGS}
+
 ## housekeeping: check: Run code quality checks.
 .PHONY: check
 check: check-fmt check-cli check-gui
