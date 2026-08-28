@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/t3gemstone/gem-imager/main/.meta/logo-dark.png" />
-    <img src="https://raw.githubusercontent.com/t3gemstone/gem-imager/main/.meta/logo-light.png" alt="T3 Gemstone" width="360" />
+    <source media="(prefers-color-scheme: dark)" srcset=".meta/logo-dark.png" />
+    <img src=".meta/logo-light.png" alt="T3 Gemstone" width="360" />
   </picture>
 </p>
 
