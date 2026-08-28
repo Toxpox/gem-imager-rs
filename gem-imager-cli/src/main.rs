@@ -16,5 +16,11 @@ fn main() {
             .expect("Failed to register tracing_subscriber");
     }
 
-    gem_imager_cli::run(opt);
+    if let Err(err) = gem_imager_cli::run(opt) {
+        let _ = console::Term::stderr().write_line(&format!(
+            "{} {err:#}",
+            console::style("Error:").red().bold()
+        ));
+        std::process::exit(1);
+    }
 }

@@ -3,7 +3,7 @@ use gem_imager_cli::cli::Opt;
 
 fn run_cli(args: &[&str]) {
     let opt = Opt::try_parse_from(args).expect("argv should parse");
-    gem_imager_cli::run(opt);
+    gem_imager_cli::run(opt).unwrap_or_else(|err| panic!("{args:?} should succeed: {err:#}"));
 }
 
 #[test]

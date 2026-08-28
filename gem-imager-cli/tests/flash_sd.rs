@@ -6,8 +6,12 @@ use gem_imager_cli::cli::Opt;
 use tempfile::NamedTempFile;
 
 fn run_cli<const N: usize>(args: [&str; N]) {
+    try_run_cli(args).expect("the command should succeed");
+}
+
+fn try_run_cli<const N: usize>(args: [&str; N]) -> anyhow::Result<()> {
     let opt = Opt::try_parse_from(args).expect("argv should parse");
-    gem_imager_cli::run(opt);
+    gem_imager_cli::run(opt)
 }
 
 fn pattern_file(len: usize) -> NamedTempFile {
@@ -299,12 +303,11 @@ fn flash_sd_cloud_init_emits_both_configs() {
 }
 
 #[test]
-#[should_panic(expected = "Failed to flash")]
 fn flash_sd_customization_on_partitionless_image_fails() {
     let img = pattern_file(64 * 1024);
     let dst = NamedTempFile::new().unwrap();
 
-    run_cli([
+    let err = try_run_cli([
         "gem-imager-cli",
         "flash",
         "--quiet",
@@ -315,15 +318,20 @@ fn flash_sd_customization_on_partitionless_image_fails() {
         "--sysconfig",
         "--hostname",
         "beagle",
-    ]);
+    ])
+    .expect_err("customizing an image without a partition table must fail");
+
+    assert!(
+        err.to_string().contains("Partition table"),
+        "unexpected error: {err:#}"
+    );
 }
 
 #[test]
-#[should_panic(expected = "Failed to flash")]
 fn flash_sd_missing_image_fails() {
     let dst = NamedTempFile::new().unwrap();
 
-    run_cli([
+    try_run_cli([
         "gem-imager-cli",
         "flash",
         "--quiet",
@@ -331,5 +339,6 @@ fn flash_sd_missing_image_fails() {
         "/nonexistent/image.img",
         dst.path().to_str().unwrap(),
         "--file-destination",
-    ]);
+    ])
+    .expect_err("a missing image must fail instead of writing anything");
 }

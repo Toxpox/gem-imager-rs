@@ -1,15 +1,17 @@
 pub mod cli;
 
+use anyhow::Context as _;
 use clap::CommandFactory;
 use cli::{Commands, DestinationsTarget, Opt, TargetCommands};
+use gem_downloader::{ArchiveIntegrity, Downloader};
 use gem_flasher::{DownloadFlashingStatus, GemFlasherTarget, LocalImage};
 use std::path::PathBuf;
 use std::sync::mpsc;
 
-pub fn run(opt: Opt) {
+pub fn run(opt: Opt) -> anyhow::Result<()> {
     match opt.command {
-        Commands::Flash { target, quiet } => flash(*target, quiet),
-        Commands::Format { dst, quiet } => format(dst, quiet),
+        Commands::Flash { target, quiet } => return flash(*target, quiet),
+        Commands::Format { dst, quiet } => return format(dst, quiet),
         Commands::ListDestinations {
             target,
             no_frills,
@@ -17,9 +19,11 @@ pub fn run(opt: Opt) {
         } => list_destinations(target, no_frills, no_filter),
         Commands::GenerateCompletion { shell } => generate_completion(shell),
     }
+
+    Ok(())
 }
 
-fn flash(target: TargetCommands, quite: bool) {
+fn flash(target: TargetCommands, quite: bool) -> anyhow::Result<()> {
     if quite {
         flash_internal(target, None)
     } else {
@@ -118,7 +122,6 @@ fn flash(target: TargetCommands, quite: bool) {
             flash_internal(target, Some(tx))
         })
     }
-    .expect("Failed to flash")
 }
 
 fn flash_internal(
@@ -128,6 +131,7 @@ fn flash_internal(
     match target {
         TargetCommands::Sd {
             dst,
+            image_sha256,
             hostname,
             timezone,
             keymap,
@@ -151,6 +155,19 @@ fn flash_internal(
             let wifi = wifi_ssid.map(|x| (x, wifi_password.unwrap()));
 
             let dst = check_macos_device_path(dst);
+
+            let target = if file_destination {
+                None
+            } else {
+                Some(
+                    dst.clone()
+                        .try_into()
+                        .map_err(|err| anyhow::anyhow!("{}: {err}", dst.display()))?,
+                )
+            };
+
+            let img_path = resolve_image(&img, image_sha256.as_deref(), chan.is_some())?;
+            tracing::info!("Resolved image: {}", img_path.display());
 
             let customization = if hostname.is_some()
                 || timezone.is_some()
@@ -183,18 +200,17 @@ fn flash_internal(
 
             tracing::info!("Customization: {:#?}", customization);
 
-            if file_destination {
-                gem_flasher::sd::Flasher::with_file_dest(
-                    LocalImage::new(img).into_image_fn(),
+            match target {
+                None => gem_flasher::sd::Flasher::with_file_dest(
+                    LocalImage::new(img_path.clone().into_boxed_path()).into_image_fn(),
                     dst,
                     customization,
-                )
-            } else {
-                gem_flasher::sd::Flasher::new(
-                    LocalImage::new(img).into_image_fn(),
-                    dst.try_into().unwrap(),
+                ),
+                Some(target) => gem_flasher::sd::Flasher::new(
+                    LocalImage::new(img_path.into_boxed_path()).into_image_fn(),
+                    target,
                     customization,
-                )
+                ),
             }
             .flash(chan, None)
         }
@@ -209,7 +225,7 @@ fn flash_internal(
                 &identifier,
                 None,
             )
-            .unwrap();
+            .map_err(|err| anyhow::anyhow!("DFU device {identifier}: {err}"))?;
             match cache_dir {
                 Some(cache_dir) => flasher.with_cache_dir(cache_dir).flash(chan),
                 None => flasher.flash(chan),
@@ -261,15 +277,22 @@ fn check_macos_device_path(dst: PathBuf) -> PathBuf {
     dst
 }
 
-fn format(dst: PathBuf, quiet: bool) {
+fn format(dst: PathBuf, quiet: bool) -> anyhow::Result<()> {
     let term = console::Term::stdout();
 
-    let config = gem_flasher::sd::FormatFlasher::new(dst.try_into().unwrap());
-    config.flash().unwrap();
+    let target = dst
+        .clone()
+        .try_into()
+        .map_err(|err| anyhow::anyhow!("{}: {err}", dst.display()))?;
+    gem_flasher::sd::FormatFlasher::new(target)
+        .flash()
+        .map_err(|err| anyhow::anyhow!("formatting {}: {err}", dst.display()))?;
 
     if !quiet {
-        term.write_line("Formatting successful").unwrap();
+        let _ = term.write_line("Formatting successful");
     }
+
+    Ok(())
 }
 
 fn no_frills_list_destinations<T: GemFlasherTarget + Send + 'static>(no_filter: bool) {
@@ -475,6 +498,113 @@ fn generate_completion(target: clap_complete::Shell) {
     clap_complete::generate(target, &mut cmd, BIN_NAME, &mut std::io::stdout())
 }
 
+fn is_remote_source(img: &str) -> bool {
+    img.starts_with("https://") || img.starts_with("http://")
+}
+
+fn decode_sha256(hex: &str) -> anyhow::Result<[u8; 32]> {
+    let hex = hex.trim();
+    if hex.len() != 64 || !hex.chars().all(|c| c.is_ascii_hexdigit()) {
+        anyhow::bail!("--image-sha256 must be 64 hexadecimal characters");
+    }
+
+    let mut digest = [0u8; 32];
+    for (i, byte) in digest.iter_mut().enumerate() {
+        *byte = u8::from_str_radix(&hex[i * 2..i * 2 + 2], 16)?;
+    }
+    Ok(digest)
+}
+
+fn cli_cache_dir() -> PathBuf {
+    if let Some(dir) = std::env::var_os("GEM_IMAGER_CACHE_DIR") {
+        return PathBuf::from(dir);
+    }
+
+    #[cfg(target_os = "windows")]
+    return std::env::var_os("LOCALAPPDATA")
+        .map(PathBuf::from)
+        .unwrap_or_else(std::env::temp_dir)
+        .join("gem-imager-cli");
+
+    #[cfg(target_os = "macos")]
+    {
+        let home = std::env::var_os("HOME")
+            .map(PathBuf::from)
+            .unwrap_or_else(std::env::temp_dir);
+        home.join("Library/Caches/gem-imager-cli")
+    }
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        let cache_home = std::env::var_os("XDG_CACHE_HOME")
+            .map(PathBuf::from)
+            .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".cache")))
+            .unwrap_or_else(std::env::temp_dir);
+        cache_home.join("gem-imager-cli")
+    }
+}
+
+fn resolve_image(img: &str, sha_hex: Option<&str>, show_progress: bool) -> anyhow::Result<PathBuf> {
+    let sha = sha_hex.map(decode_sha256).transpose()?;
+
+    if !is_remote_source(img) {
+        let path = PathBuf::from(img);
+
+        if let Some(sha) = sha {
+            let actual = gem_downloader::Downloader::sha256_of_file(&path)
+                .map_err(|err| anyhow::anyhow!("hashing {} failed: {err}", path.display()))?;
+            if actual != sha {
+                anyhow::bail!("{} does not match --image-sha256", path.display());
+            }
+        }
+
+        return Ok(path);
+    }
+
+    let Some(sha) = sha else {
+        anyhow::bail!(
+            "flashing from {img} requires --image-sha256 <hex> so the download can be verified"
+        );
+    };
+
+    let cache_dir = cli_cache_dir();
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .context("building the download runtime")?;
+
+    let bar = show_progress.then(|| {
+        let bar = indicatif::ProgressBar::new_spinner();
+        bar.set_style(
+            indicatif::ProgressStyle::with_template(
+                "{msg:15}  {spinner} {bytes} ({bytes_per_sec})",
+            )
+            .expect("Failed to create download spinner"),
+        );
+        bar.set_message("Downloading");
+        bar.enable_steady_tick(std::time::Duration::from_millis(120));
+        bar
+    });
+
+    let result = runtime.block_on(async {
+        let downloader = Downloader::new(&cache_dir).context("preparing the image cache")?;
+        downloader
+            .download_archive(img, ArchiveIntegrity::from_sha256(sha), |received| {
+                if let Some(bar) = bar.as_ref() {
+                    bar.set_position(received);
+                }
+            })
+            .await
+            .map_err(|err| anyhow::anyhow!("downloading {img}: {err}"))
+    });
+
+    if let Some(bar) = bar {
+        bar.finish_and_clear();
+    }
+
+    result
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -520,5 +650,33 @@ mod tests {
     fn check_macos_device_path_is_identity_off_macos() {
         let dst = PathBuf::from("/dev/disk2");
         assert_eq!(check_macos_device_path(dst.clone()), dst);
+    }
+
+    #[test]
+    fn flash_sd_rejects_a_bad_device_before_touching_the_network() {
+        let target = crate::cli::TargetCommands::Sd {
+            dst: PathBuf::from("/dev/definitely-not-a-real-sd-target"),
+            image_sha256: Some("a".repeat(64)),
+            hostname: None,
+            timezone: None,
+            keymap: None,
+            user_name: None,
+            user_password: None,
+            wifi_ssid: None,
+            wifi_password: None,
+            img: "https://gem-imager-cli.invalid/os.img.xz".to_string(),
+            ssh_key: None,
+            usb_enable_dhcp: false,
+            sysconfig: true,
+            cloud_init: false,
+            file_destination: false,
+        };
+
+        let err = flash_internal(target, None).expect_err("a bad SD device must fail");
+        let message = format!("{err:#}");
+        assert!(
+            message.contains("/dev/definitely-not-a-real-sd-target"),
+            "error should name the offending device, got: {message}"
+        );
     }
 }

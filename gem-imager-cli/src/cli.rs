@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use clap::{Parser, Subcommand, ValueEnum};
 
@@ -46,9 +46,14 @@ pub enum Commands {
 #[derive(Subcommand, Debug)]
 pub enum TargetCommands {
     Sd {
-        img: Box<Path>,
+        img: String,
 
         dst: PathBuf,
+
+        /// SHA-256 of the compressed image. Mandatory for https:// sources so
+        /// the download can be verified; optional for local files.
+        #[arg(long)]
+        image_sha256: Option<String>,
 
         #[arg(long)]
         hostname: Option<Box<str>>,
@@ -122,7 +127,7 @@ mod tests {
                 assert!(!quiet);
                 match *target {
                     TargetCommands::Sd { img, dst, .. } => {
-                        assert_eq!(img.as_ref(), Path::new("img.xz"));
+                        assert_eq!(img, "img.xz");
                         assert_eq!(dst, PathBuf::from("/dev/sdX"));
                     }
                     #[cfg(feature = "dfu")]
@@ -333,6 +338,34 @@ mod tests {
     #[test]
     fn unknown_subcommand_is_rejected() {
         assert!(Opt::try_parse_from(["gem-imager-cli", "bogus"]).is_err());
+    }
+
+    #[test]
+    fn flash_sd_url_source_parses_with_sha_flag() {
+        let opt = Opt::try_parse_from([
+            "gem-imager-cli",
+            "flash",
+            "sd",
+            "https://example.test/images/gemstone.img.xz",
+            "/dev/sdX",
+            "--image-sha256",
+            &"a".repeat(64),
+        ])
+        .expect("url source with digest must parse");
+
+        match opt.command {
+            Commands::Flash { target, .. } => match *target {
+                TargetCommands::Sd {
+                    img, image_sha256, ..
+                } => {
+                    assert!(img.starts_with("https://"));
+                    assert_eq!(image_sha256.unwrap().len(), 64);
+                }
+                #[cfg(feature = "dfu")]
+                other => panic!("expected Sd, got {other:?}"),
+            },
+            other => panic!("expected Flash, got {other:?}"),
+        }
     }
 
     #[test]

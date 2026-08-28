@@ -2093,10 +2093,12 @@ dependencies = [
  "clap_complete",
  "clap_mangen",
  "console",
+ "gem-downloader",
  "gem-flasher",
  "gem-flasher-sd",
  "indicatif",
  "tempfile",
+ "tokio",
  "tracing",
  "tracing-subscriber",
 ]
