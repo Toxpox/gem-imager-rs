@@ -2,7 +2,7 @@ name: Create Release artifacts
 
 on:
   push:
-    branches: [ "main", "alpha" ]
+    branches: [ "main", "alpha", "clean/alpha-release" ]
     tags: [ "[0-9]+.[0-9]+.[0-9]+" ]
   pull_request:
     branches: [ "main" ]
@@ -13,7 +13,7 @@ env:
   VERBOSE: 1
   PRE_RELEASE: ${{ github.ref_type != 'tag' && '1' || '0' }}
   VERSION: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
-  APPIMAGE_RELEASE_TAG: ${{ github.ref_type == 'tag' && 'latest' || 'continuous-release' }}
+  APPIMAGE_RELEASE_TAG: ${{ github.ref_type == 'tag' && 'latest' || (github.ref_name == 'main' && 'continuous-release' || 'alpha-release-clean') }}
 
 defaults:
   run:
@@ -397,15 +397,15 @@ jobs:
       - run: ls -laR artifacts
 
       - name: Create Pre-Release
-        # Only the mainline publishes to the shared `continuous-release` tag. Builds from other
-        # branches still produce downloadable job artifacts, but must not overwrite the release
-        # that users download.
-        if: github.ref_type != 'tag' && github.ref_name == 'main'
+        # The mainline owns the shared `continuous-release` tag. This branch publishes under its
+        # own tag so a hardening build can be downloaded and tested without replacing the release
+        # that users get from `main`.
+        if: github.ref_type != 'tag' && (github.ref_name == 'main' || github.ref_name == 'clean/alpha-release')
         uses: softprops/action-gh-release@v3
         with:
           prerelease: true
-          name: Continuous Release
-          tag_name: continuous-release
+          name: ${{ github.ref_name == 'main' && 'Continuous Release' || 'Alpha Pre-Release' }}
+          tag_name: ${{ github.ref_name == 'main' && 'continuous-release' || 'alpha-release-clean' }}
           files: artifacts/**
 
       - name: Create Release
