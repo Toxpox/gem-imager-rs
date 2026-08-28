@@ -172,8 +172,10 @@ fn registry_strings(
         return Err(ERROR_INVALID_DATA);
     }
     let utf16: Vec<u16> = raw
-        .chunks_exact(2)
-        .map(|pair| u16::from_le_bytes([pair[0], pair[1]]))
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|pair| u16::from_le_bytes(*pair))
         .collect();
 
     Ok(utf16
