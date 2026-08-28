@@ -1,0 +1,61 @@
+name: Bug report
+description: Something does not work as documented or expected.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug. Please fill in the details
+        below; the verbose log is usually the fastest path to a fix.
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - GUI (gem-imager-gui)
+        - CLI (gem-imager-cli)
+        - Packaging / installation
+        - Documentation
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: "`gem-imager-cli --version`, the GUI about page, or the commit hash."
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - Linux x86_64
+        - Linux aarch64
+        - Windows x86_64
+        - macOS Apple silicon
+        - macOS Intel
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Select board ...
+        2. Flash to ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What happened vs what you expected
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Verbose log
+      description: |
+        CLI: re-run with `--verbose`. GUI: launch from a terminal so `tracing`
+        output is visible. Paste the relevant tail here.
