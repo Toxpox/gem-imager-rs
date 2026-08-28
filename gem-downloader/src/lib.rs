@@ -85,6 +85,12 @@ impl Downloader {
         &self.policy
     }
 
+    /// Streaming SHA-256 of an on-disk file; lets callers verify a local
+    /// image against an expected digest before flashing it.
+    pub fn sha256_of_file(path: &Path) -> io::Result<[u8; 32]> {
+        sha256_from_path(path)
+    }
+
     pub fn check_cache_from_sha(&self, sha256: [u8; 32]) -> Option<PathBuf> {
         let file_path = self.path_from_sha(sha256);
 
@@ -237,6 +243,139 @@ impl Downloader {
             .persist(&file_path)
             .await
             .map_err(|source| DownloadError::io("publishing the download to the cache", source))
+    }
+
+    /// Downloads `url` into the managed cache, enforcing `integrity`, and
+    /// returns the published cache path. Repeat calls with the same digest
+    /// are served from the cache without touching the network. `on_progress`
+    /// receives the number of raw bytes received so far.
+    pub async fn download_archive<F>(
+        &self,
+        url: impl reqwest::IntoUrl,
+        integrity: ArchiveIntegrity,
+        mut on_progress: F,
+    ) -> Result<PathBuf, DownloadError>
+    where
+        F: FnMut(u64),
+    {
+        let url = self.check_url(url)?;
+        let file_path = self.path_from_sha(integrity.sha256);
+
+        let _slot = self.in_flight.acquire(integrity.sha256).await;
+
+        if let Some(cached) = self.check_cache_from_sha(integrity.sha256) {
+            tracing::info!("Serving archive from cache instead of downloading again");
+            return Ok(cached);
+        }
+
+        let limit = integrity.size.unwrap_or(self.policy.max_stream_body);
+        let scratch = tempfile::Builder::new()
+            .prefix(".part-")
+            .tempfile_in(&self.cache_dir)
+            .map_err(|source| DownloadError::io("creating the scratch archive", source))?
+            .into_temp_path()
+            .keep()
+            .map_err(|err| DownloadError::io("creating the scratch archive", err.error))?;
+
+        let result = self
+            .stream_archive_to_file(&url, &scratch, integrity, limit, &mut on_progress)
+            .await;
+
+        if let Err(err) = result {
+            let _ = tokio::fs::remove_file(&scratch).await;
+            return Err(err);
+        }
+
+        tracing::info!("Publishing the verified download to the cache");
+        tokio::fs::rename(&scratch, &file_path)
+            .await
+            .map_err(|source| DownloadError::io("publishing the verified download", source))?;
+
+        Ok(file_path)
+    }
+
+    async fn stream_archive_to_file<F>(
+        &self,
+        url: &reqwest::Url,
+        scratch: &Path,
+        integrity: ArchiveIntegrity,
+        limit: u64,
+        on_progress: &mut F,
+    ) -> Result<(), DownloadError>
+    where
+        F: FnMut(u64),
+    {
+        let response = self.send(&self.stream_client, url).await?;
+        let mut response_stream = response.bytes_stream().map_err(io::Error::other);
+
+        let mut hasher = Sha256::new();
+        let mut received: u64 = 0;
+        let mut file = tokio::fs::File::create(scratch)
+            .await
+            .map_err(|source| DownloadError::io("creating the scratch archive", source))?;
+
+        while let Some(chunk) = response_stream.next().await {
+            let mut data = chunk.map_err(|source| DownloadError::Io {
+                context: format!("reading the response body of {url}"),
+                source,
+            })?;
+
+            received += data.len() as u64;
+            if received > limit {
+                return Err(if integrity.size.is_some() {
+                    DownloadError::ArchiveSizeMismatch {
+                        url: url.to_string(),
+                        expected: limit,
+                        actual: received,
+                    }
+                } else {
+                    DownloadError::BodyTooLarge {
+                        url: url.to_string(),
+                        limit,
+                    }
+                });
+            }
+
+            hasher.update(&data);
+            file.write_all_buf(&mut data)
+                .await
+                .map_err(|source| DownloadError::io("writing the download stream", source))?;
+            on_progress(received);
+        }
+
+        if let Some(expected) = integrity.size
+            && received != expected
+        {
+            tracing::error!("Expected {expected} archive bytes, got {received}");
+            return Err(DownloadError::ArchiveSizeMismatch {
+                url: url.to_string(),
+                expected,
+                actual: received,
+            });
+        }
+
+        let hash: [u8; 32] = hasher
+            .finalize()
+            .as_slice()
+            .try_into()
+            .expect("SHA-256 is 32 bytes");
+
+        if hash != integrity.sha256 {
+            tracing::error!(
+                "Expected SHA256: {}, got {}",
+                const_hex::encode(integrity.sha256),
+                const_hex::encode(hash)
+            );
+            return Err(DownloadError::ArchiveHashMismatch {
+                url: url.to_string(),
+                expected: const_hex::encode(integrity.sha256),
+                actual: const_hex::encode(hash),
+            });
+        }
+
+        file.flush()
+            .await
+            .map_err(|source| DownloadError::io("flushing the downloaded archive", source))
     }
 
     fn check_url<U: reqwest::IntoUrl>(&self, url: U) -> Result<reqwest::Url, DownloadError> {

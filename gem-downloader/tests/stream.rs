@@ -397,3 +397,132 @@ async fn a_cached_archive_is_replayed_without_a_second_request() {
         "the cached bytes must reach the caller"
     );
 }
+
+#[tokio::test]
+async fn download_archive_persists_verified_file_and_reports_progress() {
+    let server = MockServer::start();
+    let tmp = TempDir::new().unwrap();
+    let downloader = test_downloader(tmp.path());
+
+    let content = b"archive payload for download_archive";
+    let sha = sha256(content);
+
+    let mock = server.mock(|when, then| {
+        when.method(GET).path("/a.img.xz");
+        then.status(200).body(content);
+    });
+
+    use std::sync::{Arc, Mutex};
+    let last_received = Arc::new(Mutex::new(0u64));
+    let progress = last_received.clone();
+
+    let path = downloader
+        .download_archive(
+            server.url("/a.img.xz"),
+            ArchiveIntegrity::new(sha, content.len() as u64),
+            move |received| {
+                *progress.lock().unwrap() = received;
+            },
+        )
+        .await
+        .expect("matching sha should succeed");
+
+    mock.assert_calls(1);
+    assert_eq!(std::fs::read(&path).unwrap(), content);
+    assert_eq!(
+        path.file_name().unwrap().to_str().unwrap(),
+        const_hex::encode(sha)
+    );
+    assert_eq!(*last_received.lock().unwrap(), content.len() as u64);
+
+    let again = downloader
+        .download_archive(
+            server.url("/a.img.xz"),
+            ArchiveIntegrity::new(sha, content.len() as u64),
+            |_| {},
+        )
+        .await
+        .expect("cache hit should succeed");
+    assert_eq!(again, path);
+    mock.assert_calls(1);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn concurrent_download_archive_for_the_same_digest_fetches_once() {
+    use std::sync::Arc;
+    use std::time::Duration;
+
+    let server = MockServer::start();
+    let tmp = TempDir::new().unwrap();
+    let downloader = Arc::new(test_downloader(tmp.path()));
+
+    let content = b"archive payload shared by two concurrent callers";
+    let sha = sha256(content);
+
+    let mock = server.mock(|when, then| {
+        when.method(GET).path("/shared.img.xz");
+        then.status(200)
+            .delay(Duration::from_millis(300))
+            .body(content);
+    });
+
+    let integrity = ArchiveIntegrity::new(sha, content.len() as u64);
+
+    let one = {
+        let downloader = downloader.clone();
+        let url = server.url("/shared.img.xz");
+        tokio::spawn(async move { downloader.download_archive(url, integrity, |_| {}).await })
+    };
+    let two = {
+        let downloader = downloader.clone();
+        let url = server.url("/shared.img.xz");
+        tokio::spawn(async move { downloader.download_archive(url, integrity, |_| {}).await })
+    };
+
+    let first = one.await.unwrap().expect("first download succeeds");
+    let second = two.await.unwrap().expect("second download succeeds");
+
+    assert_eq!(first, second);
+    assert_eq!(std::fs::read(&first).unwrap(), content);
+    mock.assert_calls(1);
+}
+
+#[tokio::test]
+async fn download_archive_rejects_hash_mismatch_and_leaves_no_scratch() {
+    let server = MockServer::start();
+    let tmp = TempDir::new().unwrap();
+    let downloader = test_downloader(tmp.path());
+
+    let content = b"payload whose declared digest will be wrong";
+    let wrong_sha = sha256(b"a different payload entirely");
+
+    server.mock(|when, then| {
+        when.method(GET).path("/bad.img.xz");
+        then.status(200).body(content);
+    });
+
+    let result = downloader
+        .download_archive(
+            server.url("/bad.img.xz"),
+            ArchiveIntegrity::new(wrong_sha, content.len() as u64),
+            |_| {},
+        )
+        .await;
+
+    match result {
+        Err(DownloadError::ArchiveHashMismatch { .. }) => {}
+        other => panic!("expected ArchiveHashMismatch, got {other:?}"),
+    }
+
+    for entry in entries(tmp.path()) {
+        assert!(
+            !entry
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .contains("part-"),
+            "scratch file must not survive a failed download: {}",
+            entry.display()
+        );
+    }
+}
