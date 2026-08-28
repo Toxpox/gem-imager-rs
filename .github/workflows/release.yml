@@ -2,10 +2,11 @@ name: Create Release artifacts
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "alpha" ]
     tags: [ "[0-9]+.[0-9]+.[0-9]+" ]
   pull_request:
     branches: [ "main" ]
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
