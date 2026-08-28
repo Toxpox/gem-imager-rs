@@ -1,7 +1,9 @@
 # Run 'make help' to see guidance on usage of this Makefile
 
 _HOST_TARGET = $(shell rustc --print host-tuple)
-_CARGO_TOML_VERSION = $(shell grep 'version =' Cargo.toml | sed 's/version = "\(.*\)"/\1/')
+# Anchored so the `rust-version` key on the following line is not swept in as well, which
+# produced a bogus "0.9.0 rust-1.88" version string.
+_CARGO_TOML_VERSION = $(shell grep -m1 '^version = ' Cargo.toml | sed 's/version = "\(.*\)"/\1/')
 _DATE = $(shell date +%F)
 _RUST_ARGS_BASE = --locked
 _RUST_ARGS = ${_RUST_ARGS_BASE}
@@ -102,6 +104,12 @@ endif
 ifeq ($(SYSTEM_DEPS),1)
 	_RUST_ARGS += --no-default-features
 	_RUST_ARGS_GUI += --features system-deps
+else
+# Distro packages (deb/pacman) declare their dependencies and are built with SYSTEM_DEPS=1.
+# Everything else is relocatable (tarball, snap, AppImage, dmg) and must not resolve native
+# libraries such as libusb from the host, so they are linked statically. The GUI already gets
+# this through its default features; the CLI defaults to none and needs it stated.
+	_RUST_ARGS_CLI += --features static
 endif
 
 # Add offline flag is needed
@@ -244,16 +252,18 @@ endif
 	$(CARGO_PATH) install cargo-packager --locked --version 0.11.8
 
 ## housekeeping: package-rename: Replace package version with `_alpha_`. Intended for use in CI.
-.PHONY: package-rename-alpha
+.PHONY: package-rename
 package-rename:
 	for pkg in gui cli service; do \
 		if [ -d gem-imager-$$pkg/dist ]; then \
 			for file in gem-imager-$$pkg/dist/*; do \
+				[ -e "$$file" ] || continue; \
 				if [ "$${file##*.}" = "msixbundle" ]; then \
-					mv "$$file" "$$(echo "$$file" | sed -E 's/_[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+_/_alpha_/')"; \
+					renamed=$$(printf '%s\n' "$$file" | sed -E 's/_[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+_/_alpha_/'); \
 				else \
-					mv "$$file" "$$(echo "$$file" | sed -E 's/_[0-9]+\.[0-9]+\.[0-9]+_/_alpha_/')"; \
+					renamed=$$(printf '%s\n' "$$file" | sed -E 's/_[0-9]+\.[0-9]+\.[0-9]+_/_alpha_/'); \
 				fi; \
+				[ "$$file" = "$$renamed" ] || mv "$$file" "$$renamed"; \
 			done \
 		fi \
 	done
