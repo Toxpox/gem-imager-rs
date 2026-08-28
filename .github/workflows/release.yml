@@ -234,6 +234,23 @@ jobs:
         APPLE_TEAM_ID: ${{ secrets.TEAM_ID }}
       run: make setup-packaging-deps package-x86_64-apple-darwin package-aarch64-apple-darwin
 
+    # Audits the finished dmg rather than the intermediate bundle, so a packaging regression
+    # cannot reach users as an app that dies at launch with an unhelpful dialog.
+    - name: Verify dmg is self-contained
+      run: |
+        brew install p7zip
+        shopt -s nullglob
+        dmgs=(gem-imager-gui/dist/*.dmg)
+        # Without this check a packaging regression that produces no dmg would surface as
+        # verify-macos-dmg.sh failing on the literal glob text, hiding the real cause.
+        if [ "${#dmgs[@]}" -eq 0 ]; then
+          echo "::error::packaging produced no .dmg in gem-imager-gui/dist"
+          exit 1
+        fi
+        for dmg in "${dmgs[@]}"; do
+          ./scripts/verify-macos-dmg.sh "$dmg"
+        done
+
     # Do not do versioning for Pre-Release packages
     - name: Rename Pre-Release Packages
       if: github.ref_type != 'tag'
@@ -245,6 +262,7 @@ jobs:
         name: artifacts-macos
         path: |
           gem-imager-gui/dist/*
+          !gem-imager-gui/dist/*.app
 
   windows-job:
     name: Build Windows Artifacts
