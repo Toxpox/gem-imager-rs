@@ -415,6 +415,10 @@ _DARWIN_DMG = gem-imager-gui/dist/T3 Gemstone Imager_$(VERSION)_$(_DARWIN_DMG_AR
 # A .app that links a Homebrew dylib by absolute path launches only on machines that happen to
 # have that exact path, and fails with an unhelpful "cannot be opened" dialog everywhere else.
 # Fail the build here rather than shipping a bundle that dies on the user's Mac.
+#
+# A bundle-relative install name is not automatically safe either: @rpath/foo.dylib only loads
+# if foo.dylib was actually copied into the bundle. Resolve each one against the binary's own
+# LC_RPATH entries so a dependency nobody vendored is caught here and not by the user.
 _darwin_verify:
 	@app="$(_DARWIN_APP)/Contents/MacOS/gem-imager-gui"; \
 	if [ ! -f "$$app" ]; then \
@@ -432,7 +436,38 @@ _darwin_verify:
 		echo "these will be missing on a clean Mac; vendor them statically instead" >&2; \
 		exit 1; \
 	fi; \
-	echo "dylib audit passed: only system libraries linked"
+	rpaths=$$(otool -l "$$app" | awk '/cmd LC_RPATH/{f=1} f&&/path /{print $$2; f=0}'); \
+	relative=$$(printf '%s\n' "$$linked" | tail -n +2 | awk '{print $$1}' | grep '^@' || true); \
+	exedir="$(_DARWIN_APP)/Contents/MacOS"; \
+	unresolved=""; \
+	for dep in $$relative; do \
+		suffix=$${dep#@rpath/}; \
+		found=""; \
+		case "$$dep" in \
+		@executable_path/*|@loader_path/*) \
+			cand="$$exedir/$${dep#@*path/}"; \
+			[ -f "$$cand" ] && found=1 ;; \
+		@rpath/*) \
+			for rp in $$rpaths; do \
+				case "$$rp" in \
+				/System/*|/usr/lib/*) found=1 ;; \
+				/*) [ -f "$$rp/$$suffix" ] && found=1 ;; \
+				@executable_path/*|@loader_path/*) \
+					[ -f "$$exedir/$${rp#@*path/}/$$suffix" ] && found=1 ;; \
+				*) [ -f "$$exedir/$$rp/$$suffix" ] && found=1 ;; \
+				esac; \
+				[ -n "$$found" ] && break; \
+			done ;; \
+		esac; \
+		[ -n "$$found" ] || unresolved="$$unresolved $$dep"; \
+	done; \
+	if [ -n "$$unresolved" ]; then \
+		echo "error: bundle-relative dependencies are not present in the bundle:" >&2; \
+		for dep in $$unresolved; do echo "  $$dep" >&2; done; \
+		echo "dyld aborts the app at launch when it cannot resolve these" >&2; \
+		exit 1; \
+	fi; \
+	echo "dylib audit passed: system libraries only, all bundle-relative deps present"
 
 # cargo-packager only signs when a signing identity is configured. Without one the bundle carries
 # an ad-hoc CodeDirectory with no CMS signature, and any later modification invalidates it. A

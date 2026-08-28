@@ -222,6 +222,27 @@ jobs:
     - name: Use caching
       uses: Swatinem/rust-cache@v2
         
+    # A tagged build is what users download. Shipping it ad-hoc signed means Gatekeeper refuses
+    # to open it without a right-click override, so stop before building rather than publishing
+    # a dmg that looks broken to every user. Branch pre-releases stay unsigned on purpose.
+    - name: Require signing secrets for tagged releases
+      if: github.ref_type == 'tag'
+      env:
+        APPLE_CERTIFICATE: ${{ secrets.CERT_DEVELOPER_APP_BASE64 }}
+        APPLE_ID: ${{ secrets.APPLE_ID }}
+        APPLE_PASSWORD: ${{ secrets.APP_PASSWORD }}
+      run: |
+        missing=""
+        [ -n "$TEAM_ID" ] || missing="$missing TEAM_ID"
+        [ -n "$APPLE_CERTIFICATE" ] || missing="$missing CERT_DEVELOPER_APP_BASE64"
+        [ -n "$APPLE_ID" ] || missing="$missing APPLE_ID"
+        [ -n "$APPLE_PASSWORD" ] || missing="$missing APP_PASSWORD"
+        if [ -n "$missing" ]; then
+          echo "::error::a tagged macOS release needs Developer ID signing and notarization" \
+               "secrets; missing:$missing"
+          exit 1
+        fi
+
     # The ENV variable names are what cargo-packager requires.
     # Skipped when TEAM_ID is unset, as it is on forks without the signing secrets: writing an
     # empty `signing_identity` makes cargo-packager fail rather than fall back to unsigned.
@@ -245,6 +266,10 @@ jobs:
     # Audits the finished dmg rather than the intermediate bundle, so a packaging regression
     # cannot reach users as an app that dies at launch with an unhelpful dialog.
     - name: Verify dmg is self-contained
+      env:
+        # A tagged build must carry a real CMS signature. A branch pre-release is allowed to be
+        # ad-hoc signed, which the audit reports without failing.
+        REQUIRE_DEVELOPER_ID: ${{ github.ref_type == 'tag' && '--require-developer-id' || '' }}
       run: |
         brew install p7zip
         shopt -s nullglob
@@ -256,7 +281,7 @@ jobs:
           exit 1
         fi
         for dmg in "${dmgs[@]}"; do
-          ./scripts/verify-macos-dmg.sh "$dmg"
+          ./scripts/verify-macos-dmg.sh $REQUIRE_DEVELOPER_ID "$dmg"
         done
 
     # Do not do versioning for Pre-Release packages
