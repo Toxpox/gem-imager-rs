@@ -198,14 +198,19 @@ _check_gui:
 
 # Platform-gated code is invisible to a same-platform lint, so a `#[cfg(windows)]` block can carry
 # warnings for months and only surface when the Windows CI runner denies them. These crates have no
-# native C dependency, so they cross-lint from any host. PKG_CONFIG_ALLOW_CROSS lets libusb1-sys
-# resolve through pkg-config instead of demanding vcpkg, which is what blocks a plain cross build.
+# native C dependency, so they cross-lint from any host without a cross toolchain.
 #
 # Not part of `check`: it needs the target's std installed, so it stays opt-in. The crates left out
 # (gem-flasher, gem-imager-cli, gem-imager-gui, gem-config, gem-downloader, gem-flasher-dfu) pull
 # liblzma/aws-lc/sqlite, which need a real MSVC toolchain; CI's own Windows runner covers them.
+#
+# gem-winusb and gem-winusb-helper are excluded for the same reason: they reach libusb through
+# rusb, and `--all-features` selects its vendored build, which compiles libusb's C sources for the
+# target with the host cc. That fails for the Windows triple on a Linux host, and succeeds only by
+# accident where a host libusb happens to satisfy pkg-config. Both are Windows-only crates that the
+# Windows job already lints natively, so the cross run adds no coverage they do not already get.
 _CROSS_LINT_CRATES = gem-drivelist gem-flasher-sd gem-helper gem-host-wifi gem-iced-widgets \
-	gem-i18n gem-winusb gem-winusb-helper
+	gem-i18n
 
 # Every `cfg` in those crates keys off the OS (target_os = "macos" / windows), never the
 # architecture, so one triple per gated OS covers all of it. Linting a single default target would
