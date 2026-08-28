@@ -98,7 +98,7 @@ mod tests {
             include_str!("../Cargo.toml"),
             include_str!("../Package.appxmanifest"),
             include_str!("../assets/packages/windows/gui.exe.manifest"),
-            include_str!("../assets/packages/darwin/Info.plist"),
+            include_str!("../assets/packages/darwin/Info.plist.in"),
             include_str!("../assets/packages/linux/T3GemstoneImager.desktop"),
             include_str!("../assets/packages/linux/flatpak/org.t3gemstone.imager.metainfo.xml"),
             include_str!("../../snapcraft.gui.yaml"),

@@ -115,6 +115,17 @@ Open the generated `.dmg` from `gem-imager-gui/dist/` and drag **T3 Gemstone Ima
 `Applications`. Local builds are unsigned unless Apple Developer signing and notarization
 credentials are supplied; unsigned packages can trigger Gatekeeper warnings.
 
+libusb is compiled in statically on macOS, so the bundle does not depend on a Homebrew install
+at runtime. Packaging enforces this: it fails if the app links anything outside `/System`,
+`/usr/lib`, or an `@rpath`-relative location, because such a library is missing on a clean Mac
+and the app then fails to launch with only a generic "cannot be opened" dialog.
+
+To audit a `.dmg` from any host, including Linux:
+
+```bash
+scripts/verify-macos-dmg.sh path/to/T3.Gemstone.Imager_*.dmg
+```
+
 ### Windows
 
 Use a 64-bit Windows host with the stable Rust MSVC toolchain, Git LFS, and Visual Studio 2022 Build

@@ -321,7 +321,119 @@ package-gui-appimage: build-gui
 	rm -rf gem-imager-gui/dist/org.t3gemstone.imager.AppDir
 
 package-gui-dmg: build-gui
+	$(MAKE) _darwin_plist
+	# The .app is built first so the dylib audit runs before anything is sealed into the
+	# read-only dmg image. Signing targets the compiled binary rather than the bundle,
+	# because `packager -f dmg` re-copies the binary and would discard a bundle-only seal.
+	# The final audit reads the dmg itself, since packager deletes the .app afterwards.
+	$(CARGO_PATH) packager -p gem-imager-gui --target $(TARGET) ${_PACKAGER_ARGS} -f app
+	$(MAKE) _darwin_verify TARGET=$(TARGET)
+	$(MAKE) _darwin_sign TARGET=$(TARGET)
 	$(CARGO_PATH) packager -p gem-imager-gui --target $(TARGET) ${_PACKAGER_ARGS} -f dmg
+	$(MAKE) _darwin_verify_signed TARGET=$(TARGET)
+
+_DARWIN_PLIST = target/packaging/darwin/Info.plist
+
+_darwin_plist:
+	mkdir -p $(dir $(_DARWIN_PLIST))
+	sed 's/@VERSION@/$(VERSION)/g' \
+		gem-imager-gui/assets/packages/darwin/Info.plist.in \
+		> $(_DARWIN_PLIST)
+
+_DARWIN_APP = gem-imager-gui/dist/T3 Gemstone Imager.app
+_DARWIN_BIN = target/$(TARGET)/release/gem-imager-gui
+# cargo-packager maps x86_64 to "x64" when it names the dmg, and leaves every other arch alone.
+_DARWIN_DMG_ARCH = $(if $(filter x86_64,$(_ARCH)),x64,$(_ARCH))
+_DARWIN_DMG = gem-imager-gui/dist/T3 Gemstone Imager_$(VERSION)_$(_DARWIN_DMG_ARCH).dmg
+
+# A .app that links a Homebrew dylib by absolute path launches only on machines that happen to
+# have that exact path, and fails with an unhelpful "cannot be opened" dialog everywhere else.
+# Fail the build here rather than shipping a bundle that dies on the user's Mac.
+_darwin_verify:
+	@app="$(_DARWIN_APP)/Contents/MacOS/gem-imager-gui"; \
+	if [ ! -f "$$app" ]; then \
+		echo "error: packaged binary not found for dylib audit: $$app" >&2; exit 1; \
+	fi; \
+	command -v otool >/dev/null || { \
+		echo "error: otool not found; the dylib audit cannot run" >&2; exit 1; }; \
+	linked=$$(otool -L "$$app") || { \
+		echo "error: otool failed to read $$app" >&2; exit 1; }; \
+	bad=$$(printf '%s\n' "$$linked" | tail -n +2 | awk '{print $$1}' \
+		| grep -v '^/System/' | grep -v '^/usr/lib/' | grep -v '^@' || true); \
+	if [ -n "$$bad" ]; then \
+		echo "error: bundle links non-system libraries by absolute path:" >&2; \
+		echo "$$bad" >&2; \
+		echo "these will be missing on a clean Mac; vendor them statically instead" >&2; \
+		exit 1; \
+	fi; \
+	echo "dylib audit passed: only system libraries linked"
+
+# cargo-packager only signs when a signing identity is configured. Without one the bundle carries
+# an ad-hoc CodeDirectory with no CMS signature, and any later modification invalidates it. A
+# fresh ad-hoc seal here keeps the signature consistent with the shipped contents, so Gatekeeper
+# reports "unidentified developer" (user-overridable) rather than a broken signature.
+#
+# `cargo packager -f dmg` re-runs the app packaging stage and copies the binary from
+# target/<triple>/release into a fresh bundle, so signing the bundle here would be silently
+# undone. arm64 hides this because the linker always applies its own ad-hoc signature, but an
+# x86_64 binary stays completely unsigned and macOS then refuses to launch it. Sign the source
+# binary so that every copy packager makes carries the signature.
+_darwin_sign:
+	@if codesign -dv "$(_DARWIN_BIN)" 2>&1 | grep -q '^Authority='; then \
+		echo "bundle carries a real signing authority; leaving it untouched"; \
+	else \
+		echo "no signing authority present; applying ad-hoc signature"; \
+		codesign --force --sign - "$(_DARWIN_BIN)"; \
+		codesign --verify --strict "$(_DARWIN_BIN)"; \
+		codesign --force --deep --sign - "$(_DARWIN_APP)"; \
+		codesign --verify --deep --strict "$(_DARWIN_APP)"; \
+	fi
+
+# The seal is only trustworthy if it is checked on the copy that actually ships, so this reads the
+# binary out of the finished dmg. `cargo packager -f dmg` deletes gem-imager-gui/dist/*.app once
+# the image exists (cargo-packager src/package/mod.rs, "Clean up .app if only building dmg"), so
+# checking the bundle path here would run codesign against a path that no longer exists and fail
+# every build regardless of whether the signature was fine.
+#
+# The check targets the bundle's main executable rather than the bundle as a whole: that Mach-O is
+# what the kernel validates at launch, and it is the same thing scripts/verify-macos-dmg.sh
+# inspects inside the shipped dmg. A bundle-wide `--deep` verify would additionally demand a
+# _CodeSignature directory that packager does not always produce, which would fail the build for a
+# bundle that actually launches fine.
+#
+# For the same reason the executable is copied out before `codesign --verify`: verifying it in
+# place makes codesign resolve the enclosing .app and report "code has no resources but signature
+# indicates they must be present", even though the Mach-O's own seal is intact.
+_darwin_verify_signed:
+	@dmg="$(_DARWIN_DMG)"; \
+	if [ ! -f "$$dmg" ]; then \
+		echo "error: dmg not found for signature audit: $$dmg" >&2; exit 1; \
+	fi; \
+	mnt=$$(mktemp -d); \
+	hdiutil attach "$$dmg" -nobrowse -readonly -mountpoint "$$mnt" >/dev/null \
+		|| { echo "error: could not mount $$dmg for signature audit" >&2; rmdir "$$mnt"; exit 1; }; \
+	exe=$$(find "$$mnt" -type f -path '*.app/Contents/MacOS/*' | head -1); \
+	status=0; \
+	if [ -z "$$exe" ]; then \
+		echo "error: no app bundle executable found inside $$dmg" >&2; status=1; \
+	elif ! codesign -dv "$$exe" 2>&1 | grep -q '^CodeDirectory'; then \
+		echo "error: the binary sealed into the dmg carries no signature;" >&2; \
+		echo "macOS will refuse to launch it with 'the application cannot be opened'" >&2; \
+		status=1; \
+	else \
+		probe=$$(mktemp -d); \
+		cp "$$exe" "$$probe/exe"; \
+		if ! codesign --verify --strict "$$probe/exe"; then \
+			echo "error: the binary sealed into the dmg has a broken signature" >&2; status=1; \
+		fi; \
+		rm -rf "$$probe"; \
+	fi; \
+	hdiutil detach "$$mnt" -quiet || true; \
+	rmdir "$$mnt" 2>/dev/null || true; \
+	if [ "$$status" -eq 0 ]; then \
+		echo "signature verified on the binary that was sealed into the dmg"; \
+	fi; \
+	exit "$$status"
 
 package-gui-wix: build-gui
 ifeq ($(TARGET),x86_64-pc-windows-msvc)

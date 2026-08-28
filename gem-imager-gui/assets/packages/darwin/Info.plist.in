@@ -10,11 +10,11 @@
         <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
         <key>CFBundleName</key><string>T3 Gemstone Imager</string>
         <key>CFBundlePackageType</key><string>APPL</string>
-        <key>CFBundleShortVersionString</key><string>0.0.0</string>
-        <key>CFBundleVersion</key><string>fffffff</string>
+        <key>CFBundleShortVersionString</key><string>@VERSION@</string>
+        <key>CFBundleVersion</key><string>@VERSION@</string>
         <key>CSResourcesFileMapped</key><true/>
         <key>LSApplicationCategoryType</key><string>public.app-category.utilities</string>
-        <key>LSRequiresCarbon</key><true/>
+        <key>LSMinimumSystemVersion</key><string>11.0</string>
         <key>NSHighResolutionCapable</key><true/>
         <key>NSLocationUsageDescription</key><string>Location access lets the imager read the name of the Wi-Fi network you are on so it can pre-fill the Wi-Fi settings for your board.</string>
         <key>NSLocationWhenInUseUsageDescription</key><string>Location access lets the imager read the name of the Wi-Fi network you are on so it can pre-fill the Wi-Fi settings for your board.</string>
