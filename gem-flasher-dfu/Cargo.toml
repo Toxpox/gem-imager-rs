@@ -12,7 +12,7 @@ rusb = "0.9"
 # Enumeration reports why a present-but-unopenable board was listed as unusable; the exact libusb
 # error belongs in the log rather than in the user-facing message.
 tracing = "0.1"
-sha2 = "0.10"
+sha2 = "0.11"
 thiserror = "2.0"
 gem-helper = { path = "../gem-helper", features = ["cancel", "reader_progress"] }
 gem-config = { path = "../gem-config", default-features = false }
@@ -22,6 +22,19 @@ serde_json = "1.0"
 tempfile = "3.27"
 tokio = { version = "1.52", default-features = false, features = ["rt"] }
 url = "2.5"
+
+# macOS ships no libusb, and Homebrew's copy is linked by absolute path
+# (`/opt/homebrew/opt/libusb/lib/libusb-1.0.0.dylib`). A .app carrying that reference dies at
+# launch with "the application cannot be opened" on any Mac without Homebrew's libusb, so the
+# vendored copy is compiled in statically instead. Target-scoped rather than feature-gated so a
+# plain `cargo build` on macOS cannot produce an unshippable bundle.
+[target.'cfg(target_os = "macos")'.dependencies]
+rusb = { version = "0.9", features = ["vendored"] }
+
+[features]
+# Statically link libusb on platforms where it is otherwise resolved from the system. Pulled in by
+# the workspace-wide `static` feature for self-contained artifacts such as the AppImage.
+static = ["rusb/vendored"]
 
 [dev-dependencies]
 const-hex = "1.19"

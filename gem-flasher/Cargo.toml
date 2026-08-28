@@ -65,7 +65,7 @@ t3_gem_init = [
 sd_linux_udev = ["gem-flasher-sd?/udev"]
 sd_macos_authopen = ["gem-flasher-sd?/macos_authopen"]
 dfu = ["gem-flasher-dfu"]
-static = ["liblzma/static"]
+static = ["liblzma/static", "gem-flasher-dfu?/static"]
 piped_image = ["dep:tokio-util", "gem-helper/file_stream"]
 
 [package.metadata.docs.rs]
