@@ -50,8 +50,8 @@ pub enum TargetCommands {
 
         dst: PathBuf,
 
-        /// SHA-256 of the compressed image. Mandatory for https:// sources so
-        /// the download can be verified; optional for local files.
+        /// SHA-256 of the compressed image. Mandatory for http:// and https://
+        /// sources so the download can be verified; optional for local files.
         #[arg(long)]
         image_sha256: Option<String>,
 
