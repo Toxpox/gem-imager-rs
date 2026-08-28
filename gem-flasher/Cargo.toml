@@ -4,6 +4,7 @@ description = "Library providing flashing capabilities for T3 Gemstone boards"
 version = "0.1.0"
 authors.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 repository.workspace = true
 license.workspace = true
 readme = "README.md"

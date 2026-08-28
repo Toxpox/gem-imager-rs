@@ -3,6 +3,7 @@ name = "gem-drivelist"
 version = "1.0.0"
 authors = ["Mazter Irwan <ir1keren@gmail.com>", "Ayush Singh <ayush@beagleboard.org>"]
 edition.workspace = true
+rust-version.workspace = true
 description = "This is basically a Rust implementation of [Balena's drivelist](https://github.com/balena-io-modules/drivelist)"
 keywords = ["drivelist", "balena", "drive", "list", "filesystem"]
 repository.workspace = true

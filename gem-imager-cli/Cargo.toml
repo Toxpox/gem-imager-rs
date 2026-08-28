@@ -4,6 +4,7 @@ description = "A streamlined tool for creating, flashing, and managing OS images
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 repository.workspace = true
 license.workspace = true
 

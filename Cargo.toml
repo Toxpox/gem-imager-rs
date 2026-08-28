@@ -25,6 +25,7 @@ codegen-units = 1
 [workspace.package]
 version = "0.9.0"
 edition = "2024"
+rust-version = "1.95"
 authors = ["T3 Gemstone Devteam <dev@t3gemstone.org>"]
 repository = "https://github.com/Toxpox/gem-imager-rs"
 license = "MIT"

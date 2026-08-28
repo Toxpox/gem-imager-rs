@@ -32,6 +32,43 @@ jobs:
     - name: Run tests
       run: make test
 
+  # `rust-version` is a promise to anyone building from source, but every other job installs
+  # `stable`, so nothing ever checked it. It was declared 1.88 while the tree needed 1.95, and the
+  # only way to find out was for a user on an older toolchain to hit it. Pin the declared version
+  # explicitly so the promise is tested rather than asserted.
+  msrv:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v7
+      with:
+        lfs: true
+    - name: Install dependencies
+      run: make setup-debian-deps
+    - name: Read declared MSRV
+      id: msrv
+      run: |
+        set -euo pipefail
+        version=$(cargo metadata --format-version 1 --no-deps | python3 -c '
+        import json, sys
+        pkgs = json.load(sys.stdin)["packages"]
+        declared = {p["rust_version"] for p in pkgs if p.get("rust_version")}
+        missing = sorted(p["name"] for p in pkgs if not p.get("rust_version"))
+        if missing:
+            sys.exit("workspace crates without rust-version: " + ", ".join(missing))
+        if len(declared) != 1:
+            sys.exit("workspace crates disagree on rust-version: " + ", ".join(sorted(declared)))
+        print(declared.pop())
+        ')
+        echo "Declared MSRV: ${version}"
+        echo "version=${version}" >> "$GITHUB_OUTPUT"
+    - name: Select rust toolchain
+      run: rustup toolchain install ${{ steps.msrv.outputs.version }} --profile minimal
+    - name: Use caching
+      uses: Swatinem/rust-cache@v2
+    - name: Check workspace on declared MSRV
+      run: cargo +${{ steps.msrv.outputs.version }} check --workspace --all-features --locked
+
   cargo-deny:
     runs-on: ubuntu-22.04
     strategy:

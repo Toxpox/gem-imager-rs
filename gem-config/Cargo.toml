@@ -3,6 +3,7 @@ name = "gem-config"
 version = "0.1.0"
 description = "A library providing abstractions for parsing and generating the T3 Gemstone image catalog"
 edition.workspace = true
+rust-version.workspace = true
 authors.workspace = true
 repository.workspace = true
 license.workspace = true

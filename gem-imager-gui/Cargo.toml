@@ -4,6 +4,7 @@ description = "The easiest way to install the latest operating system images for
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 repository.workspace = true
 license.workspace = true
 

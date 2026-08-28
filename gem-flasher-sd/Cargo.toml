@@ -3,6 +3,7 @@ name = "gem-flasher-sd"
 version = "3.0.0"
 description = "A library to flash OS images to SD Card"
 edition.workspace = true
+rust-version.workspace = true
 authors.workspace = true
 repository.workspace = true
 license.workspace = true

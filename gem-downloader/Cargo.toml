@@ -3,6 +3,7 @@ name = "gem-downloader"
 version = "0.2.0"
 description = "A simple async downloader for applications"
 edition.workspace = true
+rust-version.workspace = true
 authors.workspace = true
 repository.workspace = true
 license.workspace = true

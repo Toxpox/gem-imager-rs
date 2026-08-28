@@ -4,6 +4,7 @@ description = "Consoleless elevated WinUSB provisioning helper for T3 Gemstone I
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 repository.workspace = true
 license.workspace = true
 
