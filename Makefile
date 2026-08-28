@@ -194,23 +194,6 @@ _check_gui:
 	$(_CARGO_CHECK) --all-targets -p gem-imager-gui ${_RUST_ARGS_GUI} -F updater,pre-release \
 		${_CARGO_CHECK_ARGS}
 
-## housekeeping: check: Run code quality checks.
-.PHONY: check
-check: check-fmt check-cli check-gui
-
-## housekeeping: check-fmt: Verify canonical rustfmt formatting.
-.PHONY: check-fmt
-check-fmt:
-	${CARGO_PATH} fmt --all -- --check
-
-## housekeeping: check-cli: Run code quality checks on CLI.
-.PHONY: check-cli
-check-cli: _check_common _check_cli
-
-## housekeeping: check-gui: Run code quality checks on GUI.
-.PHONY: check-gui
-check-gui: _check_common _check_gui
-
 # Platform-gated code is invisible to a same-platform lint, so a `#[cfg(windows)]` block can carry
 # warnings for months and only surface when the Windows CI runner denies them. These crates have no
 # native C dependency, so they cross-lint from any host. PKG_CONFIG_ALLOW_CROSS lets libusb1-sys
@@ -241,6 +224,23 @@ check-cross:
 				--all-targets -p $$p --all-features -- -D warnings || exit 1; \
 		done; \
 	done
+
+## housekeeping: check: Run code quality checks.
+.PHONY: check
+check: check-fmt check-cli check-gui
+
+## housekeeping: check-fmt: Verify canonical rustfmt formatting.
+.PHONY: check-fmt
+check-fmt:
+	${CARGO_PATH} fmt --all -- --check
+
+## housekeeping: check-cli: Run code quality checks on CLI.
+.PHONY: check-cli
+check-cli: _check_common _check_cli
+
+## housekeeping: check-gui: Run code quality checks on GUI.
+.PHONY: check-gui
+check-gui: _check_common _check_gui
 
 ## housekeeping: check-scripts: Run the packaging-verifier self-tests.
 .PHONY: check-scripts

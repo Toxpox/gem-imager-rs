@@ -42,9 +42,9 @@
 		<category>Development</category>
 	</categories>
 
-	<url type="homepage">https://docs.t3gemstone.org</url>
+	<url type="homepage">https://docs.t3gemstone.org/en/introduction</url>
 	<url type="bugtracker">https://github.com/Toxpox/gem-imager-rs/issues</url>
-	<url type="contact">https://docs.t3gemstone.org/en</url>
+	<url type="contact">https://github.com/Toxpox</url>
 	<url type="contribute">https://github.com/Toxpox/gem-imager-rs/tree/main?tab=contributing-ov-file</url>
 	<url type="vcs-browser">https://github.com/Toxpox/gem-imager-rs</url>
 
