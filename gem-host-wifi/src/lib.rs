@@ -28,13 +28,13 @@ pub(crate) fn country_from_locale() -> Option<CountryHint> {
     }
 
     for key in ["LC_ALL", "LC_MESSAGES", "LANG"] {
-        if let Ok(value) = std::env::var(key) {
-            if let Some(code) = region_from_locale(&value) {
-                return Some(CountryHint {
-                    code,
-                    source: CountrySource::Locale,
-                });
-            }
+        if let Ok(value) = std::env::var(key)
+            && let Some(code) = region_from_locale(&value)
+        {
+            return Some(CountryHint {
+                code,
+                source: CountrySource::Locale,
+            });
         }
     }
     None

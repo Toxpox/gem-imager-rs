@@ -94,16 +94,13 @@ fn rejects_truncated_xz_header() {
 
     let result = OsImage::from_path(file.path(), ExtractGate::LocalFile);
 
-    match result {
-        Ok(mut img) => {
-            let mut out = Vec::new();
+    if let Ok(mut img) = result {
+        let mut out = Vec::new();
 
-            assert!(
-                img.read_to_end(&mut out).is_err(),
-                "truncated XZ stream unexpectedly succeeded"
-            );
-        }
-        Err(_) => {}
+        assert!(
+            img.read_to_end(&mut out).is_err(),
+            "truncated XZ stream unexpectedly succeeded"
+        );
     }
 }
 

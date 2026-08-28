@@ -154,7 +154,7 @@ fn distribution_sublist(name: &str, members: &[&Image], boards: &[&Board]) -> Op
         }
     }
 
-    releases.sort_by(|a, b| newest_release_date(&b.1).cmp(&newest_release_date(&a.1)));
+    releases.sort_by_key(|release| std::cmp::Reverse(newest_release_date(&release.1)));
 
     let mut subitems: Vec<OsListItem> = Vec::new();
 

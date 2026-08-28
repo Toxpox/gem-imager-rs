@@ -171,7 +171,6 @@ where
     )
     .map_err(failed)?;
     partition.flush().map_err(failed)?;
-    drop(partition);
 
     let mut sd = device.into_inner();
     sd.commit()
