@@ -53,11 +53,11 @@ windows-sys = { version = "0.61", features = ["Win32_Storage_FileSystem", "Win32
 
 [build-dependencies]
 embed-resource = "3.0"
-sha2 = "0.10"
+sha2 = "0.11"
 
 [dev-dependencies]
 httpmock = "0.8"
-sha2 = "0.10"
+sha2 = "0.11"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 gem-flasher = { path = "../gem-flasher", features = ["sd_linux_udev"] }

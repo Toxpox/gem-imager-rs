@@ -1,4 +1,4 @@
-use cipher::{BlockEncrypt, KeyInit, generic_array::GenericArray};
+use cipher::{Array, BlockCipherEncrypt, KeyInit};
 use sha_crypt::Sha512Params;
 
 use super::secret::{DerivedSecret, Secret};
@@ -54,8 +54,8 @@ pub(super) fn vnc_obfuscate(password: &Secret) -> Result<DerivedSecret, T3GemIni
     block[..plain.len()].copy_from_slice(plain);
 
     let key: [u8; 8] = VNC_FIXED_KEY.map(u8::reverse_bits);
-    let cipher = des::Des::new(&GenericArray::from(key));
-    let mut block = GenericArray::from(block);
+    let cipher = des::Des::new(&Array::from(key));
+    let mut block = Array::from(block);
     cipher.encrypt_block(&mut block);
 
     Ok(DerivedSecret::new(const_hex::encode(block)))
@@ -124,10 +124,8 @@ mod tests {
 
     #[test]
     fn the_des_primitive_is_standard_des() {
-        use cipher::generic_array::GenericArray;
-
-        let cipher = des::Des::new(&GenericArray::from([0u8; 8]));
-        let mut block = GenericArray::from([0u8; 8]);
+        let cipher = des::Des::new(&Array::from([0u8; 8]));
+        let mut block = Array::from([0u8; 8]);
         cipher.encrypt_block(&mut block);
 
         assert_eq!(const_hex::encode(block), "8ca64de9c1b123a7");
