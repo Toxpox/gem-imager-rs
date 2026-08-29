@@ -193,7 +193,27 @@ cargo test -p gem-imager-gui
 cargo test -p gem-imager-gui --features sd,dfu
 ```
 
-For T3 Gemstone software, images, and documentation, visit [t3gemstone.org](https://t3gemstone.org/en) and the [official documentation](https://docs.t3gemstone.org).
+## Documentation
+
+User documentation is published in English and Turkish at
+[docs.t3gemstone.org](https://docs.t3gemstone.org) and maintained in the
+[t3-docs](https://github.com/Toxpox/t3-docs) repository:
+
+| Page | English | Türkçe |
+| --- | --- | --- |
+| Introduction | [Introduction](https://docs.t3gemstone.org/en/imager/introduction) | [Giriş](https://docs.t3gemstone.org/tr/imager/introduction) |
+| Installation | [Installation](https://docs.t3gemstone.org/en/imager/installation) | [Kurulum](https://docs.t3gemstone.org/tr/imager/installation) |
+| Writing an image | [Writing an Image](https://docs.t3gemstone.org/en/imager/writing-an-image) | [İmaj Yazma](https://docs.t3gemstone.org/tr/imager/writing-an-image) |
+| Customization | [Customization](https://docs.t3gemstone.org/en/imager/customization) | [Özelleştirme](https://docs.t3gemstone.org/tr/imager/customization) |
+| Using eMMC | [Using eMMC](https://docs.t3gemstone.org/en/imager/emmc) | [eMMC Kullanımı](https://docs.t3gemstone.org/tr/imager/emmc) |
+
+When the application's user-facing behaviour changes, update those pages in `t3-docs`. UI strings
+quoted there must match `gem-i18n/src/lib.rs` exactly.
+
+Developer documentation lives in this repository: [CONTRIBUTING.md](CONTRIBUTING.md) for the
+development workflow and [PACKAGING.md](PACKAGING.md) for building packages.
+
+For T3 Gemstone software and images, visit [t3gemstone.org](https://t3gemstone.org/en).
 
 ## License
 

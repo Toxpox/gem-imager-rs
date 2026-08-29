@@ -1,170 +1,169 @@
-= Packaging Instructions for T3 Gemstone Imager
+# Packaging Instructions for T3 Gemstone Imager
 
-== Task system
+## Task system
 
-This project uses `+make+` as the task runner. For most people,
-running `+make help+` should be enough get a grasp regarding how to build and
+This project uses `make` as the task runner. For most people,
+running `make help` should be enough get a grasp regarding how to build and
 run the project.
 
-The repo contains a `+Makefile+` to help create the different supported
+The repo contains a `Makefile` to help create the different supported
 packages.
 
-== Packaging tools
+## Packaging tools
 
 This project uses
-https://crates.io/crates/cargo-packager[cargo-packager] to build the
+[cargo-packager](https://crates.io/crates/cargo-packager) to build the
 target packages. Install it first via:
 
-[source,sh]
-----
+```sh
 make setup-packaging-deps
-----
+```
 
-== Deb Package
+## Deb Package
 
 * CLI
 
-....
+```
 make package-cli-deb
-....
+```
 
 * GUI
 
-....
+```
 make package-gui-deb
-....
+```
 
-The target platform can be specified with `+TARGET+` environment
+The target platform can be specified with `TARGET` environment
 variable. Defaults to host target. Currently, the following targets have
 been tested: - x86_64-unknown-linux-gnu - aarch64-unknown-linux-gnu -
 armv7-unknown-linux-gnueabihf
 
-[NOTE]
-====
+<dl><dt><strong>📌 NOTE</strong></dt><dd>
+
 For different host/target pair, see link:#_cross_compilation[Cross
 Compilation]
-====
+</dd></dl>
 
-== AppImage
+## AppImage
 
-....
+```
 make package-gui-appimage
-....
+```
 
-The target platform can be specified with `+TARGET+` environment
+The target platform can be specified with `TARGET` environment
 variable. Defaults to host target. Currently, the following targets have
 been tested: - x86_64-unknown-linux-gnu - aarch64-unknown-linux-gnu
 
-[NOTE]
-====
+<dl><dt><strong>📌 NOTE</strong></dt><dd>
+
 For different host/target pair, see link:#_cross_compilation[Cross
 Compilation]
-====
+</dd></dl>
 
-== Linux Generic
+## Linux Generic
 
 Just a tarball of everything. Useful for creating packages that need to
 be maintained out of tree.
 
 * GUI
 
-....
+```
 make package-gui-pacman
-....
+```
 
 * CLI
 
-....
+```
 make package-cli-pacman
-....
+```
 
-The target platform can be specified with `+TARGET+` environment
+The target platform can be specified with `TARGET` environment
 variable. Defaults to host target. Currently, the following targets have
 been tested: - x86_64-unknown-linux-gnu - aarch64-unknown-linux-gnu -
 armv7-unknown-linux-gnueabihf
 
-[NOTE]
-====
+<dl><dt><strong>📌 NOTE</strong></dt><dd>
+
 For different host/target pair, see link:#_cross_compilation[Cross
 Compilation]
-====
+</dd></dl>
 
-== Windows Standalone Executable
+## Windows Standalone Executable
 
 * GUI
 
-....
+```
 make package-gui-portable-exe
-....
+```
 
-The target platform can be specified with `+TARGET+` environment
+The target platform can be specified with `TARGET` environment
 variable. Defaults to host target. Currently, the following targets have
 been tested: - x86_64-pc-windows-gnu - x86_64-pc-windows-msvc -
 aarch64-pc-windows-msvc
 
-[NOTE]
-====
+<dl><dt><strong>📌 NOTE</strong></dt><dd>
+
 For different host/target pair, see link:#_cross_compilation[Cross
 Compilation]
-====
+</dd></dl>
 
-== Windows Installer
+## Windows Installer
 
 * GUI
 
-....
+```
 make package-gui-wix
-....
+```
 
-The target platform can be specified with `+TARGET+` environment
+The target platform can be specified with `TARGET` environment
 variable. Defaults to host target. Currently, the following targets have
 been tested: - x86_64-pc-windows-msvc
 
-[NOTE]
-====
+<dl><dt><strong>📌 NOTE</strong></dt><dd>
+
 For different host/target pair, see link:#_cross_compilation[Cross
 Compilation]
-====
+</dd></dl>
 
-== MacOS DMG
+## MacOS DMG
 
 Build the package.
 
-....
+```
 make package-gui-dmg
-....
+```
 
-The target platform can be specified with `+TARGET+` environment
+The target platform can be specified with `TARGET` environment
 variable. Defaults to host target. Currently, the following targets have
 been tested: - x86_64-apple-darwin - aarch64-apple-darwin
 
 MacOS Package cannot be built on a non-MacOS host.
 
-== Creating all packages for a target
+## Creating all packages for a target
 
 Helpers are defined to build all pakcages with sane fetures for each target.
 
-....
+```
 make package-$(TARGET)
-....
+```
 
-The target platform can be specified with `+TARGET+` environment
+The target platform can be specified with `TARGET` environment
 variable. Supported values:
 
-- x86_64-unknown-linux-gnu 
-- aarch64-unknown-linux-gnu
-- x86_64-apple-darwin
-- aarch64-apple-darwin
-- x86_64-pc-windows-msvc
-- aarch64-pc-windows-msvc
+* x86_64-unknown-linux-gnu 
+* aarch64-unknown-linux-gnu
+* x86_64-apple-darwin
+* aarch64-apple-darwin
+* x86_64-pc-windows-msvc
+* aarch64-pc-windows-msvc
 
-== Cross Compilation
+## Cross Compilation
 
 Cross Compilation for linux is supported using
-https://github.com/cross-rs/cross[cross]. It is important to note that
-the git version of `+cross+` is required right now.
+[cross](https://github.com/cross-rs/cross). It is important to note that
+the git version of `cross` is required right now.
 
-....
+```
 cargo install cross --git https://github.com/cross-rs/cross
 RUST_BUILDER=$(which cross) make {recipe}
-....
+```
