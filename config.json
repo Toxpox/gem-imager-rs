@@ -2,7 +2,8 @@
 	"imager": {
 		"latest_version": "2.0.0",
 		"remote_configs": [
-			"https://packages.t3gemstone.org/images/list.json"
+			"https://packages.t3gemstone.org/images/list.json",
+			"https://raw.githubusercontent.com/beagleboard/distros/refs/heads/main/os_list.json"
 		],
 		"devices": []
 	},
