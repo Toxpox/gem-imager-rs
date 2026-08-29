@@ -82,11 +82,27 @@ pub enum TargetCommands {
         #[arg(long)]
         usb_enable_dhcp: bool,
 
+        /// Wi-Fi regulatory country as two letters, for example TR. Only used
+        /// by --geminit, which requires it whenever Wi-Fi is configured.
+        #[arg(long, requires = "wifi_ssid")]
+        wifi_country: Option<Box<str>>,
+
+        /// VNC password for desktop images. Only used by --geminit. The
+        /// protocol limits this to 8 characters.
+        #[arg(long, requires = "geminit")]
+        vnc_password: Option<Box<str>>,
+
         #[arg(long)]
         cloud_init: bool,
 
         #[arg(long)]
         sysconfig: bool,
+
+        /// Write T3 Gemstone's `config.ini`, which is the format its images
+        /// read on first boot. Without this the settings land in `sysconf.txt`
+        /// and a T3 board ignores them.
+        #[arg(long, conflicts_with_all = ["sysconfig", "cloud_init"])]
+        geminit: bool,
 
         #[arg(long)]
         file_destination: bool,

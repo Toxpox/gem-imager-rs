@@ -142,15 +142,22 @@ fn flash_internal(
             img,
             ssh_key,
             usb_enable_dhcp,
+            wifi_country,
+            vnc_password,
             sysconfig,
             cloud_init,
+            geminit,
             file_destination,
         } => {
             // TODO: Remove fallback in the future.
-            if !sysconfig && !cloud_init {
-                tracing::warn!("No config format specified. Using sysconfig by default");
+            if !sysconfig && !cloud_init && !geminit {
+                tracing::warn!(
+                    "No config format specified. Using sysconfig by default; \
+                     T3 Gemstone images need --geminit"
+                );
             }
 
+            let user_password_for_geminit = user_password.clone();
             let user = user_name.map(|x| (x, user_password.unwrap()));
             let wifi = wifi_ssid.map(|x| (x, wifi_password.unwrap()));
 
@@ -169,7 +176,17 @@ fn flash_internal(
             let img_path = resolve_image(&img, image_sha256.as_deref(), chan.is_some())?;
             tracing::info!("Resolved image: {}", img_path.display());
 
-            let customization = if hostname.is_some()
+            let customization = if geminit {
+                build_geminit(
+                    hostname,
+                    timezone,
+                    keymap,
+                    user_password_for_geminit,
+                    wifi.clone(),
+                    wifi_country,
+                    vnc_password,
+                )?
+            } else if hostname.is_some()
                 || timezone.is_some()
                 || keymap.is_some()
                 || user.is_some()
@@ -232,6 +249,76 @@ fn flash_internal(
             }
         }
     }
+}
+
+fn build_geminit(
+    hostname: Option<Box<str>>,
+    timezone: Option<Box<str>>,
+    keymap: Option<Box<str>>,
+    user_password: Option<Box<str>>,
+    wifi: Option<(Box<str>, Box<str>)>,
+    wifi_country: Option<Box<str>>,
+    vnc_password: Option<Box<str>>,
+) -> anyhow::Result<gem_flasher::sd::FlashingSdLinuxConfig> {
+    use gem_flasher::t3_gem_init as t3;
+
+    let hostname = hostname
+        .as_deref()
+        .map(t3::Hostname::parse)
+        .transpose()
+        .map_err(|err| anyhow::anyhow!("--hostname: {err}"))?;
+
+    let timezone = timezone
+        .as_deref()
+        .map(t3::Timezone::parse)
+        .transpose()
+        .map_err(|err| anyhow::anyhow!("--timezone: {err}"))?;
+
+    let keyboard_layout = keymap
+        .as_deref()
+        .map(t3::KeyboardLayout::parse)
+        .transpose()
+        .map_err(|err| anyhow::anyhow!("--keymap: {err}"))?;
+
+    let wifi = wifi
+        .map(|(ssid, password)| {
+            let country = wifi_country.as_deref().ok_or_else(|| {
+                anyhow::anyhow!(
+                    "--wifi-country is required with --geminit when Wi-Fi is configured"
+                )
+            })?;
+
+            Ok::<_, anyhow::Error>(t3::WifiSettings {
+                ssid: t3::Ssid::parse(&ssid)
+                    .map_err(|err| anyhow::anyhow!("--wifi-ssid: {err}"))?,
+                password: t3::Secret::new(password.into_string()),
+                country: t3::WifiCountry::parse(country)
+                    .map_err(|err| anyhow::anyhow!("--wifi-country: {err}"))?,
+            })
+        })
+        .transpose()?;
+
+    let vnc = vnc_password.map(|password| t3::VncSettings {
+        password: t3::Secret::new(password.into_string()),
+    });
+
+    let config = t3::T3GemInitConfig::new()
+        .with_hostname(hostname)
+        .with_user_password(user_password.map(|p| t3::Secret::new(p.into_string())))
+        .with_wifi(wifi)
+        .with_timezone(timezone)
+        .with_keyboard_layout(keyboard_layout)
+        .with_vnc(vnc);
+
+    if config.vnc_secret_survives_first_boot() {
+        tracing::warn!(
+            "The board's first-boot script does not remove the VNC password from the boot \
+             partition, so it stays readable on the card"
+        );
+    }
+
+    gem_flasher::sd::FlashingSdLinuxConfig::t3_gem_init(&config)
+        .map_err(|err| anyhow::anyhow!("building config.ini: {err}"))
 }
 
 #[cfg(target_os = "macos")]
@@ -667,8 +754,11 @@ mod tests {
             img: "https://gem-imager-cli.invalid/os.img.xz".to_string(),
             ssh_key: None,
             usb_enable_dhcp: false,
+            wifi_country: None,
+            vnc_password: None,
             sysconfig: true,
             cloud_init: false,
+            geminit: false,
             file_destination: false,
         };
 

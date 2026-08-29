@@ -64,6 +64,7 @@ pub struct FlashingSdLinuxConfig(Vec<(Box<str>, Box<[u8]>, Verification)>);
 enum Verification {
     None,
     ReadBack,
+    Directory,
 }
 
 fn sysconf_w(sysconf: &mut Vec<u8>, key: &str, value: &str) {
@@ -114,6 +115,11 @@ impl FlashingSdLinuxConfig {
                         "sysconf.txt".to_string().into(),
                         content.into(),
                         Verification::None,
+                    ),
+                    (
+                        "services".to_string().into(),
+                        Box::default(),
+                        Verification::Directory,
                     ),
                     (
                         format!("services/{ssid}.psk").into(),
@@ -361,6 +367,7 @@ where
                 let content = match v {
                     Verification::None => gem_flasher_sd::ContentType::DataAppend(d),
                     Verification::ReadBack => gem_flasher_sd::ContentType::VerifiedData(d),
+                    Verification::Directory => gem_flasher_sd::ContentType::Dir,
                 };
                 (p, content)
             });
