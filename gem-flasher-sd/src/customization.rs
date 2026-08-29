@@ -34,7 +34,10 @@ impl ParitionType {
                     .open_from_device(&mut dst)
                     .map_err(|_| crate::Error::InvalidPartitionTable)?;
 
-                let partition_2 = disk.partitions().get(&2).unwrap();
+                let partition_2 = disk
+                    .partitions()
+                    .get(&2)
+                    .ok_or(crate::Error::InvalidBootPartition)?;
 
                 let start_offset: u64 =
                     partition_2.first_lba * gpt::disk::DEFAULT_SECTOR_SIZE.as_u64();
@@ -199,5 +202,45 @@ impl ParitionType {
         partition.unmount()?;
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn gpt_disk_without_partition_two() -> std::io::Cursor<Vec<u8>> {
+        const DISK_SIZE: usize = 16 * 1024 * 1024;
+
+        let mut disk = std::io::Cursor::new(vec![0u8; DISK_SIZE]);
+        let mut gpt = gpt::GptConfig::new()
+            .writable(true)
+            .logical_block_size(gpt::disk::LogicalBlockSize::Lb512)
+            .create_from_device(&mut disk, None)
+            .unwrap();
+
+        gpt.add_partition(
+            "only-partition",
+            4 * 1024 * 1024,
+            gpt::partition_types::BASIC,
+            0,
+            None,
+        )
+        .unwrap();
+        gpt.write().unwrap();
+
+        disk.set_position(0);
+        disk
+    }
+
+    #[test]
+    fn a_gpt_image_without_the_boot_partition_is_rejected_instead_of_panicking() {
+        let disk = gpt_disk_without_partition_two();
+
+        match ParitionType::Boot.open(disk) {
+            Ok(_) => panic!("a GPT image without partition 2 must not be customized"),
+            Err(Error::InvalidBootPartition) => {}
+            Err(other) => panic!("expected InvalidBootPartition, got {other:?}"),
+        }
     }
 }
