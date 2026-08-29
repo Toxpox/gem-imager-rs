@@ -267,7 +267,7 @@ where
         self.buf.as_mut_slice()[start..(start + count)].copy_from_slice(&buf[..count]);
 
         self.f.seek(io::SeekFrom::Start(self.cache_offset))?;
-        self.f.write(self.buf.as_slice())?;
+        self.f.write_all(self.buf.as_slice())?;
 
         self.offset += count as u64;
 
@@ -684,6 +684,58 @@ mod tests {
         let error = PublishLayout::publish_layout(&mut sd)
             .expect_err("a corrupted physical layout block must fail publication");
         assert!(matches!(error, crate::Error::LayoutReadBackMismatch));
+    }
+
+    #[derive(Debug)]
+    struct ShortWriter {
+        inner: std::io::Cursor<Vec<u8>>,
+        limit: usize,
+    }
+
+    impl Read for ShortWriter {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            self.inner.read(buf)
+        }
+    }
+
+    impl Write for ShortWriter {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            let take = buf.len().min(self.limit);
+            self.inner.write(&buf[..take])
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            self.inner.flush()
+        }
+    }
+
+    impl Seek for ShortWriter {
+        fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
+            self.inner.seek(pos)
+        }
+    }
+
+    #[test]
+    fn a_short_device_write_is_not_reported_as_a_complete_one() {
+        const OFFSET: u64 = 2048;
+
+        let backing = ShortWriter {
+            inner: std::io::Cursor::new(vec![0u8; FILE_LEN]),
+            limit: 512,
+        };
+        let mut device = super::DeviceWrapper::new(backing).unwrap();
+
+        device.seek(SeekFrom::Start(OFFSET)).unwrap();
+        device.write_all(&[0xa5; 64]).unwrap();
+        device.flush().unwrap();
+
+        let backing = device.into_inner().inner.into_inner();
+        let start = OFFSET as usize;
+        assert_eq!(
+            &backing[start..start + 64],
+            [0xa5; 64],
+            "customization bytes were reported as written but never reached the device"
+        );
     }
 
     #[test]
