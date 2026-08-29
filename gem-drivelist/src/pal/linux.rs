@@ -27,6 +27,9 @@ struct Device {
     pttype: Option<String>,
     #[serde(default)]
     children: Vec<Child>,
+    mountpoint: Option<String>,
+    fssize: Option<FsSize>,
+    fsavail: Option<FsSize>,
     label: Option<String>,
     vendor: Option<String>,
     model: Option<String>,
@@ -75,33 +78,63 @@ impl Device {
     fn is_system(&self) -> bool {
         !(self.is_removable() || self.is_virtual())
     }
+
+    fn mountpoints(self) -> Vec<MountPoint> {
+        let whole_disk = self
+            .mountpoint
+            .filter(|path| !path.is_empty())
+            .map(|path| MountPoint {
+                path,
+                label: self.label.clone(),
+                total_bytes: self.fssize.map(Into::into),
+                available_bytes: self.fsavail.map(Into::into),
+            });
+
+        whole_disk
+            .into_iter()
+            .chain(self.children.into_iter().map(Into::into))
+            .collect()
+    }
 }
 
 impl From<Device> for DeviceDescriptor {
-    fn from(value: Device) -> Self {
+    fn from(mut value: Device) -> Self {
         let is_scsi = value.is_scsi();
         let description = value.description();
         let is_virtual = value.is_virtual();
         let is_removable = value.is_removable();
         let is_system = value.is_system();
+        let is_usb = value
+            .subsystems
+            .as_deref()
+            .is_some_and(|x| x.contains("usb"));
+        let bus_type = Some(value.tran.as_deref().unwrap_or("UNKNOWN").to_uppercase());
+        let name = std::mem::take(&mut value.name);
+        let kname = std::mem::take(&mut value.kname);
+        let size = value.size;
+        let is_readonly = value.ro;
+        let block_size = value.phy_sec;
+        let logical_block_size = value.log_sec;
+        let partition_table_type = value.pttype.take();
+        let mountpoints = value.mountpoints();
 
         Self {
             enumerator: "lsblk:json".to_string(),
-            bus_type: Some(value.tran.as_deref().unwrap_or("UNKNOWN").to_uppercase()),
-            device: value.name,
-            raw: value.kname,
+            bus_type,
+            device: name,
+            raw: kname,
             is_virtual,
             is_scsi,
-            is_usb: value.subsystems.is_some_and(|x| x.contains("usb")),
-            is_readonly: value.ro,
+            is_usb,
+            is_readonly,
             description,
-            size: value.size,
-            block_size: value.phy_sec,
-            logical_block_size: value.log_sec,
+            size,
+            block_size,
+            logical_block_size,
             is_removable,
             is_system,
-            partition_table_type: value.pttype,
-            mountpoints: value.children.into_iter().map(Into::into).collect(),
+            partition_table_type,
+            mountpoints,
             ..Default::default()
         }
     }
@@ -435,6 +468,58 @@ mod tests {
         assert!(!d.is_virtual);
         assert!(!d.is_removable);
         assert!(d.is_system);
+    }
+
+    #[test]
+    fn a_filesystem_mounted_on_the_whole_disk_is_reported() {
+        let d = &descriptors(
+            r#"[{
+                "name":"/dev/sdb","kname":"/dev/sdb",
+                "size":1000,"tran":"usb","subsystems":"block:scsi:usb","ro":false,
+                "phy-sec":512,"log-sec":512,"rm":true,"hotplug":true,
+                "pttype":null,"label":"DATA","vendor":null,"model":null,
+                "mountpoint":"/mnt/stick","fssize":900,"fsavail":400
+            }]"#,
+        )[0];
+
+        assert_eq!(
+            d.mountpoints.len(),
+            1,
+            "a partitionless mounted disk must not look unmounted"
+        );
+        assert_eq!(d.mountpoints[0].path, "/mnt/stick");
+    }
+
+    #[test]
+    fn whole_disk_and_partition_mounts_are_both_reported() {
+        let d = &descriptors(
+            r#"[{
+                "name":"/dev/sdb","kname":"/dev/sdb",
+                "size":1000,"tran":"usb","subsystems":"block:scsi:usb","ro":false,
+                "phy-sec":512,"log-sec":512,"rm":true,"hotplug":true,
+                "pttype":"dos","label":null,"vendor":null,"model":null,
+                "mountpoint":"/mnt/whole",
+                "children":[{"mountpoint":"/mnt/part","label":"BOOT"}]
+            }]"#,
+        )[0];
+
+        let paths: Vec<&str> = d.mountpoints.iter().map(|m| m.path.as_str()).collect();
+        assert_eq!(paths, ["/mnt/whole", "/mnt/part"]);
+    }
+
+    #[test]
+    fn an_unmounted_disk_reports_no_mountpoints() {
+        let d = &descriptors(
+            r#"[{
+                "name":"/dev/sdb","kname":"/dev/sdb",
+                "size":1000,"tran":"usb","subsystems":"block:scsi:usb","ro":false,
+                "phy-sec":512,"log-sec":512,"rm":true,"hotplug":true,
+                "pttype":null,"label":null,"vendor":null,"model":null,
+                "mountpoint":null
+            }]"#,
+        )[0];
+
+        assert!(d.mountpoints.is_empty());
     }
 
     #[test]
