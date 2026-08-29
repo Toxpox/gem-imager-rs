@@ -1067,3 +1067,70 @@ fn copied_board_json_round_trips_as_a_catalog_entry() {
     serde_json::from_str::<gem_config::config::Device>(&json)
         .expect("copied JSON should deserialize as a catalog device entry");
 }
+
+fn board(name: &str, tag: &str) -> gem_config::config::Device {
+    gem_config::config::Device {
+        name: name.to_string(),
+        tags: std::collections::HashSet::from([tag.to_string()]),
+        icon: None,
+        description: name.to_string(),
+        flasher: gem_config::config::Flasher::SdCard,
+        emmc_dfu: false,
+        documentation: None,
+        instructions: None,
+        specification: vec![],
+        oshw: None,
+    }
+}
+
+#[test]
+#[cfg_attr(
+    not(feature = "sd"),
+    ignore = "needs `sd`: fixture boards use Flasher::SdCard"
+)]
+fn the_t3_board_is_listed_first_and_the_rest_stay_alphabetical() {
+    let db = Db::new().expect("Failed to create DB");
+    db.init().expect("DB initialization should succeed");
+
+    let shipped: Vec<String> = db
+        .board_list("")
+        .expect("Fetching board list should succeed")
+        .into_iter()
+        .map(|item| item.name)
+        .collect();
+
+    let mut imager = gem_config::config::Imager::default();
+    imager.devices.push(board("Zeta Board", "zeta"));
+    imager.devices.push(board("Alpha Board", "alpha"));
+    imager
+        .devices
+        .push(board("T3-GEM-O1", gem_config::t3::T3_BOARD_TAG));
+    imager.devices.push(board("Middle Board", "middle"));
+
+    db.add_config(
+        Config {
+            imager,
+            os_list: vec![],
+        },
+        None,
+    )
+    .expect("adding the config should succeed");
+
+    let names: Vec<String> = db
+        .board_list("")
+        .expect("Fetching board list should succeed")
+        .into_iter()
+        .map(|item| item.name)
+        .collect();
+
+    assert_eq!(
+        names.first().map(String::as_str),
+        Some("T3-GEM-O1"),
+        "the T3 board must head the list; shipped boards were {shipped:?}, list is {names:?}"
+    );
+
+    let rest: Vec<&str> = names.iter().skip(1).map(String::as_str).collect();
+    let mut sorted = rest.clone();
+    sorted.sort_by_key(|name| name.to_lowercase());
+    assert_eq!(rest, sorted, "the remaining boards must stay alphabetical");
+}

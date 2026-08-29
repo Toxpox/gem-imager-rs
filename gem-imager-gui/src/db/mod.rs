@@ -570,10 +570,19 @@ impl Db {
                 (SELECT group_concat(t.tag, char(31))
                  FROM board_tags t WHERE t.board_id = b.id) AS tags
             FROM boards b
-            WHERE b.name LIKE $1 COLLATE NOCASE"#,
+            WHERE b.name LIKE $1 COLLATE NOCASE
+            ORDER BY
+                EXISTS (
+                    SELECT 1 FROM board_tags t
+                    WHERE t.board_id = b.id AND t.tag = $2
+                ) DESC,
+                b.name COLLATE NOCASE"#,
         )?;
         let res = stmt
-            .query_map([format!("%{}%", search)], BoardListItem::from_row)?
+            .query_map(
+                rusqlite::params![format!("%{}%", search), gem_config::t3::T3_BOARD_TAG],
+                BoardListItem::from_row,
+            )?
             .map(|x| x.unwrap())
             .collect();
 
