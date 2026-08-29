@@ -113,12 +113,89 @@ fn vec_skip_error_drops_malformed_items() {
 }
 
 #[test]
+fn retain_device_tag_prunes_other_boards_images_and_empty_sublists() {
+    let board = |name: &str, tag: &str| {
+        format!(
+            r#"{{
+                "name": "{name}",
+                "tags": ["{tag}"],
+                "description": "{name}",
+                "flasher": "SdCard",
+                "documentation": null,
+                "instructions": null,
+                "oshw": null
+            }}"#
+        )
+    };
+    let image = |name: &str, tag: &str| {
+        OS_IMAGE_JSON
+            .replace("Test Image", name)
+            .replace(r#"["board-a", "board-b"]"#, &format!(r#"["{tag}"]"#))
+    };
+
+    let doc = format!(
+        r#"{{
+            "imager": {{
+                "devices": [{}, {}]
+            }},
+            "os_list": [
+                {},
+                {},
+                {{
+                    "name": "Mixed",
+                    "description": "nested list",
+                    "icon": "https://example.com/mixed.png",
+                    "subitems": [{}, {}]
+                }},
+                {{
+                    "name": "Other only",
+                    "description": "must disappear",
+                    "icon": "https://example.com/other.png",
+                    "subitems": [{}]
+                }},
+                {}
+            ]
+        }}"#,
+        board("Wanted board", "wanted"),
+        board("Other board", "other"),
+        image("Wanted top-level", "wanted"),
+        image("Other top-level", "other"),
+        image("Wanted nested", "wanted"),
+        image("Other nested", "other"),
+        image("Other nested only", "other"),
+        OS_REMOTE_SUBLIST_JSON.replace("board-a", "wanted"),
+    );
+
+    let mut config: Config = serde_json::from_str(&doc).expect("config should deserialize");
+    config.retain_device_tag("wanted");
+
+    assert_eq!(config.imager.devices.len(), 1);
+    assert_eq!(config.imager.devices[0].name, "Wanted board");
+    assert_eq!(config.image_count(), 2);
+    assert_eq!(
+        config.os_list.len(),
+        3,
+        "image, non-empty sublist, remote sublist"
+    );
+
+    let OsListItem::SubList(sublist) = &config.os_list[1] else {
+        panic!("the mixed sublist should remain");
+    };
+    assert_eq!(sublist.subitems.len(), 1);
+    assert!(
+        matches!(&sublist.subitems[0], OsListItem::Image(image) if image.name == "Wanted nested")
+    );
+}
+
+#[test]
 fn init_format_serde_strings() {
     let cases = [
         (InitFormat::None, "\"none\""),
         (InitFormat::Sysconf, "\"sysconf\""),
         (InitFormat::Armbian, "\"armbian\""),
         (InitFormat::CloudInit, "\"cloudinit\""),
+        (InitFormat::GemInit, "\"geminit\""),
+        (InitFormat::GemInitDesktop, "\"geminit-desktop\""),
     ];
     for (variant, expected) in cases {
         assert_eq!(serde_json::to_string(&variant).unwrap(), expected);
@@ -127,6 +204,43 @@ fn init_format_serde_strings() {
             variant
         );
     }
+}
+
+#[test]
+fn init_format_display_matches_the_wire_format() {
+    for variant in InitFormat::ALL {
+        let wire = serde_json::to_string(&variant).unwrap();
+        let wire = wire.trim_matches('"');
+
+        assert_eq!(
+            variant.to_string(),
+            wire,
+            "Display for {variant:?} disagrees with its serde representation; \
+             a displayed value fed back into a parser would be rejected"
+        );
+
+        assert_eq!(
+            wire.parse::<InitFormat>().unwrap(),
+            variant,
+            "{variant:?} does not survive a Display -> FromStr round trip"
+        );
+    }
+}
+
+#[test]
+fn init_format_rejects_an_unknown_string() {
+    assert!("sysconfig".parse::<InitFormat>().is_err());
+    assert!("".parse::<InitFormat>().is_err());
+    assert!(serde_json::from_str::<InitFormat>("\"sysconfig\"").is_err());
+}
+
+#[test]
+fn init_format_still_accepts_the_previous_desktop_spelling() {
+    assert_eq!(
+        serde_json::from_str::<InitFormat>("\"geminitdesktop\"").unwrap(),
+        InitFormat::GemInitDesktop,
+        "a catalogue written against the old lowercase spelling must keep parsing"
+    );
 }
 
 #[test]
