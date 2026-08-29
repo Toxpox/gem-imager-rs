@@ -3,6 +3,47 @@ use std::process::Command;
 use crate::device::{DeviceDescriptor, MountPoint};
 use serde::Deserialize;
 
+const OS_MOUNTS: &[&str] = &[
+    "/",
+    "/boot",
+    "/boot/efi",
+    "/efi",
+    "/usr",
+    "/var",
+    "/etc",
+    "/nix",
+];
+
+#[derive(Debug, Default)]
+pub(crate) struct OsMounts {
+    mounts: Vec<String>,
+}
+
+impl OsMounts {
+    pub(crate) fn current() -> Self {
+        Self::from_mountinfo(&std::fs::read_to_string("/proc/self/mountinfo").unwrap_or_default())
+    }
+
+    fn from_mountinfo(mountinfo: &str) -> Self {
+        let mounts = mountinfo
+            .lines()
+            .filter_map(|line| line.split_whitespace().nth(4))
+            .filter(|mount| OS_MOUNTS.contains(mount))
+            .map(str::to_owned)
+            .collect();
+
+        Self { mounts }
+    }
+
+    fn claims(&self, mount: &str) -> bool {
+        if mount == "[SWAP]" {
+            return true;
+        }
+
+        self.mounts.iter().any(|os_mount| os_mount == mount)
+    }
+}
+
 #[derive(Deserialize, Debug)]
 struct Devices {
     blockdevices: Vec<Device>,
@@ -25,6 +66,10 @@ struct Device {
     log_sec: u32,
     rm: bool,
     pttype: Option<String>,
+    #[serde(default, deserialize_with = "empty_string_as_none")]
+    serial: Option<String>,
+    #[serde(default, deserialize_with = "empty_string_as_none")]
+    wwn: Option<String>,
     #[serde(default)]
     children: Vec<Child>,
     mountpoint: Option<String>,
@@ -79,6 +124,17 @@ impl Device {
         !(self.is_removable() || self.is_virtual())
     }
 
+    fn holds_os_mount(&self, os_mounts: &OsMounts) -> bool {
+        std::iter::once(self.mountpoint.as_deref())
+            .chain(
+                self.children
+                    .iter()
+                    .map(|child| child.mountpoint.as_deref()),
+            )
+            .flatten()
+            .any(|mount| os_mounts.claims(mount))
+    }
+
     fn mountpoints(self) -> Vec<MountPoint> {
         let whole_disk = self
             .mountpoint
@@ -97,13 +153,14 @@ impl Device {
     }
 }
 
-impl From<Device> for DeviceDescriptor {
-    fn from(mut value: Device) -> Self {
+impl Device {
+    fn into_descriptor(mut self, os_mounts: &OsMounts) -> DeviceDescriptor {
+        let value = &mut self;
         let is_scsi = value.is_scsi();
         let description = value.description();
         let is_virtual = value.is_virtual();
         let is_removable = value.is_removable();
-        let is_system = value.is_system();
+        let is_system = value.is_system() || value.holds_os_mount(os_mounts);
         let is_usb = value
             .subsystems
             .as_deref()
@@ -116,9 +173,11 @@ impl From<Device> for DeviceDescriptor {
         let block_size = value.phy_sec;
         let logical_block_size = value.log_sec;
         let partition_table_type = value.pttype.take();
-        let mountpoints = value.mountpoints();
+        let serial = value.serial.take();
+        let wwn = value.wwn.take();
+        let mountpoints = self.mountpoints();
 
-        Self {
+        DeviceDescriptor {
             enumerator: "lsblk:json".to_string(),
             bus_type,
             device: name,
@@ -135,6 +194,8 @@ impl From<Device> for DeviceDescriptor {
             is_system,
             partition_table_type,
             mountpoints,
+            serial,
+            wwn,
             ..Default::default()
         }
     }
@@ -181,7 +242,8 @@ impl From<Child> for MountPoint {
 }
 
 const COLUMNS: &str = "NAME,KNAME,SIZE,TRAN,SUBSYSTEMS,RO,RM,HOTPLUG,PHY-SEC,LOG-SEC,\
-                       PTTYPE,LABEL,VENDOR,MODEL,MOUNTPOINT,FSSIZE,FSAVAIL,PARTLABEL";
+                       PTTYPE,LABEL,VENDOR,MODEL,MOUNTPOINT,FSSIZE,FSAVAIL,PARTLABEL,\
+                       SERIAL,WWN";
 
 pub(crate) fn lsblk() -> crate::Result<Vec<DeviceDescriptor>> {
     let output = Command::new("lsblk")
@@ -195,7 +257,13 @@ pub(crate) fn lsblk() -> crate::Result<Vec<DeviceDescriptor>> {
 
     let res: Devices = serde_json::from_slice(&output.stdout).unwrap();
 
-    Ok(res.blockdevices.into_iter().map(Into::into).collect())
+    let os_mounts = OsMounts::current();
+
+    Ok(res
+        .blockdevices
+        .into_iter()
+        .map(|device| device.into_descriptor(&os_mounts))
+        .collect())
 }
 
 fn empty_string_as_none<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
@@ -272,13 +340,28 @@ mod tests {
         }"#;
 
         let res: super::Devices = serde_json::from_str(data).unwrap();
-        let _: Vec<DeviceDescriptor> = res.blockdevices.into_iter().map(Into::into).collect();
+        let os_mounts = super::OsMounts::default();
+        let _: Vec<DeviceDescriptor> = res
+            .blockdevices
+            .into_iter()
+            .map(|device| device.into_descriptor(&os_mounts))
+            .collect();
     }
 
     fn descriptors(blockdevices: &str) -> Vec<DeviceDescriptor> {
+        descriptors_with_os_mounts(blockdevices, &super::OsMounts::default())
+    }
+
+    fn descriptors_with_os_mounts(
+        blockdevices: &str,
+        os_mounts: &super::OsMounts,
+    ) -> Vec<DeviceDescriptor> {
         let data = format!(r#"{{"blockdevices":{blockdevices}}}"#);
         let res: super::Devices = serde_json::from_str(&data).unwrap();
-        res.blockdevices.into_iter().map(Into::into).collect()
+        res.blockdevices
+            .into_iter()
+            .map(|device| device.into_descriptor(os_mounts))
+            .collect()
     }
 
     #[test]
@@ -468,6 +551,81 @@ mod tests {
         assert!(!d.is_virtual);
         assert!(!d.is_removable);
         assert!(d.is_system);
+    }
+
+    const REMOVABLE_BOOT_DISK: &str = r#"[{
+        "name":"/dev/sda","kname":"/dev/sda",
+        "size":32000000000,"tran":"usb","subsystems":"block:scsi:usb","ro":false,
+        "phy-sec":512,"log-sec":512,"rm":true,"hotplug":true,
+        "pttype":"gpt","label":null,"vendor":null,"model":null,
+        "mountpoint":null,
+        "children":[
+            {"mountpoint":"/boot","label":"BOOT"},
+            {"mountpoint":"/","label":"ROOT"}
+        ]
+    }]"#;
+
+    #[test]
+    fn a_removable_disk_carrying_the_running_system_is_not_offered_as_a_target() {
+        let os_mounts = super::OsMounts::from_mountinfo(
+            "31 1 259:2 / / rw,relatime shared:1 - ext4 /dev/sda2 rw\n             32 31 259:1 / /boot rw,relatime shared:2 - vfat /dev/sda1 rw\n",
+        );
+        let d = &descriptors_with_os_mounts(REMOVABLE_BOOT_DISK, &os_mounts)[0];
+
+        assert!(
+            d.is_system,
+            "a USB disk holding / and /boot must be treated as the system disk"
+        );
+    }
+
+    #[test]
+    fn a_removable_disk_without_os_mounts_stays_writable() {
+        let os_mounts = super::OsMounts::from_mountinfo(
+            "31 1 259:2 / / rw,relatime shared:1 - ext4 /dev/nvme0n1p2 rw\n",
+        );
+        let d = &descriptors_with_os_mounts(
+            r#"[{
+                "name":"/dev/sdb","kname":"/dev/sdb",
+                "size":32000000000,"tran":"usb","subsystems":"block:scsi:usb","ro":false,
+                "phy-sec":512,"log-sec":512,"rm":true,"hotplug":true,
+                "pttype":"dos","label":null,"vendor":null,"model":null,
+                "mountpoint":null,
+                "children":[{"mountpoint":"/media/card","label":"BOOT"}]
+            }]"#,
+            &os_mounts,
+        )[0];
+
+        assert!(
+            !d.is_system,
+            "an ordinary SD card must stay selectable as a flash target"
+        );
+    }
+
+    #[test]
+    fn a_disk_holding_swap_is_treated_as_a_system_disk() {
+        let d = &descriptors(
+            r#"[{
+                "name":"/dev/sdc","kname":"/dev/sdc",
+                "size":32000000000,"tran":"usb","subsystems":"block:scsi:usb","ro":false,
+                "phy-sec":512,"log-sec":512,"rm":true,"hotplug":true,
+                "pttype":"gpt","label":null,"vendor":null,"model":null,
+                "mountpoint":null,
+                "children":[{"mountpoint":"[SWAP]","label":null}]
+            }]"#,
+        )[0];
+
+        assert!(d.is_system, "erasing active swap would crash the host");
+    }
+
+    #[test]
+    fn os_mounts_ignores_unrelated_mount_points() {
+        let os_mounts = super::OsMounts::from_mountinfo(
+            "31 1 259:2 / /media/usb rw,relatime shared:1 - ext4 /dev/sdb1 rw\n             32 31 259:1 / /home rw,relatime shared:2 - ext4 /dev/sdb2 rw\n",
+        );
+
+        assert!(!os_mounts.claims("/media/usb"));
+        assert!(!os_mounts.claims("/home"));
+        assert!(!os_mounts.claims("/"));
     }
 
     #[test]
