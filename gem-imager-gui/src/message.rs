@@ -733,6 +733,11 @@ fn localized_flash_error(lang: gem_i18n::Lang, technical: &str) -> String {
             gem_i18n::Msg::DestinationTooSmallTitle,
             gem_i18n::Msg::DestinationTooSmallBody,
         )
+    } else if lower.contains("a different device now occupies this path") {
+        (
+            gem_i18n::Msg::DestinationChangedTitle,
+            gem_i18n::Msg::DestinationChangedBody,
+        )
     } else if lower.contains("not a recognised removable device") {
         (
             gem_i18n::Msg::UnknownDestinationTitle,
@@ -781,6 +786,19 @@ mod i18n_tests {
         assert!(tr.contains("yeniden indirin"));
         assert!(!en.contains("deadbeef"));
         assert!(!tr.contains("deadbeef"));
+    }
+
+    #[test]
+    fn a_swapped_card_is_explained_in_both_languages() {
+        let technical = "Refusing to write to \"Generic SD Card\": a different device now \
+                         occupies this path. Reselect the destination and try again.";
+
+        let en = localized_flash_error(Lang::En, technical);
+        let tr = localized_flash_error(Lang::Tr, technical);
+
+        assert!(en.contains("Reselect the destination"), "{en}");
+        assert!(tr.contains("Hedefi yeniden seçip"), "{tr}");
+        assert_ne!(en, tr);
     }
 
     #[test]

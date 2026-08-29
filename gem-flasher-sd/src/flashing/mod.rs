@@ -183,7 +183,7 @@ fn verify_written(
     Ok(())
 }
 
-fn guard_target(path: &std::path::Path) -> Result<Option<u64>> {
+fn guard_target(path: &std::path::Path, expected: &crate::DeviceIdentity) -> Result<Option<u64>> {
     let dev = crate::devices(false).into_iter().find(|d| d.path == path);
 
     if dev.is_none() {
@@ -192,16 +192,25 @@ fn guard_target(path: &std::path::Path) -> Result<Option<u64>> {
         });
     }
 
-    evaluate_target(dev.as_ref())
+    evaluate_target(dev.as_ref(), expected)
 }
 
-fn evaluate_target(dev: Option<&crate::Device>) -> Result<Option<u64>> {
+fn evaluate_target(
+    dev: Option<&crate::Device>,
+    expected: &crate::DeviceIdentity,
+) -> Result<Option<u64>> {
     let Some(dev) = dev else {
         return Ok(None);
     };
 
     if dev.is_system {
         return Err(crate::Error::SystemDisk {
+            name: dev.name.clone().into(),
+        });
+    }
+
+    if !dev.identity.matches(expected) {
+        return Err(crate::Error::DestinationChanged {
             name: dev.name.clone().into(),
         });
     }
@@ -232,8 +241,8 @@ where
                 .open(path)?;
             flash_internal(img, sd, None, chan, customizations, cancel)
         }
-        crate::Destination::SdCard(path) => {
-            let capacity = guard_target(&path)?;
+        crate::Destination::SdCard(path, identity) => {
+            let capacity = guard_target(&path, &identity)?;
             let sd = crate::pal::open(&path)?;
             let sd = crate::helpers::SdCardWrapper::new(sd);
             flash_internal(img, sd, capacity, chan, customizations, cancel)

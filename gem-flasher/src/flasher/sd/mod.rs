@@ -331,7 +331,7 @@ impl<I> Flasher<I> {
     pub fn new(img: I, dst: Target, customization: FlashingSdLinuxConfig) -> Self {
         Self {
             img,
-            dst: gem_flasher_sd::Destination::SdCard(dst.0.path.into_boxed_path()),
+            dst: gem_flasher_sd::Destination::SdCard(dst.0.path.into_boxed_path(), dst.0.identity),
             customization,
         }
     }

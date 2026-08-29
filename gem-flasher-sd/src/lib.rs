@@ -83,6 +83,12 @@ pub enum Error {
     SystemDisk { name: Box<str> },
 
     #[error(
+        "Refusing to write to \"{name}\": a different device now occupies this path. Reselect the \
+         destination and try again."
+    )]
+    DestinationChanged { name: Box<str> },
+
+    #[error(
         "Refusing to write to \"{path}\": it is not a recognised removable device. Reconnect the \
          card and try again."
     )]
@@ -132,11 +138,18 @@ pub fn devices(filter: bool) -> Vec<Device> {
             }
         })
         .map(|x| {
+            let identity = DeviceIdentity {
+                serial: x.serial,
+                wwn: x.wwn,
+                size: x.size.unwrap_or_default(),
+            };
+
             Device::new(
                 x.description,
                 x.raw.into(),
                 x.size.unwrap_or_default(),
                 x.is_system,
+                identity,
             )
         })
         .collect()
@@ -148,16 +161,45 @@ pub struct Device {
     pub path: PathBuf,
     pub size: u64,
     pub is_system: bool,
+    pub identity: DeviceIdentity,
 }
 
 impl Device {
-    const fn new(name: String, path: PathBuf, size: u64, is_system: bool) -> Self {
+    const fn new(
+        name: String,
+        path: PathBuf,
+        size: u64,
+        is_system: bool,
+        identity: DeviceIdentity,
+    ) -> Self {
         Self {
             name,
             path,
             size,
             is_system,
+            identity,
         }
+    }
+}
+
+#[derive(Hash, Debug, PartialEq, Eq, Clone, Default)]
+pub struct DeviceIdentity {
+    pub serial: Option<String>,
+    pub wwn: Option<String>,
+    pub size: u64,
+}
+
+impl DeviceIdentity {
+    pub fn is_distinguishing(&self) -> bool {
+        self.serial.is_some() || self.wwn.is_some()
+    }
+
+    pub fn matches(&self, other: &Self) -> bool {
+        if self.is_distinguishing() || other.is_distinguishing() {
+            return self.serial == other.serial && self.wwn == other.wwn;
+        }
+
+        self.size == other.size
     }
 }
 
@@ -168,5 +210,5 @@ pub fn format(dst: &std::path::Path) -> Result<()> {
 #[derive(Debug, Clone)]
 pub enum Destination {
     File(Box<Path>),
-    SdCard(Box<Path>),
+    SdCard(Box<Path>, DeviceIdentity),
 }
