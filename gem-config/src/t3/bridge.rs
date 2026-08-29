@@ -28,6 +28,8 @@ pub fn catalog_to_config(catalog: &ValidatedT3Catalog) -> Config {
     }
 }
 
+const T3_DOCUMENTATION_URL: &str = "https://docs.t3gemstone.org/";
+
 const T3_GEM_O1_SPECIFICATION: &[(&str, &str)] = &[
     ("Processor", "Texas Instruments AM67A"),
     (
@@ -40,8 +42,20 @@ const T3_GEM_O1_SPECIFICATION: &[(&str, &str)] = &[
     ("Onboard Flash", "32GB eMMC"),
 ];
 
+fn is_t3_board(board: &Board) -> bool {
+    board.tags.iter().any(|tag| tag == T3_BOARD_TAG)
+}
+
+fn documentation_for(board: &Board) -> Option<Url> {
+    if !is_t3_board(board) {
+        return None;
+    }
+
+    T3_DOCUMENTATION_URL.parse().ok()
+}
+
 fn specification_for(board: &Board) -> Vec<(String, String)> {
-    if !board.tags.iter().any(|tag| tag == T3_BOARD_TAG) {
+    if !is_t3_board(board) {
         return Vec::new();
     }
 
@@ -59,7 +73,7 @@ fn board_to_device(board: &Board) -> Device {
         description: board.description.clone(),
         flasher: Flasher::SdCard,
         emmc_dfu: board.capabilities.supports_dfu(),
-        documentation: None,
+        documentation: documentation_for(board),
         instructions: None,
         specification: specification_for(board),
         oshw: None,
@@ -462,6 +476,40 @@ mod tests {
         assert!(
             beagley.specification.is_empty(),
             "only the T3 board has a specification published by this fork"
+        );
+    }
+
+    #[test]
+    fn the_t3_board_links_to_the_documentation_site() {
+        let config = bridged(ProductScope::T3AndBeagleY);
+
+        let t3 = config
+            .imager
+            .devices
+            .iter()
+            .find(|device| device.tags.contains(T3_BOARD_TAG))
+            .expect("the T3 board must be bridged");
+
+        let documentation = t3
+            .documentation
+            .as_ref()
+            .expect("the board pane only draws the button when a link is present");
+        assert_eq!(documentation.as_str(), "https://docs.t3gemstone.org/");
+        assert_eq!(
+            documentation.scheme(),
+            "https",
+            "the link is opened in a browser, so it must not be plain http"
+        );
+
+        let beagley = config
+            .imager
+            .devices
+            .iter()
+            .find(|device| !device.tags.contains(T3_BOARD_TAG))
+            .expect("BeagleY-AI is in scope here");
+        assert!(
+            beagley.documentation.is_none(),
+            "BeagleY-AI documentation belongs to BeagleBoard, not this site"
         );
     }
 
