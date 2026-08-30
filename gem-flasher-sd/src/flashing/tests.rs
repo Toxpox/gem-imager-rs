@@ -317,6 +317,24 @@ mod target_guard {
     }
 
     #[test]
+    fn the_guard_is_a_pure_function_of_the_current_drive_list() {
+        let size = 32 * 1024 * 1024 * 1024;
+        let selected = identity(Some("SERIAL-A"), size);
+
+        let before = evaluate_target(Some(&device(false, size)), &selected).unwrap();
+        let after = evaluate_target(
+            Some(&device_with_serial(false, size, Some("SERIAL-B"))),
+            &selected,
+        );
+
+        assert_eq!(before, Some(size));
+        assert!(
+            after.is_err(),
+            "re-running the guard after the device is opened must catch a swap"
+        );
+    }
+
+    #[test]
     fn a_target_missing_from_the_drive_list_is_refused() {
         let err = guard_target(
             std::path::Path::new("/dev/gem-nonexistent-target-for-tests"),

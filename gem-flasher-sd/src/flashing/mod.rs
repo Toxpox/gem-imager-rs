@@ -244,6 +244,14 @@ where
         crate::Destination::SdCard(path, identity) => {
             let capacity = guard_target(&path, &identity)?;
             let sd = crate::pal::open(&path)?;
+            let confirmed = guard_target(&path, &identity)?;
+
+            if confirmed != capacity {
+                return Err(crate::Error::DestinationChanged {
+                    name: path.display().to_string().into_boxed_str(),
+                });
+            }
+
             let sd = crate::helpers::SdCardWrapper::new(sd);
             flash_internal(img, sd, capacity, chan, customizations, cancel)
         }
