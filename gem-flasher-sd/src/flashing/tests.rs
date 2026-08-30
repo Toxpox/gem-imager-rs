@@ -252,7 +252,7 @@ mod target_guard {
     }
 
     #[test]
-    fn a_card_without_a_serial_falls_back_to_its_size() {
+    fn a_card_without_a_serial_stays_usable_but_must_keep_its_size() {
         let size = 32 * 1024 * 1024 * 1024;
         let selected = identity(None, size);
 
@@ -264,6 +264,22 @@ mod target_guard {
 
         let err = evaluate_target(Some(&device_with_serial(false, size / 2, None)), &selected)
             .expect_err("a differently sized unnamed card must not be written");
+        assert!(
+            matches!(err, crate::Error::DestinationChanged { .. }),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn a_serial_change_alone_is_refused_at_the_same_size() {
+        let size = 32 * 1024 * 1024 * 1024;
+        let selected = identity(Some("SERIAL-A"), size);
+
+        let err = evaluate_target(
+            Some(&device_with_serial(false, size, Some("SERIAL-B"))),
+            &selected,
+        )
+        .expect_err("an identically sized card with another serial is a different card");
         assert!(
             matches!(err, crate::Error::DestinationChanged { .. }),
             "got {err:?}"

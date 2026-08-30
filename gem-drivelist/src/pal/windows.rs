@@ -26,8 +26,9 @@ use windows::Win32::System::Ioctl::{
     IOCTL_DISK_GET_DRIVE_GEOMETRY_EX, IOCTL_DISK_GET_DRIVE_LAYOUT_EX, IOCTL_DISK_IS_WRITABLE,
     IOCTL_STORAGE_GET_DEVICE_NUMBER, IOCTL_STORAGE_QUERY_PROPERTY, PARTITION_INFORMATION_EX,
     PARTITION_STYLE_GPT, PARTITION_STYLE_MBR, PropertyStandardQuery,
-    STORAGE_ACCESS_ALIGNMENT_DESCRIPTOR, STORAGE_ADAPTER_DESCRIPTOR, STORAGE_DEVICE_NUMBER,
-    STORAGE_PROPERTY_QUERY, StorageAccessAlignmentProperty, StorageAdapterProperty,
+    STORAGE_ACCESS_ALIGNMENT_DESCRIPTOR, STORAGE_ADAPTER_DESCRIPTOR, STORAGE_DESCRIPTOR_HEADER,
+    STORAGE_DEVICE_DESCRIPTOR, STORAGE_DEVICE_NUMBER, STORAGE_PROPERTY_QUERY,
+    StorageAccessAlignmentProperty, StorageAdapterProperty, StorageDeviceProperty,
     VOLUME_DISK_EXTENTS,
 };
 use windows::Win32::System::WindowsProgramming::{DRIVE_FIXED, DRIVE_REMOVABLE};
@@ -249,6 +250,10 @@ fn get_detail_data(
             device.error = Some(format!("Couldn't get device block size: Error {err}"));
             break;
         }
+        if let Err(err) = get_device_serial(device, HANDLE(h_physical.as_raw_handle())) {
+            device.error = Some(format!("Couldn't get device serial: Error {err}"));
+            break;
+        }
         device.is_readonly = is_readonly(HANDLE(h_physical.as_raw_handle()));
     }
 
@@ -295,6 +300,66 @@ fn get_device_block_size(device: &mut DeviceDescriptor, h_physical: HANDLE) -> c
     device.logical_block_size = descriptor.BytesPerLogicalSector;
 
     Ok(())
+}
+
+fn get_device_serial(device: &mut DeviceDescriptor, h_physical: HANDLE) -> crate::Result<()> {
+    let mut query = STORAGE_PROPERTY_QUERY {
+        QueryType: PropertyStandardQuery,
+        PropertyId: StorageDeviceProperty,
+        ..Default::default()
+    };
+
+    let mut header = STORAGE_DESCRIPTOR_HEADER::default();
+    unsafe {
+        DeviceIoControl(
+            h_physical,
+            IOCTL_STORAGE_QUERY_PROPERTY,
+            Some(&mut query as *mut _ as *mut std::ffi::c_void),
+            size_of::<STORAGE_PROPERTY_QUERY>() as u32,
+            Some(&mut header as *mut _ as *mut std::ffi::c_void),
+            size_of::<STORAGE_DESCRIPTOR_HEADER>() as u32,
+            None,
+            None,
+        )
+    }?;
+
+    let size = header.Size as usize;
+    if size < size_of::<STORAGE_DEVICE_DESCRIPTOR>() {
+        return Ok(());
+    }
+
+    let mut buf = vec![0u8; size];
+    unsafe {
+        DeviceIoControl(
+            h_physical,
+            IOCTL_STORAGE_QUERY_PROPERTY,
+            Some(&mut query as *mut _ as *mut std::ffi::c_void),
+            size_of::<STORAGE_PROPERTY_QUERY>() as u32,
+            Some(buf.as_mut_ptr().cast()),
+            size as u32,
+            None,
+            None,
+        )
+    }?;
+
+    let descriptor = unsafe { &*(buf.as_ptr() as *const STORAGE_DEVICE_DESCRIPTOR) };
+    device.serial = read_descriptor_string(&buf, descriptor.SerialNumberOffset as usize);
+
+    Ok(())
+}
+
+fn read_descriptor_string(buf: &[u8], offset: usize) -> Option<String> {
+    if offset == 0 || offset >= buf.len() {
+        return None;
+    }
+
+    let end = buf[offset..]
+        .iter()
+        .position(|b| *b == 0)
+        .map_or(buf.len(), |len| offset + len);
+    let value = String::from_utf8_lossy(&buf[offset..end]).trim().to_owned();
+
+    Some(value).filter(|s| !s.is_empty())
 }
 
 fn get_adapter_info(device: &mut DeviceDescriptor, h_physical: HANDLE) -> crate::Result<()> {

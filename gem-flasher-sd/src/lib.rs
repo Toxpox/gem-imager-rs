@@ -195,11 +195,11 @@ impl DeviceIdentity {
     }
 
     pub fn matches(&self, other: &Self) -> bool {
-        if self.is_distinguishing() || other.is_distinguishing() {
-            return self.serial == other.serial && self.wwn == other.wwn;
+        if self.size != other.size {
+            return false;
         }
 
-        self.size == other.size
+        self.serial == other.serial && self.wwn == other.wwn
     }
 }
 

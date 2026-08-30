@@ -14,7 +14,8 @@ use objc2_core_foundation::{
 use objc2_disk_arbitration::{
     DADisk, DARegisterDiskAppearedCallback, DASession, DAUnregisterCallback,
     kDADiskDescriptionBusPathKey, kDADiskDescriptionDeviceInternalKey,
-    kDADiskDescriptionDeviceProtocolKey, kDADiskDescriptionMediaBlockSizeKey,
+    kDADiskDescriptionDeviceModelKey, kDADiskDescriptionDeviceProtocolKey,
+    kDADiskDescriptionDeviceRevisionKey, kDADiskDescriptionMediaBlockSizeKey,
     kDADiskDescriptionMediaContentKey, kDADiskDescriptionMediaEjectableKey,
     kDADiskDescriptionMediaIconKey, kDADiskDescriptionMediaNameKey,
     kDADiskDescriptionMediaRemovableKey, kDADiskDescriptionMediaSizeKey,
@@ -292,6 +293,18 @@ impl DeviceDescriptorFromDiskDescription for DeviceDescriptor {
             .unwrap_or(false);
 
         device.is_system = is_internal && !is_removable;
+
+        device.serial = disk_description
+            .get_string(unsafe { kDADiskDescriptionDeviceRevisionKey })
+            .map(|s| s.to_string())
+            .zip(
+                disk_description
+                    .get_string(unsafe { kDADiskDescriptionDeviceModelKey })
+                    .map(|s| s.to_string()),
+            )
+            .map(|(revision, model)| format!("{} {}", model.trim(), revision.trim()))
+            .map(|s| s.trim().to_owned())
+            .filter(|s| !s.is_empty());
 
         device.is_virtual = device_protocol
             .as_ref()
