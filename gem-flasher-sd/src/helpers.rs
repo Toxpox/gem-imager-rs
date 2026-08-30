@@ -76,7 +76,10 @@ impl Eject for std::fs::File {
     }
 }
 
-pub(crate) fn destination_size(path: &std::path::Path) -> crate::Result<u64> {
+pub(crate) fn destination_size(
+    path: &std::path::Path,
+    expected: &crate::DeviceIdentity,
+) -> crate::Result<u64> {
     let device = crate::devices(false)
         .into_iter()
         .find(|device| device.path == path)
@@ -89,6 +92,12 @@ pub(crate) fn destination_size(path: &std::path::Path) -> crate::Result<u64> {
 
     if device.is_system {
         return Err(crate::Error::SystemDisk {
+            name: device.name.into(),
+        });
+    }
+
+    if !device.identity.matches(expected) {
+        return Err(crate::Error::DestinationChanged {
             name: device.name.into(),
         });
     }
@@ -772,5 +781,38 @@ mod tests {
             fatfs::FileSystem::new(fscommon::BufStream::new(slice), fatfs::FsOptions::new())
                 .unwrap();
         assert_eq!(filesystem.fat_type(), fatfs::FatType::Fat32);
+    }
+
+    #[test]
+    fn formatting_an_unenumerated_destination_is_refused() {
+        let err = super::destination_size(
+            std::path::Path::new("/dev/gem-nonexistent-format-target"),
+            &crate::DeviceIdentity::default(),
+        )
+        .expect_err("formatting must not touch a device the drive list does not report");
+
+        assert!(
+            matches!(err, crate::Error::FailedToFormat { .. }),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn the_format_guard_rejects_a_card_whose_identity_no_longer_matches() {
+        let selected = crate::DeviceIdentity {
+            serial: Some("SERIAL-A".to_owned()),
+            wwn: None,
+            size: 32 * 1024 * 1024 * 1024,
+        };
+        let present = crate::DeviceIdentity {
+            serial: Some("SERIAL-B".to_owned()),
+            wwn: None,
+            size: 32 * 1024 * 1024 * 1024,
+        };
+
+        assert!(
+            !present.matches(&selected),
+            "formatting reuses this comparison, so a swapped card must not satisfy it"
+        );
     }
 }

@@ -187,15 +187,15 @@ impl Extend<Self> for FlashingSdLinuxConfig {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct FormatFlasher(PathBuf);
+pub struct FormatFlasher(PathBuf, gem_flasher_sd::DeviceIdentity);
 
 impl FormatFlasher {
     pub fn new(p: Target) -> Self {
-        Self(p.0.path)
+        Self(p.0.path, p.0.identity)
     }
 
     pub fn flash(self) -> anyhow::Result<()> {
-        gem_flasher_sd::format(self.0.as_path()).map_err(Into::into)
+        gem_flasher_sd::format(self.0.as_path(), &self.1).map_err(Into::into)
     }
 }
 

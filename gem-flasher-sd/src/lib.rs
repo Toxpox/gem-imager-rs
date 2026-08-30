@@ -203,8 +203,8 @@ impl DeviceIdentity {
     }
 }
 
-pub fn format(dst: &std::path::Path) -> Result<()> {
-    crate::pal::format(dst)
+pub fn format(dst: &std::path::Path, identity: &DeviceIdentity) -> Result<()> {
+    crate::pal::format(dst, identity)
 }
 
 #[derive(Debug, Clone)]
