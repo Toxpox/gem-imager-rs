@@ -3,46 +3,7 @@ use std::process::Command;
 use crate::device::{DeviceDescriptor, MountPoint};
 use serde::Deserialize;
 
-const OS_MOUNTS: &[&str] = &[
-    "/",
-    "/boot",
-    "/boot/efi",
-    "/efi",
-    "/usr",
-    "/var",
-    "/etc",
-    "/nix",
-];
-
-#[derive(Debug, Default)]
-pub(crate) struct OsMounts {
-    mounts: Vec<String>,
-}
-
-impl OsMounts {
-    pub(crate) fn current() -> Self {
-        Self::from_mountinfo(&std::fs::read_to_string("/proc/self/mountinfo").unwrap_or_default())
-    }
-
-    fn from_mountinfo(mountinfo: &str) -> Self {
-        let mounts = mountinfo
-            .lines()
-            .filter_map(|line| line.split_whitespace().nth(4))
-            .filter(|mount| OS_MOUNTS.contains(mount))
-            .map(str::to_owned)
-            .collect();
-
-        Self { mounts }
-    }
-
-    fn claims(&self, mount: &str) -> bool {
-        if mount == "[SWAP]" {
-            return true;
-        }
-
-        self.mounts.iter().any(|os_mount| os_mount == mount)
-    }
-}
+use crate::os_mounts::OsMounts;
 
 #[derive(Deserialize, Debug)]
 struct Devices {

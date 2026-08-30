@@ -415,6 +415,10 @@ pub(crate) fn drive_list() -> crate::Result<Vec<DeviceDescriptor>> {
         };
 
         if let Some(&idx) = device_map.get(&format!("/dev/{}", disk_bsdname)) {
+            if crate::os_mounts::is_os_mount(&mount_path) {
+                device_list[idx].is_system = true;
+            }
+
             device_list[idx]
                 .mountpoints
                 .push(MountPoint::new(mount_path));
