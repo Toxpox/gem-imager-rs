@@ -126,11 +126,7 @@ impl Device {
 
     fn holds_os_mount(&self, os_mounts: &OsMounts) -> bool {
         std::iter::once(self.mountpoint.as_deref())
-            .chain(
-                self.children
-                    .iter()
-                    .map(|child| child.mountpoint.as_deref()),
-            )
+            .chain(self.children.iter().flat_map(Child::mountpoints))
             .flatten()
             .any(|mount| os_mounts.claims(mount))
     }
@@ -148,7 +144,7 @@ impl Device {
 
         whole_disk
             .into_iter()
-            .chain(self.children.into_iter().map(Into::into))
+            .chain(self.children.into_iter().flat_map(Child::into_mountpoints))
             .collect()
     }
 }
@@ -224,6 +220,41 @@ struct Child {
     fsavail: Option<FsSize>,
     label: Option<String>,
     partlabel: Option<String>,
+    #[serde(default)]
+    children: Vec<Child>,
+}
+
+impl Child {
+    fn mountpoints(&self) -> impl Iterator<Item = Option<&str>> {
+        std::iter::once(self.mountpoint.as_deref())
+            .chain(self.descendants().map(|c| c.mountpoint.as_deref()))
+    }
+
+    fn descendants(&self) -> Box<dyn Iterator<Item = &Self> + '_> {
+        Box::new(
+            self.children
+                .iter()
+                .flat_map(|child| std::iter::once(child).chain(child.descendants())),
+        )
+    }
+
+    fn into_mountpoints(self) -> Vec<MountPoint> {
+        let children = self.children;
+        let own = MountPoint {
+            path: self.mountpoint.unwrap_or_default(),
+            label: if self.label.is_some() {
+                self.label
+            } else {
+                self.partlabel
+            },
+            total_bytes: self.fssize.map(Into::into),
+            available_bytes: self.fsavail.map(Into::into),
+        };
+
+        std::iter::once(own)
+            .chain(children.into_iter().flat_map(Self::into_mountpoints))
+            .collect()
+    }
 }
 
 impl From<Child> for MountPoint {
@@ -575,6 +606,61 @@ mod tests {
         assert!(
             d.is_system,
             "a USB disk holding / and /boot must be treated as the system disk"
+        );
+    }
+
+    #[test]
+    fn a_removable_disk_whose_root_sits_behind_dm_crypt_is_not_offered_as_a_target() {
+        let os_mounts = super::OsMounts::from_mountinfo(
+            "31 1 254:0 / / rw,relatime shared:1 - ext4 /dev/mapper/cryptroot rw\n",
+        );
+        let d = &descriptors_with_os_mounts(
+            r#"[{
+                "name":"/dev/sda","kname":"/dev/sda",
+                "size":32000000000,"tran":"usb","subsystems":"block:scsi:usb","ro":false,
+                "phy-sec":512,"log-sec":512,"rm":true,"hotplug":true,
+                "pttype":"gpt","label":null,"vendor":null,"model":null,
+                "mountpoint":null,
+                "children":[{
+                    "mountpoint":null,"label":null,
+                    "children":[{"mountpoint":"/","label":"cryptroot"}]
+                }]
+            }]"#,
+            &os_mounts,
+        )[0];
+
+        assert!(
+            d.is_system,
+            "a LUKS or LVM disk whose root is one level deeper must still be refused"
+        );
+    }
+
+    #[test]
+    fn mountpoints_below_the_first_child_level_are_reported() {
+        let d = &descriptors(
+            r#"[{
+                "name":"/dev/sdb","kname":"/dev/sdb",
+                "size":1000,"tran":"usb","subsystems":"block:scsi:usb","ro":false,
+                "phy-sec":512,"log-sec":512,"rm":true,"hotplug":true,
+                "pttype":"gpt","label":null,"vendor":null,"model":null,
+                "mountpoint":null,
+                "children":[{
+                    "mountpoint":null,"label":null,
+                    "children":[{"mountpoint":"/media/vault","label":"VAULT"}]
+                }]
+            }]"#,
+        )[0];
+
+        let paths: Vec<&str> = d
+            .mountpoints
+            .iter()
+            .map(|m| m.path.as_str())
+            .filter(|p| !p.is_empty())
+            .collect();
+        assert_eq!(
+            paths,
+            ["/media/vault"],
+            "a nested mount must be unmounted before the raw write"
         );
     }
 
