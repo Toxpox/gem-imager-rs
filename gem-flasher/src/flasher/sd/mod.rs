@@ -64,6 +64,7 @@ pub struct FlashingSdLinuxConfig(Vec<(Box<str>, Box<[u8]>, Verification)>);
 enum Verification {
     None,
     ReadBack,
+    Directory,
 }
 
 fn sysconf_w(sysconf: &mut Vec<u8>, key: &str, value: &str) {
@@ -114,6 +115,11 @@ impl FlashingSdLinuxConfig {
                         "sysconf.txt".to_string().into(),
                         content.into(),
                         Verification::None,
+                    ),
+                    (
+                        "services".to_string().into(),
+                        Box::default(),
+                        Verification::Directory,
                     ),
                     (
                         format!("services/{ssid}.psk").into(),
@@ -181,15 +187,15 @@ impl Extend<Self> for FlashingSdLinuxConfig {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct FormatFlasher(PathBuf);
+pub struct FormatFlasher(PathBuf, gem_flasher_sd::DeviceIdentity);
 
 impl FormatFlasher {
     pub fn new(p: Target) -> Self {
-        Self(p.0.path)
+        Self(p.0.path, p.0.identity)
     }
 
     pub fn flash(self) -> anyhow::Result<()> {
-        gem_flasher_sd::format(self.0.as_path()).map_err(Into::into)
+        gem_flasher_sd::format(self.0.as_path(), &self.1).map_err(Into::into)
     }
 }
 
@@ -325,7 +331,7 @@ impl<I> Flasher<I> {
     pub fn new(img: I, dst: Target, customization: FlashingSdLinuxConfig) -> Self {
         Self {
             img,
-            dst: gem_flasher_sd::Destination::SdCard(dst.0.path.into_boxed_path()),
+            dst: gem_flasher_sd::Destination::SdCard(dst.0.path.into_boxed_path(), dst.0.identity),
             customization,
         }
     }
@@ -361,6 +367,7 @@ where
                 let content = match v {
                     Verification::None => gem_flasher_sd::ContentType::DataAppend(d),
                     Verification::ReadBack => gem_flasher_sd::ContentType::VerifiedData(d),
+                    Verification::Directory => gem_flasher_sd::ContentType::Dir,
                 };
                 (p, content)
             });

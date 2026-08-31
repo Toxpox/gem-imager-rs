@@ -438,8 +438,8 @@ impl crate::helpers::Eject for WinDrive {
     }
 }
 
-pub(crate) fn format(dst: &Path) -> Result<()> {
-    let disk_size = crate::helpers::destination_size(dst)?;
+pub(crate) fn format(dst: &Path, identity: &crate::DeviceIdentity) -> Result<()> {
+    let disk_size = crate::helpers::destination_size(dst, identity)?;
     let drive = open(dst)?;
     crate::helpers::format_device(drive, disk_size)
 }

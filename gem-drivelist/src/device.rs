@@ -41,6 +41,8 @@ pub struct DeviceDescriptor {
     pub is_virtual: bool,
     pub is_removable: bool,
     pub is_uas: Option<bool>,
+    pub serial: Option<String>,
+    pub wwn: Option<String>,
 }
 
 impl Default for DeviceDescriptor {
@@ -68,6 +70,8 @@ impl Default for DeviceDescriptor {
             is_virtual: Default::default(),
             is_removable: Default::default(),
             is_uas: Default::default(),
+            serial: Default::default(),
+            wwn: Default::default(),
         }
     }
 }

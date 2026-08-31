@@ -339,7 +339,6 @@ endif
 	sed -i '/\[workspace.package\]/,/^\[/{s/^\s*version\s*=.*/version = "${VERSION}"/}' Cargo.toml
 	sed -i "s/^version: .*/version: ${VERSION}/" snapcraft.cli.yaml
 	sed -i "s/^version: .*/version: ${VERSION}/" snapcraft.gui.yaml
-	sed -i "s/^version: .*/version: ${VERSION}/" docs/antora.yml
 	sed -i '/<releases>/a \
 \t\t<release version="$(VERSION)" date="$(_DATE)">\
 \t\t\t<url>https://github.com/Toxpox/gem-imager-rs/releases/tag/$(VERSION)</url>\
@@ -356,7 +355,7 @@ endif
         	read -r -p "Create git commit and tag [y/N]: " CONTINUE; \
 	done ; \
 	[ $$CONTINUE = "y" ] || [ $$CONTINUE = "Y" ] || (echo "Aborting."; exit 1;)
-	git add Cargo.toml Cargo.lock gem-imager-gui/assets/packages/linux/flatpak/org.t3gemstone.imager.metainfo.xml docs/antora.yml \
+	git add Cargo.toml Cargo.lock gem-imager-gui/assets/packages/linux/flatpak/org.t3gemstone.imager.metainfo.xml \
 		snapcraft.*.yaml gem-imager-gui/Package.appxmanifest gem-imager-gui/assets/packages/windows/gui.exe.manifest \
 		gem-imager-gui/assets/packages/windows/gui-as-invoker.exe.manifest \
 		gem-winusb-helper/assets/helper.exe.manifest Packager.windows-x64.toml

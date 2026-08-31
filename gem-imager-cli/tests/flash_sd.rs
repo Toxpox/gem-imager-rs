@@ -232,10 +232,6 @@ fn flash_sd_without_usb_dhcp_flag_omits_the_key() {
     assert_eq!(fixture.boot_file("sysconf.txt").unwrap(), "keymap=us\n");
 }
 
-/// NOTE: `services/` must already exist in the image's boot partition — the
-/// customization writer uses `create_file`, which does not create parent
-/// directories, so `--wifi-ssid` on an image without that directory fails the
-/// whole flash with "Failed to create customization services/<ssid>.psk".
 #[test]
 fn flash_sd_wifi_writes_psk_file_next_to_sysconfig() {
     let mut fixture = SdFixture::with_boot_dirs(&["services"]);
@@ -259,6 +255,31 @@ fn flash_sd_wifi_writes_psk_file_next_to_sysconfig() {
         fixture.boot_file("sysconf.txt").unwrap(),
         "iwd_psk_file=mynet.psk\n"
     );
+    assert_eq!(
+        fixture.boot_file("services/mynet.psk").unwrap(),
+        "[Security]\nPassphrase=hunter2\n\n[Settings]\nAutoConnect=true"
+    );
+}
+
+#[test]
+fn flash_sd_wifi_creates_the_services_dir_when_the_image_lacks_it() {
+    let mut fixture = SdFixture::new();
+
+    run_cli([
+        "gem-imager-cli",
+        "flash",
+        "--quiet",
+        "sd",
+        fixture.img(),
+        fixture.dst(),
+        "--file-destination",
+        "--sysconfig",
+        "--wifi-ssid",
+        "mynet",
+        "--wifi-password",
+        "hunter2",
+    ]);
+
     assert_eq!(
         fixture.boot_file("services/mynet.psk").unwrap(),
         "[Security]\nPassphrase=hunter2\n\n[Settings]\nAutoConnect=true"
@@ -341,4 +362,107 @@ fn flash_sd_missing_image_fails() {
         "--file-destination",
     ])
     .expect_err("a missing image must fail instead of writing anything");
+}
+
+#[test]
+fn flash_sd_geminit_writes_config_ini() {
+    let mut fixture = SdFixture::new();
+
+    run_cli([
+        "gem-imager-cli",
+        "flash",
+        "--quiet",
+        "sd",
+        fixture.img(),
+        fixture.dst(),
+        "--file-destination",
+        "--geminit",
+        "--hostname",
+        "my-gemstone",
+        "--user-name",
+        "gemstone",
+        "--user-password",
+        "hunter2",
+        "--timezone",
+        "Europe/Istanbul",
+        "--keymap",
+        "tr",
+        "--wifi-ssid",
+        "mynet",
+        "--wifi-password",
+        "hunter2pass",
+        "--wifi-country",
+        "TR",
+    ]);
+
+    let config = fixture.boot_file("config.ini").unwrap();
+
+    assert!(config.starts_with("firstboot=1\n"), "got: {config}");
+    assert!(config.contains("hostname='my-gemstone'\n"), "got: {config}");
+    assert!(config.contains("wifiname='mynet'\n"), "got: {config}");
+    assert!(
+        config.contains("wifipasswd='hunter2pass'\n"),
+        "got: {config}"
+    );
+    assert!(config.contains("wificountry='TR'\n"), "got: {config}");
+    assert!(
+        config.contains("timezone='Europe/Istanbul'\n"),
+        "got: {config}"
+    );
+    assert!(config.contains("keyboardlayout='tr'\n"), "got: {config}");
+
+    assert!(config.contains("userpasswd='$6$"), "got: {config}");
+    assert!(
+        !config.contains("hunter2'"),
+        "plaintext password leaked: {config}"
+    );
+
+    assert!(fixture.boot_file("sysconf.txt").is_err());
+    assert!(fixture.boot_file("services/mynet.psk").is_err());
+}
+
+#[test]
+fn flash_sd_geminit_rejects_an_invalid_hostname() {
+    let fixture = SdFixture::new();
+
+    let err = try_run_cli([
+        "gem-imager-cli",
+        "flash",
+        "--quiet",
+        "sd",
+        fixture.img(),
+        fixture.dst(),
+        "--file-destination",
+        "--geminit",
+        "--hostname",
+        "not_a_valid_hostname",
+    ])
+    .expect_err("an invalid hostname must fail");
+
+    let message = format!("{err:#}");
+    assert!(message.contains("--hostname"), "got: {message}");
+}
+
+#[test]
+fn flash_sd_geminit_requires_wifi_country() {
+    let fixture = SdFixture::new();
+
+    let err = try_run_cli([
+        "gem-imager-cli",
+        "flash",
+        "--quiet",
+        "sd",
+        fixture.img(),
+        fixture.dst(),
+        "--file-destination",
+        "--geminit",
+        "--wifi-ssid",
+        "mynet",
+        "--wifi-password",
+        "hunter2pass",
+    ])
+    .expect_err("wifi without a country must fail under --geminit");
+
+    let message = format!("{err:#}");
+    assert!(message.contains("--wifi-country"), "got: {message}");
 }

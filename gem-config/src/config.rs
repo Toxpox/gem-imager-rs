@@ -28,6 +28,24 @@ impl Config {
 
         count(&self.os_list)
     }
+
+    pub fn retain_device_tag(&mut self, device_tag: &str) {
+        fn retain_items(items: &mut Vec<OsListItem>, device_tag: &str) {
+            items.retain_mut(|item| match item {
+                OsListItem::Image(image) => image.devices.contains(device_tag),
+                OsListItem::SubList(sublist) => {
+                    retain_items(&mut sublist.subitems, device_tag);
+                    !sublist.subitems.is_empty()
+                }
+                OsListItem::RemoteSubList(sublist) => sublist.devices.contains(device_tag),
+            });
+        }
+
+        self.imager
+            .devices
+            .retain(|device| device.tags.contains(device_tag));
+        retain_items(&mut self.os_list, device_tag);
+    }
 }
 
 #[serde_as]
@@ -60,18 +78,43 @@ pub struct Device {
 
 #[derive(Deserialize, Serialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
 #[non_exhaustive]
-#[serde(rename_all = "lowercase")]
 pub enum InitFormat {
     #[default]
+    #[serde(rename = "none")]
     None,
+    #[serde(rename = "sysconf")]
     Sysconf,
+    #[serde(rename = "armbian")]
     Armbian,
+    #[serde(rename = "cloudinit")]
     CloudInit,
+    #[serde(rename = "geminit")]
     GemInit,
+    #[serde(rename = "geminit-desktop", alias = "geminitdesktop")]
     GemInitDesktop,
 }
 
 impl InitFormat {
+    pub const ALL: [Self; 6] = [
+        Self::None,
+        Self::Sysconf,
+        Self::Armbian,
+        Self::CloudInit,
+        Self::GemInit,
+        Self::GemInitDesktop,
+    ];
+
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::None => "none",
+            Self::Sysconf => "sysconf",
+            Self::Armbian => "armbian",
+            Self::CloudInit => "cloudinit",
+            Self::GemInit => "geminit",
+            Self::GemInitDesktop => "geminit-desktop",
+        }
+    }
+
     pub const fn is_gem_init(self) -> bool {
         matches!(self, Self::GemInit | Self::GemInitDesktop)
     }
@@ -80,6 +123,28 @@ impl InitFormat {
         matches!(self, Self::GemInitDesktop)
     }
 }
+
+impl std::str::FromStr for InitFormat {
+    type Err = UnknownInitFormat;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::ALL
+            .into_iter()
+            .find(|candidate| candidate.as_str() == s)
+            .ok_or_else(|| UnknownInitFormat(s.to_owned()))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnknownInitFormat(pub String);
+
+impl std::fmt::Display for UnknownInitFormat {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "unknown init format: {}", self.0)
+    }
+}
+
+impl std::error::Error for UnknownInitFormat {}
 
 #[cfg(feature = "store")]
 impl rusqlite::ToSql for InitFormat {
@@ -115,14 +180,7 @@ impl rusqlite::types::FromSql for InitFormat {
 
 impl std::fmt::Display for InitFormat {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            InitFormat::None => f.write_str("none"),
-            InitFormat::Sysconf => f.write_str("sysconfig"),
-            InitFormat::Armbian => f.write_str("armbian"),
-            InitFormat::CloudInit => f.write_str("cloudinit"),
-            InitFormat::GemInit => f.write_str("geminit"),
-            InitFormat::GemInitDesktop => f.write_str("geminit-desktop"),
-        }
+        f.write_str(self.as_str())
     }
 }
 

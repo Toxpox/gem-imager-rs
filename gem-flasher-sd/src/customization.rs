@@ -27,40 +27,90 @@ impl ParitionType {
         dst.rewind()?;
         let part_table = PartitionTable::detect_partition_table(&mut dst)?;
         dst.rewind()?;
-        let (start_offset, end_offset) = match part_table {
+        let candidates = match part_table {
             PartitionTable::Gpt => {
                 let disk = gpt::GptConfig::new()
                     .writable(false)
                     .open_from_device(&mut dst)
                     .map_err(|_| crate::Error::InvalidPartitionTable)?;
 
-                let partition_2 = disk.partitions().get(&2).unwrap();
-
-                let start_offset: u64 =
-                    partition_2.first_lba * gpt::disk::DEFAULT_SECTOR_SIZE.as_u64();
-                let end_offset: u64 =
-                    partition_2.last_lba * gpt::disk::DEFAULT_SECTOR_SIZE.as_u64();
-
-                (start_offset, end_offset)
+                let sector = gpt::disk::DEFAULT_SECTOR_SIZE.as_u64();
+                let mut entries: Vec<(u32, u64, u64)> = disk
+                    .partitions()
+                    .iter()
+                    .filter(|(_, part)| part.last_lba > part.first_lba)
+                    .map(|(index, part)| (*index, part.first_lba * sector, part.last_lba * sector))
+                    .collect();
+                entries.sort_unstable_by_key(|(index, _, _)| *index);
+                entries
             }
             PartitionTable::Mbr => {
                 let mbr = mbrman::MBRHeader::read_from(&mut dst)
                     .map_err(|_| Error::InvalidPartitionTable)?;
 
-                let boot_part = mbr.get(1).ok_or(Error::InvalidPartitionTable)?;
-                let start_offset: u64 = (boot_part.starting_lba * 512).into();
-                let end_offset: u64 = start_offset + u64::from(boot_part.sectors) * 512;
-
-                (start_offset, end_offset)
+                let mut entries: Vec<(u32, u64, u64)> = mbr
+                    .iter()
+                    .filter(|(_, part)| part.sectors > 0 && part.starting_lba > 0)
+                    .map(|(index, part)| {
+                        let start = u64::from(part.starting_lba) * 512;
+                        (index as u32, start, start + u64::from(part.sectors) * 512)
+                    })
+                    .collect();
+                entries.sort_unstable_by_key(|(index, _, _)| *index);
+                entries
             }
         };
 
+        if candidates.is_empty() {
+            return Err(Error::InvalidPartitionTable);
+        }
+
+        let mut boot = None;
+        for (_, start_offset, end_offset) in candidates {
+            if looks_like_fat(&mut dst, start_offset)? {
+                boot = Some((start_offset, end_offset));
+                break;
+            }
+        }
+
+        let (start_offset, end_offset) = boot.ok_or(Error::InvalidBootPartition)?;
+
+        dst.rewind()?;
         let slice = StreamSlice::new(dst, start_offset, end_offset)
             .map_err(|_| Error::InvalidPartitionTable)?;
         let boot_stream = BufStream::new(slice);
         FileSystem::new(boot_stream, fatfs::FsOptions::new())
             .map_err(|_| Error::InvalidBootPartition)
     }
+}
+
+fn looks_like_fat<T>(dst: &mut T, start_offset: u64) -> Result<bool>
+where
+    T: Read + Seek,
+{
+    let mut sector = [0u8; 512];
+
+    dst.seek(SeekFrom::Start(start_offset))?;
+    if dst.read_exact(&mut sector).is_err() {
+        return Ok(false);
+    }
+
+    if sector[510] != 0x55 || sector[511] != 0xAA {
+        return Ok(false);
+    }
+
+    let bytes_per_sector = u16::from_le_bytes([sector[11], sector[12]]);
+    if !matches!(bytes_per_sector, 512 | 1024 | 2048 | 4096) {
+        return Ok(false);
+    }
+
+    if sector[13] == 0 {
+        return Ok(false);
+    }
+
+    let fat_marker = |window: &[u8]| window.starts_with(b"FAT");
+
+    Ok(fat_marker(&sector[54..59]) || fat_marker(&sector[82..87]))
 }
 
 #[derive(Debug)]
@@ -199,5 +249,92 @@ impl ParitionType {
         partition.unmount()?;
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn gpt_disk_without_partition_two() -> std::io::Cursor<Vec<u8>> {
+        const DISK_SIZE: usize = 16 * 1024 * 1024;
+
+        let mut disk = std::io::Cursor::new(vec![0u8; DISK_SIZE]);
+        let mut gpt = gpt::GptConfig::new()
+            .writable(true)
+            .logical_block_size(gpt::disk::LogicalBlockSize::Lb512)
+            .create_from_device(&mut disk, None)
+            .unwrap();
+
+        gpt.add_partition(
+            "only-partition",
+            4 * 1024 * 1024,
+            gpt::partition_types::BASIC,
+            0,
+            None,
+        )
+        .unwrap();
+        gpt.write().unwrap();
+
+        disk.set_position(0);
+        disk
+    }
+
+    fn gpt_disk_with_fat_boot_first() -> std::io::Cursor<Vec<u8>> {
+        const DISK_SIZE: usize = 32 * 1024 * 1024;
+        const BOOT_SIZE: u64 = 8 * 1024 * 1024;
+
+        let mut disk = std::io::Cursor::new(vec![0u8; DISK_SIZE]);
+        let mut gpt = gpt::GptConfig::new()
+            .writable(true)
+            .logical_block_size(gpt::disk::LogicalBlockSize::Lb512)
+            .create_from_device(&mut disk, None)
+            .unwrap();
+
+        let id = gpt
+            .add_partition("boot", BOOT_SIZE, gpt::partition_types::EFI, 0, None)
+            .unwrap();
+        gpt.add_partition(
+            "root",
+            8 * 1024 * 1024,
+            gpt::partition_types::LINUX_FS,
+            0,
+            None,
+        )
+        .unwrap();
+
+        let start = gpt.partitions().get(&id).unwrap().first_lba * 512;
+        let end = gpt.partitions().get(&id).unwrap().last_lba * 512;
+        gpt.write().unwrap();
+
+        let slice = StreamSlice::new(&mut disk, start, end).unwrap();
+        fatfs::format_volume(
+            BufStream::new(slice),
+            fatfs::FormatVolumeOptions::new().fat_type(fatfs::FatType::Fat32),
+        )
+        .unwrap();
+
+        disk.set_position(0);
+        disk
+    }
+
+    #[test]
+    fn the_boot_partition_is_found_even_when_it_is_not_the_second_entry() {
+        let disk = gpt_disk_with_fat_boot_first();
+
+        ParitionType::Boot
+            .open(disk)
+            .expect("a FAT boot partition in slot 1 must still be customizable");
+    }
+
+    #[test]
+    fn a_gpt_image_without_the_boot_partition_is_rejected_instead_of_panicking() {
+        let disk = gpt_disk_without_partition_two();
+
+        match ParitionType::Boot.open(disk) {
+            Ok(_) => panic!("a GPT image without a FAT boot partition must not be customized"),
+            Err(Error::InvalidBootPartition) => {}
+            Err(other) => panic!("expected InvalidBootPartition, got {other:?}"),
+        }
     }
 }
