@@ -76,7 +76,10 @@ impl Eject for std::fs::File {
     }
 }
 
-pub(crate) fn destination_size(path: &std::path::Path) -> crate::Result<u64> {
+pub(crate) fn destination_size(
+    path: &std::path::Path,
+    expected: &crate::DeviceIdentity,
+) -> crate::Result<u64> {
     let device = crate::devices(false)
         .into_iter()
         .find(|device| device.path == path)
@@ -89,6 +92,12 @@ pub(crate) fn destination_size(path: &std::path::Path) -> crate::Result<u64> {
 
     if device.is_system {
         return Err(crate::Error::SystemDisk {
+            name: device.name.into(),
+        });
+    }
+
+    if !device.identity.matches(expected) {
+        return Err(crate::Error::DestinationChanged {
             name: device.name.into(),
         });
     }
@@ -171,7 +180,6 @@ where
     )
     .map_err(failed)?;
     partition.flush().map_err(failed)?;
-    drop(partition);
 
     let mut sd = device.into_inner();
     sd.commit()
@@ -268,7 +276,7 @@ where
         self.buf.as_mut_slice()[start..(start + count)].copy_from_slice(&buf[..count]);
 
         self.f.seek(io::SeekFrom::Start(self.cache_offset))?;
-        self.f.write(self.buf.as_slice())?;
+        self.f.write_all(self.buf.as_slice())?;
 
         self.offset += count as u64;
 
@@ -687,6 +695,58 @@ mod tests {
         assert!(matches!(error, crate::Error::LayoutReadBackMismatch));
     }
 
+    #[derive(Debug)]
+    struct ShortWriter {
+        inner: std::io::Cursor<Vec<u8>>,
+        limit: usize,
+    }
+
+    impl Read for ShortWriter {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            self.inner.read(buf)
+        }
+    }
+
+    impl Write for ShortWriter {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            let take = buf.len().min(self.limit);
+            self.inner.write(&buf[..take])
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            self.inner.flush()
+        }
+    }
+
+    impl Seek for ShortWriter {
+        fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
+            self.inner.seek(pos)
+        }
+    }
+
+    #[test]
+    fn a_short_device_write_is_not_reported_as_a_complete_one() {
+        const OFFSET: u64 = 2048;
+
+        let backing = ShortWriter {
+            inner: std::io::Cursor::new(vec![0u8; FILE_LEN]),
+            limit: 512,
+        };
+        let mut device = super::DeviceWrapper::new(backing).unwrap();
+
+        device.seek(SeekFrom::Start(OFFSET)).unwrap();
+        device.write_all(&[0xa5; 64]).unwrap();
+        device.flush().unwrap();
+
+        let backing = device.into_inner().inner.into_inner();
+        let start = OFFSET as usize;
+        assert_eq!(
+            &backing[start..start + 64],
+            [0xa5; 64],
+            "customization bytes were reported as written but never reached the device"
+        );
+    }
+
     #[test]
     fn formatter_publishes_an_mbr_with_a_mountable_fat32_partition() {
         const FORMAT_SIZE: u64 = 64 * 1024 * 1024;
@@ -721,5 +781,38 @@ mod tests {
             fatfs::FileSystem::new(fscommon::BufStream::new(slice), fatfs::FsOptions::new())
                 .unwrap();
         assert_eq!(filesystem.fat_type(), fatfs::FatType::Fat32);
+    }
+
+    #[test]
+    fn formatting_an_unenumerated_destination_is_refused() {
+        let err = super::destination_size(
+            std::path::Path::new("/dev/gem-nonexistent-format-target"),
+            &crate::DeviceIdentity::default(),
+        )
+        .expect_err("formatting must not touch a device the drive list does not report");
+
+        assert!(
+            matches!(err, crate::Error::FailedToFormat { .. }),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn the_format_guard_rejects_a_card_whose_identity_no_longer_matches() {
+        let selected = crate::DeviceIdentity {
+            serial: Some("SERIAL-A".to_owned()),
+            wwn: None,
+            size: 32 * 1024 * 1024 * 1024,
+        };
+        let present = crate::DeviceIdentity {
+            serial: Some("SERIAL-B".to_owned()),
+            wwn: None,
+            size: 32 * 1024 * 1024 * 1024,
+        };
+
+        assert!(
+            !present.matches(&selected),
+            "formatting reuses this comparison, so a swapped card must not satisfy it"
+        );
     }
 }

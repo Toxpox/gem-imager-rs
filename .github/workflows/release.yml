@@ -2,17 +2,24 @@ name: Create Release artifacts
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "alpha" ]
     tags: [ "[0-9]+.[0-9]+.[0-9]+" ]
   pull_request:
     branches: [ "main" ]
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
   VERBOSE: 1
   PRE_RELEASE: ${{ github.ref_type != 'tag' && '1' || '0' }}
   VERSION: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
-  APPIMAGE_RELEASE_TAG: ${{ github.ref_type == 'tag' && 'latest' || 'continuous-release' }}
+  APPIMAGE_RELEASE_TAG: ${{ github.ref_type == 'tag' && 'latest' || (github.ref_name == 'alpha' && 'alpha-release' || 'continuous-release') }}
+  APPIMAGE_RELEASE_OWNER: ${{ github.repository_owner }}
+  APPIMAGE_RELEASE_REPO: ${{ github.event.repository.name }}
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
 
 defaults:
   run:
@@ -55,10 +62,13 @@ jobs:
 
   linux-snap-job:
     strategy:
+      fail-fast: false
       matrix:
         platform: [ubuntu-24.04, ubuntu-24.04-arm]
-    name: Build Snaps - ${{ matrix.platform }}
+        package: [gui, cli]
+    name: Build ${{ matrix.package }} Snap - ${{ matrix.platform }}
     runs-on: ${{ matrix.platform }}
+    timeout-minutes: 90
     steps:
     - name: Checkout
       uses: actions/checkout@v7
@@ -71,22 +81,22 @@ jobs:
 
     - run: echo PRE_RELEASE=$PRE_RELEASE > .envrc
 
-    - run: ln -sf snapcraft.gui.yaml snapcraft.yaml
+    - run: ln -sf "snapcraft.${{ matrix.package }}.yaml" snapcraft.yaml
     - uses: snapcore/action-build@v1
-      id: build-gui
+      id: build
 
-    - run: ln -sf snapcraft.cli.yaml snapcraft.yaml
-    - uses: snapcore/action-build@v1
-      id: build-cli
+    - name: Report disk use
+      if: always()
+      run: |
+        df -h
+        sudo du -sh /var/snap/lxd/common/lxd/storage-pools/default 2>/dev/null || true
 
     # The built file is taken from the action's output rather than matched by a glob: the snap
     # is named after `name:` in the recipe, which is not the crate directory name.
     - name: Move to dist folders
       run: |
-        mkdir -p gem-imager-cli/dist/
-        mkdir -p gem-imager-gui/dist/
-        mv "${{ steps.build-cli.outputs.snap }}" gem-imager-cli/dist/
-        mv "${{ steps.build-gui.outputs.snap }}" gem-imager-gui/dist/
+        mkdir -p "gem-imager-${{ matrix.package }}/dist/"
+        mv "${{ steps.build.outputs.snap }}" "gem-imager-${{ matrix.package }}/dist/"
 
     # Do not do versioning for Pre-Release packages
     - name: Rename Pre-Release Packages
@@ -96,10 +106,8 @@ jobs:
     - name: Upload artifacts
       uses: actions/upload-artifact@v7
       with:
-        name: artifacts-snap-${{ matrix.platform }}
-        path: |
-          gem-imager-gui/dist/*
-          gem-imager-cli/dist/*
+        name: artifacts-snap-${{ matrix.package }}-${{ matrix.platform }}
+        path: gem-imager-${{ matrix.package }}/dist/*
 
   linux-snap-cross-job:
     strategy:
@@ -214,6 +222,27 @@ jobs:
     - name: Use caching
       uses: Swatinem/rust-cache@v2
         
+    # A tagged build is what users download. Shipping it ad-hoc signed means Gatekeeper refuses
+    # to open it without a right-click override, so stop before building rather than publishing
+    # a dmg that looks broken to every user. Branch pre-releases stay unsigned on purpose.
+    - name: Require signing secrets for tagged releases
+      if: github.ref_type == 'tag'
+      env:
+        APPLE_CERTIFICATE: ${{ secrets.CERT_DEVELOPER_APP_BASE64 }}
+        APPLE_ID: ${{ secrets.APPLE_ID }}
+        APPLE_PASSWORD: ${{ secrets.APP_PASSWORD }}
+      run: |
+        missing=""
+        [ -n "$TEAM_ID" ] || missing="$missing TEAM_ID"
+        [ -n "$APPLE_CERTIFICATE" ] || missing="$missing CERT_DEVELOPER_APP_BASE64"
+        [ -n "$APPLE_ID" ] || missing="$missing APPLE_ID"
+        [ -n "$APPLE_PASSWORD" ] || missing="$missing APP_PASSWORD"
+        if [ -n "$missing" ]; then
+          echo "::error::a tagged macOS release needs Developer ID signing and notarization" \
+               "secrets; missing:$missing"
+          exit 1
+        fi
+
     # The ENV variable names are what cargo-packager requires.
     # Skipped when TEAM_ID is unset, as it is on forks without the signing secrets: writing an
     # empty `signing_identity` makes cargo-packager fail rather than fall back to unsigned.
@@ -234,6 +263,27 @@ jobs:
         APPLE_TEAM_ID: ${{ secrets.TEAM_ID }}
       run: make setup-packaging-deps package-x86_64-apple-darwin package-aarch64-apple-darwin
 
+    # Audits the finished dmg rather than the intermediate bundle, so a packaging regression
+    # cannot reach users as an app that dies at launch with an unhelpful dialog.
+    - name: Verify dmg is self-contained
+      env:
+        # A tagged build must carry a real CMS signature. A branch pre-release is allowed to be
+        # ad-hoc signed, which the audit reports without failing.
+        REQUIRE_DEVELOPER_ID: ${{ github.ref_type == 'tag' && '--require-developer-id' || '' }}
+      run: |
+        brew install p7zip
+        shopt -s nullglob
+        dmgs=(gem-imager-gui/dist/*.dmg)
+        # Without this check a packaging regression that produces no dmg would surface as
+        # verify-macos-dmg.sh failing on the literal glob text, hiding the real cause.
+        if [ "${#dmgs[@]}" -eq 0 ]; then
+          echo "::error::packaging produced no .dmg in gem-imager-gui/dist"
+          exit 1
+        fi
+        for dmg in "${dmgs[@]}"; do
+          ./scripts/verify-macos-dmg.sh $REQUIRE_DEVELOPER_ID "$dmg"
+        done
+
     # Do not do versioning for Pre-Release packages
     - name: Rename Pre-Release Packages
       if: github.ref_type != 'tag'
@@ -245,6 +295,7 @@ jobs:
         name: artifacts-macos
         path: |
           gem-imager-gui/dist/*
+          !gem-imager-gui/dist/*.app
 
   windows-job:
     name: Build Windows Artifacts
@@ -265,7 +316,76 @@ jobs:
 
     - name: Use caching
       uses: Swatinem/rust-cache@v2
-        
+
+    # cargo-packager fetches the WIX3 toolchain from GitHub on every run and has no retry, so a
+    # single dropped TLS connection fails the whole Windows release. Caching the extracted tools
+    # keeps later runs off the network entirely.
+    - name: Cache WIX toolset
+      id: wix-cache
+      uses: actions/cache@v4
+      with:
+        # cargo-packager resolves this as `dirs::cache_dir()/.cargo-packager/WixTools`, which is
+        # %LOCALAPPDATA% on Windows. Written with `~` because the `env` context only exposes
+        # variables declared in the workflow, not the runner's own environment.
+        path: ~\AppData\Local\.cargo-packager\WixTools
+        key: ${{ runner.os }}-wix3-3112rtm-2c1888d5
+
+    # Fetch the tools here instead of letting cargo-packager do it: this retries and verifies the
+    # published checksum, so a transient network error retries rather than aborting the build.
+    #
+    # This runs even on a cache hit, because it also validates the restored directory. A partial
+    # cache satisfies `cache-hit` but not cargo-packager, which then silently falls back to its
+    # own unretried download: the exact failure this step exists to prevent. The file list and
+    # checksum below mirror WIX_REQUIRED_FILES and WIX_SHA256 in cargo-packager 0.11.8.
+    - name: Prefetch and verify WIX toolset
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $url = 'https://github.com/wixtoolset/wix3/releases/download/wix3112rtm/wix311-binaries.zip'
+        $expected = '2c1888d5d1dba377fc7fa14444cf556963747ff9a0a289a3599cf09da03b9e2e'
+        $dest = "$env:LOCALAPPDATA\.cargo-packager\WixTools"
+        $zip = Join-Path $env:RUNNER_TEMP 'wix311-binaries.zip'
+        $required = @(
+          'candle.exe', 'candle.exe.config', 'darice.cub', 'light.exe', 'light.exe.config',
+          'wconsole.dll', 'winterop.dll', 'wix.dll', 'WixUIExtension.dll', 'WixUtilExtension.dll'
+        )
+
+        function Test-WixComplete {
+          $missing = $required | Where-Object { -not (Test-Path (Join-Path $dest $_)) }
+          if ($missing) {
+            Write-Host "WixTools is incomplete, missing: $($missing -join ', ')"
+            return $false
+          }
+          return $true
+        }
+
+        if (Test-WixComplete) {
+          Write-Host "WIX toolset restored from cache at $dest"
+          exit 0
+        }
+
+        # A partial directory makes cargo-packager delete and refetch without retries, so clear it
+        # here and let the retry loop below own the download.
+        if (Test-Path $dest) { Remove-Item -Recurse -Force $dest }
+
+        foreach ($attempt in 1..5) {
+          try {
+            Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing -TimeoutSec 120
+            $hash = (Get-FileHash -Path $zip -Algorithm SHA256).Hash.ToLower()
+            if ($hash -ne $expected) { throw "checksum mismatch: got $hash" }
+            New-Item -ItemType Directory -Force -Path $dest | Out-Null
+            Expand-Archive -Path $zip -DestinationPath $dest -Force
+            if (-not (Test-WixComplete)) { throw "archive did not contain the expected tools" }
+            Write-Host "WIX toolset ready at $dest"
+            exit 0
+          } catch {
+            Write-Host "attempt ${attempt} failed: $($_.Exception.Message)"
+            if ($attempt -eq 5) { throw }
+            if (Test-Path $dest) { Remove-Item -Recurse -Force $dest }
+            Start-Sleep -Seconds ([Math]::Pow(2, $attempt))
+          }
+        }
+
     - name: Build packages
       run: make setup-packaging-deps package-aarch64-pc-windows-msvc package-x86_64-pc-windows-msvc package-bundle-pc-windows-msvc
 
@@ -308,13 +428,35 @@ jobs:
           merge-multiple: true
       - run: ls -laR artifacts
 
+      - name: Prepare Pre-Release
+        if: github.ref_type != 'tag' && (github.ref_name == 'main' || github.ref_name == 'alpha')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name == 'main' && 'continuous-release' || 'alpha-release' }}
+        run: |
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" >/dev/null 2>&1; then
+            gh api --method PATCH "repos/$GITHUB_REPOSITORY/git/refs/tags/$RELEASE_TAG" -f sha="$GITHUB_SHA" -F force=true >/dev/null
+          else
+            gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$RELEASE_TAG" -f sha="$GITHUB_SHA" >/dev/null
+          fi
+          release_id=
+          if release_id=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" --jq .id 2>/dev/null); then
+            gh api "repos/$GITHUB_REPOSITORY/releases/$release_id/assets" --jq '.[].id' |
+              while read -r asset_id; do
+                gh api --method DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$asset_id"
+              done
+          fi
+
       - name: Create Pre-Release
-        if: github.ref_type != 'tag'
+        if: github.ref_type != 'tag' && (github.ref_name == 'main' || github.ref_name == 'alpha')
         uses: softprops/action-gh-release@v3
         with:
           prerelease: true
-          name: Continuous Release
-          tag_name: continuous-release
+          name: ${{ github.ref_name == 'main' && 'Continuous Release' || 'Alpha Pre-Release' }}
+          tag_name: ${{ github.ref_name == 'main' && 'continuous-release' || 'alpha-release' }}
+          target_commitish: ${{ github.sha }}
+          fail_on_unmatched_files: true
+          make_latest: false
           files: artifacts/**
 
       - name: Create Release
@@ -326,23 +468,33 @@ jobs:
 
       # The three snap-store steps only run where store credentials exist. On a fork without
       # SNAP_STORE_LOGIN, `snapcraft upload` would abort the whole release job even though the
-      # GitHub release itself was published successfully.
+      # GitHub release itself was published successfully. They are also limited to the mainline
+      # and tags so that test builds from other branches cannot push to the snap store.
       - name: Install Snapcraft
-        if: env.SNAPCRAFT_STORE_CREDENTIALS != ''
+        if: env.SNAPCRAFT_STORE_CREDENTIALS != '' && (github.ref_name == 'main' || github.ref_type == 'tag')
         uses: samuelmeuli/action-snapcraft@v3
 
       # TODO: Publish CLI
+      # `download-artifact` with `merge-multiple` flattens every artifact into `artifacts/`, so the
+      # per-crate `dist/` prefix is gone by this point. Select the GUI snap by its snap name
+      # (`t3gemstone-imager`) and exclude the CLI snap, which shares that prefix.
       - name: Publish Snaps
-        if: env.SNAPCRAFT_STORE_CREDENTIALS != ''
+        if: env.SNAPCRAFT_STORE_CREDENTIALS != '' && (github.ref_name == 'main' || github.ref_type == 'tag')
         run: |
-          for pkg in gui; do
-            for file in artifacts/gem-imager-$pkg/dist/*.snap; do
-              snapcraft upload "$file" --release=$SNAP_CHANNEL;
-            done
+          set -euo pipefail
+          published=0
+          for file in artifacts/t3gemstone-imager_*.snap; do
+            [ -e "$file" ] || continue
+            snapcraft upload "$file" --release="$SNAP_CHANNEL"
+            published=$((published + 1))
           done
+          if [ "$published" -eq 0 ]; then
+            echo "No GUI snap found to publish" >&2
+            exit 1
+          fi
 
       - name: Logout from snapcraft
-        if: env.SNAPCRAFT_STORE_CREDENTIALS != ''
+        if: env.SNAPCRAFT_STORE_CREDENTIALS != '' && (github.ref_name == 'main' || github.ref_type == 'tag')
         run: snapcraft logout
 
   publish-aur:

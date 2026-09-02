@@ -26,8 +26,9 @@ use windows::Win32::System::Ioctl::{
     IOCTL_DISK_GET_DRIVE_GEOMETRY_EX, IOCTL_DISK_GET_DRIVE_LAYOUT_EX, IOCTL_DISK_IS_WRITABLE,
     IOCTL_STORAGE_GET_DEVICE_NUMBER, IOCTL_STORAGE_QUERY_PROPERTY, PARTITION_INFORMATION_EX,
     PARTITION_STYLE_GPT, PARTITION_STYLE_MBR, PropertyStandardQuery,
-    STORAGE_ACCESS_ALIGNMENT_DESCRIPTOR, STORAGE_ADAPTER_DESCRIPTOR, STORAGE_DEVICE_NUMBER,
-    STORAGE_PROPERTY_QUERY, StorageAccessAlignmentProperty, StorageAdapterProperty,
+    STORAGE_ACCESS_ALIGNMENT_DESCRIPTOR, STORAGE_ADAPTER_DESCRIPTOR, STORAGE_DESCRIPTOR_HEADER,
+    STORAGE_DEVICE_DESCRIPTOR, STORAGE_DEVICE_NUMBER, STORAGE_PROPERTY_QUERY,
+    StorageAccessAlignmentProperty, StorageAdapterProperty, StorageDeviceProperty,
     VOLUME_DISK_EXTENTS,
 };
 use windows::Win32::System::WindowsProgramming::{DRIVE_FIXED, DRIVE_REMOVABLE};
@@ -59,7 +60,7 @@ pub(crate) fn drive_list() -> crate::Result<Vec<DeviceDescriptor>> {
             }
 
             let enumerator_name = get_enumerator_name(h_device_info, &device_info_data);
-            let friendly_name = get_friendly_name(h_device_info, &mut device_info_data);
+            let friendly_name = get_friendly_name(h_device_info, &device_info_data);
             if friendly_name.is_empty() {
                 continue;
             }
@@ -68,11 +69,11 @@ pub(crate) fn drive_list() -> crate::Result<Vec<DeviceDescriptor>> {
                 description: friendly_name.clone(),
                 enumerator: enumerator_name.clone(),
                 is_usb: is_usb_drive(&enumerator_name),
-                is_removable: is_removable(h_device_info, &mut device_info_data),
+                is_removable: is_removable(h_device_info, &device_info_data),
                 ..Default::default()
             };
 
-            get_detail_data(&mut item, h_device_info, &mut device_info_data).unwrap();
+            get_detail_data(&mut item, h_device_info, &device_info_data).unwrap();
 
             let bt = item.bus_type.clone().unwrap_or("UNKNOWN".to_string());
             item.is_card = ["SDCARD", "MMC"].contains(&bt.as_str());
@@ -234,31 +235,23 @@ fn get_detail_data(
             .open(&device.device)
             .unwrap();
         if let Err(err) = get_device_size(device, HANDLE(h_physical.as_raw_handle())) {
-            device.error = Some(format!(
-                "Couldn't get device size: Error {}",
-                err.to_string()
-            ));
+            device.error = Some(format!("Couldn't get device size: Error {err}"));
             break;
         }
         if let Err(err) = get_partition_table_type(device, HANDLE(h_physical.as_raw_handle())) {
-            device.error = Some(format!(
-                "Couldn't get device partition type: Error {}",
-                err.to_string()
-            ));
+            device.error = Some(format!("Couldn't get device partition type: Error {err}"));
             break;
         }
         if let Err(err) = get_adapter_info(device, HANDLE(h_physical.as_raw_handle())) {
-            device.error = Some(format!(
-                "Couldn't get device adapter info: Error {}",
-                err.to_string()
-            ));
+            device.error = Some(format!("Couldn't get device adapter info: Error {err}"));
             break;
         }
         if let Err(err) = get_device_block_size(device, HANDLE(h_physical.as_raw_handle())) {
-            device.error = Some(format!(
-                "Couldn't get device block size: Error {}",
-                err.to_string()
-            ));
+            device.error = Some(format!("Couldn't get device block size: Error {err}"));
+            break;
+        }
+        if let Err(err) = get_device_serial(device, HANDLE(h_physical.as_raw_handle())) {
+            device.error = Some(format!("Couldn't get device serial: Error {err}"));
             break;
         }
         device.is_readonly = is_readonly(HANDLE(h_physical.as_raw_handle()));
@@ -307,6 +300,66 @@ fn get_device_block_size(device: &mut DeviceDescriptor, h_physical: HANDLE) -> c
     device.logical_block_size = descriptor.BytesPerLogicalSector;
 
     Ok(())
+}
+
+fn get_device_serial(device: &mut DeviceDescriptor, h_physical: HANDLE) -> crate::Result<()> {
+    let mut query = STORAGE_PROPERTY_QUERY {
+        QueryType: PropertyStandardQuery,
+        PropertyId: StorageDeviceProperty,
+        ..Default::default()
+    };
+
+    let mut header = STORAGE_DESCRIPTOR_HEADER::default();
+    unsafe {
+        DeviceIoControl(
+            h_physical,
+            IOCTL_STORAGE_QUERY_PROPERTY,
+            Some(&mut query as *mut _ as *mut std::ffi::c_void),
+            size_of::<STORAGE_PROPERTY_QUERY>() as u32,
+            Some(&mut header as *mut _ as *mut std::ffi::c_void),
+            size_of::<STORAGE_DESCRIPTOR_HEADER>() as u32,
+            None,
+            None,
+        )
+    }?;
+
+    let size = header.Size as usize;
+    if size < size_of::<STORAGE_DEVICE_DESCRIPTOR>() {
+        return Ok(());
+    }
+
+    let mut buf = vec![0u8; size];
+    unsafe {
+        DeviceIoControl(
+            h_physical,
+            IOCTL_STORAGE_QUERY_PROPERTY,
+            Some(&mut query as *mut _ as *mut std::ffi::c_void),
+            size_of::<STORAGE_PROPERTY_QUERY>() as u32,
+            Some(buf.as_mut_ptr().cast()),
+            size as u32,
+            None,
+            None,
+        )
+    }?;
+
+    let descriptor = unsafe { &*(buf.as_ptr() as *const STORAGE_DEVICE_DESCRIPTOR) };
+    device.serial = read_descriptor_string(&buf, descriptor.SerialNumberOffset as usize);
+
+    Ok(())
+}
+
+fn read_descriptor_string(buf: &[u8], offset: usize) -> Option<String> {
+    if offset == 0 || offset >= buf.len() {
+        return None;
+    }
+
+    let end = buf[offset..]
+        .iter()
+        .position(|b| *b == 0)
+        .map_or(buf.len(), |len| offset + len);
+    let value = String::from_utf8_lossy(&buf[offset..end]).trim().to_owned();
+
+    Some(value).filter(|s| !s.is_empty())
 }
 
 fn get_adapter_info(device: &mut DeviceDescriptor, h_physical: HANDLE) -> crate::Result<()> {
@@ -518,10 +571,8 @@ fn get_device_number(h_device: HANDLE) -> Option<u32> {
         )
     };
 
-    if res.is_ok() {
-        if disk_extents.NumberOfDiskExtents >= 2 {
-            return None;
-        }
+    if res.is_ok() && disk_extents.NumberOfDiskExtents >= 2 {
+        return None;
     }
 
     let mut device_number = STORAGE_DEVICE_NUMBER::default();

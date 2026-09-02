@@ -4,14 +4,15 @@ description = "Narrow Windows WinUSB readiness and provisioning support for T3 R
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 repository.workspace = true
 license.workspace = true
 
 [dependencies]
-sha2 = "0.10"
-rusb = "0.9"
+sha2 = "0.11"
 
 [target.'cfg(windows)'.dependencies]
+rusb = "0.9"
 windows-sys = { version = "0.61", features = [
     "Win32_Devices_DeviceAndDriverInstallation",
     "Win32_Foundation",

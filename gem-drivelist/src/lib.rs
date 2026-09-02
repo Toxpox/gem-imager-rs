@@ -1,4 +1,5 @@
 mod device;
+mod os_mounts;
 
 mod pal;
 

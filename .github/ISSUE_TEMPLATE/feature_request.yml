@@ -1,0 +1,32 @@
+name: Feature request
+description: Suggest an enhancement for the imager.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or use case
+      description: What are you trying to do, and what stands in the way?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: checkboxes
+    id: constraints
+    attributes:
+      label: Integrity constraints
+      description: |
+        The imager treats verified writes as a product invariant. Proposals
+        that would weaken download/write verification need extraordinary
+        justification.
+      options:
+        - label: This proposal keeps download and write verification intact
+          required: true

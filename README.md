@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/t3gemstone/gem-imager/main/.meta/logo-dark.png" />
-    <img src="https://raw.githubusercontent.com/t3gemstone/gem-imager/main/.meta/logo-light.png" alt="T3 Gemstone" width="360" />
+    <source media="(prefers-color-scheme: dark)" srcset=".meta/logo-dark.png" />
+    <img src=".meta/logo-light.png" alt="T3 Gemstone" width="360" />
   </picture>
 </p>
 
@@ -115,6 +115,17 @@ Open the generated `.dmg` from `gem-imager-gui/dist/` and drag **T3 Gemstone Ima
 `Applications`. Local builds are unsigned unless Apple Developer signing and notarization
 credentials are supplied; unsigned packages can trigger Gatekeeper warnings.
 
+libusb is compiled in statically on macOS, so the bundle does not depend on a Homebrew install
+at runtime. Packaging enforces this: it fails if the app links anything outside `/System`,
+`/usr/lib`, or an `@rpath`-relative location, because such a library is missing on a clean Mac
+and the app then fails to launch with only a generic "cannot be opened" dialog.
+
+To audit a `.dmg` from any host, including Linux:
+
+```bash
+scripts/verify-macos-dmg.sh path/to/T3.Gemstone.Imager_*.dmg
+```
+
 ### Windows
 
 Use a 64-bit Windows host with the stable Rust MSVC toolchain, Git LFS, and Visual Studio 2022 Build
@@ -182,7 +193,27 @@ cargo test -p gem-imager-gui
 cargo test -p gem-imager-gui --features sd,dfu
 ```
 
-For T3 Gemstone software, images, and documentation, visit [t3gemstone.org](https://t3gemstone.org/en) and the [official documentation](https://docs.t3gemstone.org).
+## Documentation
+
+User documentation is published in English and Turkish at
+[docs.t3gemstone.org](https://docs.t3gemstone.org) and maintained in the
+[t3-docs](https://github.com/Toxpox/t3-docs) repository:
+
+| Page | English | Türkçe |
+| --- | --- | --- |
+| Introduction | [Introduction](https://docs.t3gemstone.org/en/imager/introduction) | [Giriş](https://docs.t3gemstone.org/tr/imager/introduction) |
+| Installation | [Installation](https://docs.t3gemstone.org/en/imager/installation) | [Kurulum](https://docs.t3gemstone.org/tr/imager/installation) |
+| Writing an image | [Writing an Image](https://docs.t3gemstone.org/en/imager/writing-an-image) | [İmaj Yazma](https://docs.t3gemstone.org/tr/imager/writing-an-image) |
+| Customization | [Customization](https://docs.t3gemstone.org/en/imager/customization) | [Özelleştirme](https://docs.t3gemstone.org/tr/imager/customization) |
+| Using eMMC | [Using eMMC](https://docs.t3gemstone.org/en/imager/emmc) | [eMMC Kullanımı](https://docs.t3gemstone.org/tr/imager/emmc) |
+
+When the application's user-facing behaviour changes, update those pages in `t3-docs`. UI strings
+quoted there must match `gem-i18n/src/lib.rs` exactly.
+
+Developer documentation lives in this repository: [CONTRIBUTING.md](CONTRIBUTING.md) for the
+development workflow and [PACKAGING.md](PACKAGING.md) for building packages.
+
+For T3 Gemstone software and images, visit [t3gemstone.org](https://t3gemstone.org/en).
 
 ## License
 

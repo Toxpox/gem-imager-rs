@@ -7,7 +7,7 @@ pub(crate) const LATEST_RELEASE_URL: &str =
 
 pub(crate) const PACKAGE_QUALIFIER: (&str, &str, &str) = ("org", "t3gemstone", "imager");
 
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(any(target_os = "linux", all(target_os = "macos", feature = "notify-rust")))]
 pub(crate) const APP_ID: &str = "org.t3gemstone.imager";
 
 pub(crate) const DEFAULT_CONFIG: &[u8] = include_bytes!("../../config.json");
@@ -98,7 +98,7 @@ mod tests {
             include_str!("../Cargo.toml"),
             include_str!("../Package.appxmanifest"),
             include_str!("../assets/packages/windows/gui.exe.manifest"),
-            include_str!("../assets/packages/darwin/Info.plist"),
+            include_str!("../assets/packages/darwin/Info.plist.in"),
             include_str!("../assets/packages/linux/T3GemstoneImager.desktop"),
             include_str!("../assets/packages/linux/flatpak/org.t3gemstone.imager.metainfo.xml"),
             include_str!("../../snapcraft.gui.yaml"),

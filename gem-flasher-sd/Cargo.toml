@@ -3,6 +3,7 @@ name = "gem-flasher-sd"
 version = "3.0.0"
 description = "A library to flash OS images to SD Card"
 edition.workspace = true
+rust-version.workspace = true
 authors.workspace = true
 repository.workspace = true
 license.workspace = true
@@ -22,7 +23,7 @@ tokio = { version = "1.52", optional = true, default-features = false, features 
 anyhow = "1.0"
 gem-helper = { path = "../gem-helper", features = ["cancel"] }
 tempfile = { version = "3.27", optional = true }
-sha2 = "0.10"
+sha2 = "0.11"
 const-hex = "1.19"
 
 [dev-dependencies]

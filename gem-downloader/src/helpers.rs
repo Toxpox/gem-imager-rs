@@ -6,8 +6,15 @@ pub(crate) fn sha256_from_path(p: &Path) -> io::Result<[u8; 32]> {
     let file = std::fs::File::open(p)?;
     let mut reader = std::io::BufReader::new(file);
     let mut hasher = Sha256::new();
+    let mut buf = [0u8; 64 * 1024];
 
-    std::io::copy(&mut reader, &mut hasher)?;
+    loop {
+        let read = std::io::Read::read(&mut reader, &mut buf)?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buf[..read]);
+    }
 
     let hash = hasher
         .finalize()

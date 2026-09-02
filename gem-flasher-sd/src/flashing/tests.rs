@@ -171,18 +171,32 @@ fn read_back_stops_when_cancelled() {
 mod target_guard {
     use super::*;
 
+    fn identity(serial: Option<&str>, size: u64) -> crate::DeviceIdentity {
+        crate::DeviceIdentity {
+            serial: serial.map(str::to_owned),
+            wwn: None,
+            size,
+        }
+    }
+
     fn device(is_system: bool, size: u64) -> crate::Device {
+        device_with_serial(is_system, size, Some("SERIAL-A"))
+    }
+
+    fn device_with_serial(is_system: bool, size: u64, serial: Option<&str>) -> crate::Device {
         crate::Device {
             name: "Test Card".to_string(),
             path: std::path::PathBuf::from("/dev/test"),
             size,
             is_system,
+            identity: identity(serial, size),
         }
     }
 
     #[test]
     fn a_system_disk_is_refused() {
-        let err = evaluate_target(Some(&device(true, 64 * 1024 * 1024 * 1024)))
+        let size = 64 * 1024 * 1024 * 1024;
+        let err = evaluate_target(Some(&device(true, size)), &identity(Some("SERIAL-A"), size))
             .expect_err("a system disk must never be a valid destination");
 
         match err {
@@ -193,22 +207,139 @@ mod target_guard {
 
     #[test]
     fn a_normal_card_reports_its_capacity() {
+        let size = 32 * 1024 * 1024 * 1024;
         assert_eq!(
-            evaluate_target(Some(&device(false, 32 * 1024 * 1024 * 1024))).unwrap(),
-            Some(32 * 1024 * 1024 * 1024)
+            evaluate_target(
+                Some(&device(false, size)),
+                &identity(Some("SERIAL-A"), size)
+            )
+            .unwrap(),
+            Some(size)
         );
     }
 
     #[test]
     fn an_unknown_capacity_does_not_block_the_flash() {
-        assert_eq!(evaluate_target(Some(&device(false, 0))).unwrap(), None);
+        assert_eq!(
+            evaluate_target(Some(&device(false, 0)), &identity(Some("SERIAL-A"), 0)).unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn a_different_card_reusing_the_same_path_is_refused() {
+        let selected = identity(Some("SERIAL-A"), 32 * 1024 * 1024 * 1024);
+        let now_present = device_with_serial(false, 16 * 1024 * 1024 * 1024, Some("SERIAL-B"));
+
+        let err = evaluate_target(Some(&now_present), &selected)
+            .expect_err("a card swapped onto the same path must not be written");
+
+        match err {
+            crate::Error::DestinationChanged { name } => assert_eq!(&*name, "Test Card"),
+            other => panic!("expected DestinationChanged, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn the_same_card_is_still_accepted() {
+        let size = 32 * 1024 * 1024 * 1024;
+        let selected = identity(Some("SERIAL-A"), size);
+
+        assert_eq!(
+            evaluate_target(Some(&device(false, size)), &selected).unwrap(),
+            Some(size)
+        );
+    }
+
+    #[test]
+    fn a_card_without_a_serial_stays_usable_but_must_keep_its_size() {
+        let size = 32 * 1024 * 1024 * 1024;
+        let selected = identity(None, size);
+
+        assert_eq!(
+            evaluate_target(Some(&device_with_serial(false, size, None)), &selected).unwrap(),
+            Some(size),
+            "a card with no serial must stay usable"
+        );
+
+        let err = evaluate_target(Some(&device_with_serial(false, size / 2, None)), &selected)
+            .expect_err("a differently sized unnamed card must not be written");
+        assert!(
+            matches!(err, crate::Error::DestinationChanged { .. }),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn a_serial_change_alone_is_refused_at_the_same_size() {
+        let size = 32 * 1024 * 1024 * 1024;
+        let selected = identity(Some("SERIAL-A"), size);
+
+        let err = evaluate_target(
+            Some(&device_with_serial(false, size, Some("SERIAL-B"))),
+            &selected,
+        )
+        .expect_err("an identically sized card with another serial is a different card");
+        assert!(
+            matches!(err, crate::Error::DestinationChanged { .. }),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn a_card_that_gained_a_serial_is_refused() {
+        let size = 32 * 1024 * 1024 * 1024;
+        let selected = identity(None, size);
+
+        let err = evaluate_target(
+            Some(&device_with_serial(false, size, Some("SERIAL-B"))),
+            &selected,
+        )
+        .expect_err("an identifiable card must not silently satisfy an unnamed selection");
+        assert!(
+            matches!(err, crate::Error::DestinationChanged { .. }),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn the_swapped_card_message_stays_matchable_by_the_gui() {
+        let message = crate::Error::DestinationChanged {
+            name: "Generic SD Card".into(),
+        }
+        .to_string()
+        .to_lowercase();
+
+        assert!(
+            message.contains("a different device now occupies this path"),
+            "the GUI matches this phrase to localize the error: {message}"
+        );
+    }
+
+    #[test]
+    fn the_guard_is_a_pure_function_of_the_current_drive_list() {
+        let size = 32 * 1024 * 1024 * 1024;
+        let selected = identity(Some("SERIAL-A"), size);
+
+        let before = evaluate_target(Some(&device(false, size)), &selected).unwrap();
+        let after = evaluate_target(
+            Some(&device_with_serial(false, size, Some("SERIAL-B"))),
+            &selected,
+        );
+
+        assert_eq!(before, Some(size));
+        assert!(
+            after.is_err(),
+            "re-running the guard after the device is opened must catch a swap"
+        );
     }
 
     #[test]
     fn a_target_missing_from_the_drive_list_is_refused() {
-        let err = guard_target(std::path::Path::new(
-            "/dev/gem-nonexistent-target-for-tests",
-        ))
+        let err = guard_target(
+            std::path::Path::new("/dev/gem-nonexistent-target-for-tests"),
+            &crate::DeviceIdentity::default(),
+        )
         .expect_err("an unenumerated destination must not be accepted");
 
         match err {

@@ -4,10 +4,12 @@ use std::{
     sync::atomic::{AtomicU64, Ordering},
 };
 
+#[cfg_attr(not(feature = "sd"), allow(dead_code))]
 const HEADROOM: u64 = 256 * 1024 * 1024;
 
 const PREFIX: &str = "t3-staging-";
 
+#[cfg_attr(not(feature = "sd"), allow(dead_code))]
 static STAGING_NONCE: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, thiserror::Error)]
@@ -16,6 +18,7 @@ pub(crate) enum StagingError {
     #[error("no application cache directory is available for image staging")]
     NoCacheDir,
     #[error("failed to prepare the image staging directory: {source}")]
+    #[cfg_attr(not(feature = "sd"), allow(dead_code))]
     Io {
         #[source]
         source: io::Error,
@@ -24,6 +27,7 @@ pub(crate) enum StagingError {
         "not enough free space for image staging: {required} bytes required, \
          {available} bytes available"
     )]
+    #[cfg_attr(not(feature = "sd"), allow(dead_code))]
     InsufficientSpace { required: u64, available: u64 },
 }
 
@@ -51,11 +55,13 @@ pub(crate) fn staging_dir() -> Result<PathBuf, StagingError> {
 }
 
 #[derive(Debug)]
+#[cfg_attr(not(feature = "sd"), allow(dead_code))]
 pub(crate) struct StagingImage {
     path: PathBuf,
 }
 
 impl StagingImage {
+    #[cfg_attr(not(feature = "sd"), allow(dead_code))]
     pub(crate) fn create(image_size: u64) -> Result<Self, StagingError> {
         let dir = staging_dir()?;
         std::fs::create_dir_all(&dir).map_err(|source| StagingError::Io { source })?;
@@ -77,6 +83,7 @@ impl StagingImage {
         Ok(Self { path })
     }
 
+    #[cfg_attr(not(feature = "sd"), allow(dead_code))]
     pub(crate) fn path(&self) -> &Path {
         &self.path
     }
@@ -113,6 +120,7 @@ pub(crate) fn cleanup_stale() {
 }
 
 #[cfg(windows)]
+#[cfg_attr(not(feature = "sd"), allow(dead_code))]
 fn available_space(dir: &Path) -> io::Result<u64> {
     use std::os::windows::ffi::OsStrExt as _;
 
@@ -138,6 +146,7 @@ fn available_space(dir: &Path) -> io::Result<u64> {
 }
 
 #[cfg(unix)]
+#[cfg_attr(not(feature = "sd"), allow(dead_code))]
 fn available_space(dir: &Path) -> io::Result<u64> {
     use std::os::unix::ffi::OsStrExt as _;
 

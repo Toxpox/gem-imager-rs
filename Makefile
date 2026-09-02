@@ -1,14 +1,22 @@
 # Run 'make help' to see guidance on usage of this Makefile
 
 _HOST_TARGET = $(shell rustc --print host-tuple)
-_CARGO_TOML_VERSION = $(shell grep 'version =' Cargo.toml | sed 's/version = "\(.*\)"/\1/')
+# Anchored so the `rust-version` key on the following line is not swept in as well, which
+# produced a bogus "0.9.0 rust-1.88" version string.
+_CARGO_TOML_VERSION = $(shell grep -m1 '^version = ' Cargo.toml | sed 's/version = "\(.*\)"/\1/')
 _DATE = $(shell date +%F)
 _RUST_ARGS_BASE = --locked
 _RUST_ARGS = ${_RUST_ARGS_BASE}
 _RUST_ARGS_CLI = ${_RUST_ARGS} --features dfu
 _RUST_ARGS_GUI = ${_RUST_ARGS} --features sd,dfu
 _PACKAGER_ARGS = -r -vvv --verbose
-_CARGO_CHECK ?= $(CARGO_PATH) $(if $(shell cargo clippy --version >/dev/null 2>&1 && echo yes),clippy,check)
+# Clippy is the canonical check engine: always clippy, never a silent
+# fallback to `check`, so CI and contributors run the same gate.
+_CARGO_CHECK ?= $(CARGO_PATH) clippy
+# A warning that does not fail the build is a warning nobody fixes. Deny them, but only
+# when the engine really is clippy: `check` is reused with `test` and `llvm-cov`
+# overrides, and those would forward `-D warnings` to the test harness instead.
+_CARGO_CHECK_ARGS = $(if $(findstring clippy,$(_CARGO_CHECK)),-- -D warnings,)
 _ARCH = $(firstword $(subst -, ,$(TARGET)))
 _APPIMAGETOOL_ARGS =
 _DEST_VERSION = $(VERSION)
@@ -73,6 +81,8 @@ NOTIFY_RUST ?= 1
 APPIMAGE_ARCH ?= $(_ARCH)
 ## variable: APPIMAGE_RELEASE_TAG: Release tag for update info
 APPIMAGE_RELEASE_TAG ?=
+APPIMAGE_RELEASE_OWNER ?= Toxpox
+APPIMAGE_RELEASE_REPO ?= gem-imager-rs
 
 # The reviewed libwdi runtime and helper are currently gated to Windows x64. ARM64 keeps building
 # without the provisioning feature until its native runtime and hardware matrix are complete.
@@ -96,6 +106,12 @@ endif
 ifeq ($(SYSTEM_DEPS),1)
 	_RUST_ARGS += --no-default-features
 	_RUST_ARGS_GUI += --features system-deps
+else
+# Distro packages (deb/pacman) declare their dependencies and are built with SYSTEM_DEPS=1.
+# Everything else is relocatable (tarball, snap, AppImage, dmg) and must not resolve native
+# libraries such as libusb from the host, so they are linked statically. The GUI already gets
+# this through its default features; the CLI defaults to none and needs it stated.
+	_RUST_ARGS_CLI += --features static
 endif
 
 # Add offline flag is needed
@@ -120,7 +136,7 @@ ifeq ($(NOTIFY_RUST),1)
 endif
 
 ifneq ($(APPIMAGE_RELEASE_TAG),)
-	_APPIMAGETOOL_ARGS += -u "gh-releases-zsync|t3gemstone|imager|${APPIMAGE_RELEASE_TAG}|T3Gemstone_Imager-*-${APPIMAGE_ARCH}.AppImage.zsync"
+	_APPIMAGETOOL_ARGS += -u "gh-releases-zsync|${APPIMAGE_RELEASE_OWNER}|${APPIMAGE_RELEASE_REPO}|${APPIMAGE_RELEASE_TAG}|T3Gemstone_Imager-*-${APPIMAGE_ARCH}.AppImage.zsync"
 endif
 
 ## build: build: Build both CLI and GUI
@@ -162,16 +178,60 @@ endif
 
 _check_common:
 	$(_CARGO_CHECK) --all-targets --all-features --workspace ${_RUST_ARGS_BASE} \
-		--exclude gem-flasher --exclude gem-imager-gui --exclude gem-imager-cli
-	$(_CARGO_CHECK) --all-targets -p gem-flasher ${_RUST_ARGS_BASE} -F dfu,static,piped_image,sd
+		--exclude gem-flasher --exclude gem-imager-gui --exclude gem-imager-cli \
+		${_CARGO_CHECK_ARGS}
+	$(_CARGO_CHECK) --all-targets -p gem-flasher ${_RUST_ARGS_BASE} -F dfu,static,piped_image,sd \
+		${_CARGO_CHECK_ARGS}
 
+# Both binaries are checked with and without their write-path features: the feature-rich
+# build is what ships, but the default build is what `cargo clippy` gives a contributor,
+# and a variant that only exists in one of the two is exactly where dead code hides.
 _check_cli:
-	$(_CARGO_CHECK) --all-targets -p gem-imager-cli ${_RUST_ARGS_CLI}
+	$(_CARGO_CHECK) --all-targets -p gem-imager-cli ${_RUST_ARGS_BASE} ${_CARGO_CHECK_ARGS}
+	$(_CARGO_CHECK) --all-targets -p gem-imager-cli ${_RUST_ARGS_CLI} ${_CARGO_CHECK_ARGS}
 
 _check_gui:
-	$(_CARGO_CHECK) --all-targets -p gem-imager-gui ${_RUST_ARGS_BASE}
-	$(_CARGO_CHECK) --all-targets -p gem-imager-gui ${_RUST_ARGS_GUI} -F updater,pre-release
-	
+	$(_CARGO_CHECK) --all-targets -p gem-imager-gui ${_RUST_ARGS_BASE} ${_CARGO_CHECK_ARGS}
+	$(_CARGO_CHECK) --all-targets -p gem-imager-gui ${_RUST_ARGS} --features sd ${_CARGO_CHECK_ARGS}
+	$(_CARGO_CHECK) --all-targets -p gem-imager-gui ${_RUST_ARGS_GUI} -F updater,pre-release \
+		${_CARGO_CHECK_ARGS}
+
+# Platform-gated code is invisible to a same-platform lint, so a `#[cfg(windows)]` block can carry
+# warnings for months and only surface when the Windows CI runner denies them. These crates have no
+# native C dependency, so they cross-lint from any host without a cross toolchain.
+#
+# Not part of `check`: it needs the target's std installed, so it stays opt-in. The crates left out
+# (gem-flasher, gem-imager-cli, gem-imager-gui, gem-config, gem-downloader, gem-flasher-dfu) pull
+# liblzma/aws-lc/sqlite, which need a real MSVC toolchain; CI's own Windows runner covers them.
+#
+# gem-winusb and gem-winusb-helper are excluded for the same reason: they reach libusb through
+# rusb, and `--all-features` selects its vendored build, which compiles libusb's C sources for the
+# target with the host cc. That fails for the Windows triple on a Linux host, and succeeds only by
+# accident where a host libusb happens to satisfy pkg-config. Both are Windows-only crates that the
+# Windows job already lints natively, so the cross run adds no coverage they do not already get.
+_CROSS_LINT_CRATES = gem-drivelist gem-flasher-sd gem-helper gem-host-wifi gem-iced-widgets \
+	gem-i18n
+
+# Every `cfg` in those crates keys off the OS (target_os = "macos" / windows), never the
+# architecture, so one triple per gated OS covers all of it. Linting a single default target would
+# leave the other OS unchecked, which is the hole that let a macOS-only lint sit undetected.
+_CROSS_LINT_TARGETS = x86_64-pc-windows-msvc x86_64-apple-darwin
+
+## housekeeping: check-cross: Lint platform-gated code for every gated OS. CROSS_TARGET=<triple>
+.PHONY: check-cross
+check-cross:
+	@for t in $(or $(CROSS_TARGET),$(_CROSS_LINT_TARGETS)); do \
+		echo "Cross-linting platform-gated code for $$t"; \
+		rustup target list --installed | grep -qx "$$t" || { \
+			echo "error: rustup target add $$t" >&2; exit 1; }; \
+		for p in $(_CROSS_LINT_CRATES); do \
+			echo "  $$p"; \
+			PKG_CONFIG_ALLOW_CROSS=1 $(CARGO_PATH) clippy \
+				--target $$t \
+				--all-targets -p $$p --all-features -- -D warnings || exit 1; \
+		done; \
+	done
+
 ## housekeeping: check: Run code quality checks.
 .PHONY: check
 check: check-fmt check-cli check-gui
@@ -188,6 +248,29 @@ check-cli: _check_common _check_cli
 ## housekeeping: check-gui: Run code quality checks on GUI.
 .PHONY: check-gui
 check-gui: _check_common _check_gui
+
+## housekeeping: check-scripts: Run the packaging-verifier self-tests.
+.PHONY: check-scripts
+check-scripts: check-macos-dmg-selftest check-wix-prefetch
+
+## housekeeping: check-macos-dmg-selftest: Self-test the macOS dmg verifier against synthetic bundles.
+.PHONY: check-macos-dmg-selftest
+check-macos-dmg-selftest:
+	python3 scripts/verify-macos-dmg-selftest.py
+
+## housekeeping: check-wix-pin: Verify the release WIX constants still match cargo-packager.
+.PHONY: check-wix-pin
+check-wix-pin:
+	python3 scripts/verify-wix-pin.py
+
+## housekeeping: check-wix-prefetch: Replay the release WIX prefetch step without a Windows runner.
+.PHONY: check-wix-prefetch
+check-wix-prefetch:
+	@command -v pwsh >/dev/null || { \
+		echo "error: pwsh is required; see https://learn.microsoft.com/powershell/scripting/install" >&2; \
+		exit 1; }
+	pwsh -File scripts/verify-wix-prefetch.ps1
+
 
 ## housekeeping: test: Run tests on workspace
 .PHONY: test
@@ -230,16 +313,18 @@ endif
 	$(CARGO_PATH) install cargo-packager --locked --version 0.11.8
 
 ## housekeeping: package-rename: Replace package version with `_alpha_`. Intended for use in CI.
-.PHONY: package-rename-alpha
+.PHONY: package-rename
 package-rename:
 	for pkg in gui cli service; do \
 		if [ -d gem-imager-$$pkg/dist ]; then \
 			for file in gem-imager-$$pkg/dist/*; do \
+				[ -e "$$file" ] || continue; \
 				if [ "$${file##*.}" = "msixbundle" ]; then \
-					mv "$$file" "$$(echo "$$file" | sed -E 's/_[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+_/_alpha_/')"; \
+					renamed=$$(printf '%s\n' "$$file" | sed -E 's/_[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+_/_alpha_/'); \
 				else \
-					mv "$$file" "$$(echo "$$file" | sed -E 's/_[0-9]+\.[0-9]+\.[0-9]+_/_alpha_/')"; \
+					renamed=$$(printf '%s\n' "$$file" | sed -E 's/_[0-9]+\.[0-9]+\.[0-9]+_/_alpha_/'); \
 				fi; \
+				[ "$$file" = "$$renamed" ] || mv "$$file" "$$renamed"; \
 			done \
 		fi \
 	done
@@ -254,7 +339,6 @@ endif
 	sed -i '/\[workspace.package\]/,/^\[/{s/^\s*version\s*=.*/version = "${VERSION}"/}' Cargo.toml
 	sed -i "s/^version: .*/version: ${VERSION}/" snapcraft.cli.yaml
 	sed -i "s/^version: .*/version: ${VERSION}/" snapcraft.gui.yaml
-	sed -i "s/^version: .*/version: ${VERSION}/" docs/antora.yml
 	sed -i '/<releases>/a \
 \t\t<release version="$(VERSION)" date="$(_DATE)">\
 \t\t\t<url>https://github.com/Toxpox/gem-imager-rs/releases/tag/$(VERSION)</url>\
@@ -271,7 +355,7 @@ endif
         	read -r -p "Create git commit and tag [y/N]: " CONTINUE; \
 	done ; \
 	[ $$CONTINUE = "y" ] || [ $$CONTINUE = "Y" ] || (echo "Aborting."; exit 1;)
-	git add Cargo.toml Cargo.lock gem-imager-gui/assets/packages/linux/flatpak/org.t3gemstone.imager.metainfo.xml docs/antora.yml \
+	git add Cargo.toml Cargo.lock gem-imager-gui/assets/packages/linux/flatpak/org.t3gemstone.imager.metainfo.xml \
 		snapcraft.*.yaml gem-imager-gui/Package.appxmanifest gem-imager-gui/assets/packages/windows/gui.exe.manifest \
 		gem-imager-gui/assets/packages/windows/gui-as-invoker.exe.manifest \
 		gem-winusb-helper/assets/helper.exe.manifest Packager.windows-x64.toml
@@ -307,7 +391,154 @@ package-gui-appimage: build-gui
 	rm -rf gem-imager-gui/dist/org.t3gemstone.imager.AppDir
 
 package-gui-dmg: build-gui
+	$(MAKE) _darwin_plist
+	# The .app is built first so the dylib audit runs before anything is sealed into the
+	# read-only dmg image. Signing targets the compiled binary rather than the bundle,
+	# because `packager -f dmg` re-copies the binary and would discard a bundle-only seal.
+	# The final audit reads the dmg itself, since packager deletes the .app afterwards.
+	$(CARGO_PATH) packager -p gem-imager-gui --target $(TARGET) ${_PACKAGER_ARGS} -f app
+	$(MAKE) _darwin_verify TARGET=$(TARGET)
+	$(MAKE) _darwin_sign TARGET=$(TARGET)
 	$(CARGO_PATH) packager -p gem-imager-gui --target $(TARGET) ${_PACKAGER_ARGS} -f dmg
+	$(MAKE) _darwin_verify_signed TARGET=$(TARGET)
+
+_DARWIN_PLIST = target/packaging/darwin/Info.plist
+
+_darwin_plist:
+	mkdir -p $(dir $(_DARWIN_PLIST))
+	sed 's/@VERSION@/$(VERSION)/g' \
+		gem-imager-gui/assets/packages/darwin/Info.plist.in \
+		> $(_DARWIN_PLIST)
+
+_DARWIN_APP = gem-imager-gui/dist/T3 Gemstone Imager.app
+_DARWIN_BIN = target/$(TARGET)/release/gem-imager-gui
+# cargo-packager maps x86_64 to "x64" when it names the dmg, and leaves every other arch alone.
+_DARWIN_DMG_ARCH = $(if $(filter x86_64,$(_ARCH)),x64,$(_ARCH))
+_DARWIN_DMG = gem-imager-gui/dist/T3 Gemstone Imager_$(VERSION)_$(_DARWIN_DMG_ARCH).dmg
+
+# A .app that links a Homebrew dylib by absolute path launches only on machines that happen to
+# have that exact path, and fails with an unhelpful "cannot be opened" dialog everywhere else.
+# Fail the build here rather than shipping a bundle that dies on the user's Mac.
+#
+# A bundle-relative install name is not automatically safe either: @rpath/foo.dylib only loads
+# if foo.dylib was actually copied into the bundle. Resolve each one against the binary's own
+# LC_RPATH entries so a dependency nobody vendored is caught here and not by the user.
+_darwin_verify:
+	@app="$(_DARWIN_APP)/Contents/MacOS/gem-imager-gui"; \
+	if [ ! -f "$$app" ]; then \
+		echo "error: packaged binary not found for dylib audit: $$app" >&2; exit 1; \
+	fi; \
+	command -v otool >/dev/null || { \
+		echo "error: otool not found; the dylib audit cannot run" >&2; exit 1; }; \
+	linked=$$(otool -L "$$app") || { \
+		echo "error: otool failed to read $$app" >&2; exit 1; }; \
+	bad=$$(printf '%s\n' "$$linked" | tail -n +2 | awk '{print $$1}' \
+		| grep -v '^/System/' | grep -v '^/usr/lib/' | grep -v '^@' || true); \
+	if [ -n "$$bad" ]; then \
+		echo "error: bundle links non-system libraries by absolute path:" >&2; \
+		echo "$$bad" >&2; \
+		echo "these will be missing on a clean Mac; vendor them statically instead" >&2; \
+		exit 1; \
+	fi; \
+	rpaths=$$(otool -l "$$app" | awk '/cmd LC_RPATH/{f=1} f&&/path /{print $$2; f=0}'); \
+	relative=$$(printf '%s\n' "$$linked" | tail -n +2 | awk '{print $$1}' | grep '^@' || true); \
+	exedir="$(_DARWIN_APP)/Contents/MacOS"; \
+	unresolved=""; \
+	for dep in $$relative; do \
+		suffix=$${dep#@rpath/}; \
+		found=""; \
+		case "$$dep" in \
+		@executable_path/*|@loader_path/*) \
+			cand="$$exedir/$${dep#@*path/}"; \
+			[ -f "$$cand" ] && found=1 ;; \
+		@rpath/*) \
+			for rp in $$rpaths; do \
+				case "$$rp" in \
+				/System/*|/usr/lib/*) found=1 ;; \
+				/*) [ -f "$$rp/$$suffix" ] && found=1 ;; \
+				@executable_path/*|@loader_path/*) \
+					[ -f "$$exedir/$${rp#@*path/}/$$suffix" ] && found=1 ;; \
+				*) [ -f "$$exedir/$$rp/$$suffix" ] && found=1 ;; \
+				esac; \
+				[ -n "$$found" ] && break; \
+			done ;; \
+		esac; \
+		[ -n "$$found" ] || unresolved="$$unresolved $$dep"; \
+	done; \
+	if [ -n "$$unresolved" ]; then \
+		echo "error: bundle-relative dependencies are not present in the bundle:" >&2; \
+		for dep in $$unresolved; do echo "  $$dep" >&2; done; \
+		echo "dyld aborts the app at launch when it cannot resolve these" >&2; \
+		exit 1; \
+	fi; \
+	echo "dylib audit passed: system libraries only, all bundle-relative deps present"
+
+# cargo-packager only signs when a signing identity is configured. Without one the bundle carries
+# an ad-hoc CodeDirectory with no CMS signature, and any later modification invalidates it. A
+# fresh ad-hoc seal here keeps the signature consistent with the shipped contents, so Gatekeeper
+# reports "unidentified developer" (user-overridable) rather than a broken signature.
+#
+# `cargo packager -f dmg` re-runs the app packaging stage and copies the binary from
+# target/<triple>/release into a fresh bundle, so signing the bundle here would be silently
+# undone. arm64 hides this because the linker always applies its own ad-hoc signature, but an
+# x86_64 binary stays completely unsigned and macOS then refuses to launch it. Sign the source
+# binary so that every copy packager makes carries the signature.
+_darwin_sign:
+	@if codesign -dv "$(_DARWIN_BIN)" 2>&1 | grep -q '^Authority='; then \
+		echo "bundle carries a real signing authority; leaving it untouched"; \
+	else \
+		echo "no signing authority present; applying ad-hoc signature"; \
+		codesign --force --sign - "$(_DARWIN_BIN)"; \
+		codesign --verify --strict "$(_DARWIN_BIN)"; \
+		codesign --force --deep --sign - "$(_DARWIN_APP)"; \
+		codesign --verify --deep --strict "$(_DARWIN_APP)"; \
+	fi
+
+# The seal is only trustworthy if it is checked on the copy that actually ships, so this reads the
+# binary out of the finished dmg. `cargo packager -f dmg` deletes gem-imager-gui/dist/*.app once
+# the image exists (cargo-packager src/package/mod.rs, "Clean up .app if only building dmg"), so
+# checking the bundle path here would run codesign against a path that no longer exists and fail
+# every build regardless of whether the signature was fine.
+#
+# The check targets the bundle's main executable rather than the bundle as a whole: that Mach-O is
+# what the kernel validates at launch, and it is the same thing scripts/verify-macos-dmg.sh
+# inspects inside the shipped dmg. A bundle-wide `--deep` verify would additionally demand a
+# _CodeSignature directory that packager does not always produce, which would fail the build for a
+# bundle that actually launches fine.
+#
+# For the same reason the executable is copied out before `codesign --verify`: verifying it in
+# place makes codesign resolve the enclosing .app and report "code has no resources but signature
+# indicates they must be present", even though the Mach-O's own seal is intact.
+_darwin_verify_signed:
+	@dmg="$(_DARWIN_DMG)"; \
+	if [ ! -f "$$dmg" ]; then \
+		echo "error: dmg not found for signature audit: $$dmg" >&2; exit 1; \
+	fi; \
+	mnt=$$(mktemp -d); \
+	hdiutil attach "$$dmg" -nobrowse -readonly -mountpoint "$$mnt" >/dev/null \
+		|| { echo "error: could not mount $$dmg for signature audit" >&2; rmdir "$$mnt"; exit 1; }; \
+	exe=$$(find "$$mnt" -type f -path '*.app/Contents/MacOS/*' | head -1); \
+	status=0; \
+	if [ -z "$$exe" ]; then \
+		echo "error: no app bundle executable found inside $$dmg" >&2; status=1; \
+	elif ! codesign -dv "$$exe" 2>&1 | grep -q '^CodeDirectory'; then \
+		echo "error: the binary sealed into the dmg carries no signature;" >&2; \
+		echo "macOS will refuse to launch it with 'the application cannot be opened'" >&2; \
+		status=1; \
+	else \
+		probe=$$(mktemp -d); \
+		cp "$$exe" "$$probe/exe"; \
+		if ! codesign --verify --strict "$$probe/exe"; then \
+			echo "error: the binary sealed into the dmg has a broken signature" >&2; status=1; \
+		fi; \
+		rm -rf "$$probe"; \
+	fi; \
+	hdiutil detach "$$mnt" -quiet || true; \
+	rmdir "$$mnt" 2>/dev/null || true; \
+	if [ "$$status" -eq 0 ]; then \
+		echo "signature verified on the binary that was sealed into the dmg"; \
+	fi; \
+	exit "$$status"
 
 package-gui-wix: build-gui
 ifeq ($(TARGET),x86_64-pc-windows-msvc)

@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use url::Url;
 
 use crate::config::{Config, Device, Flasher, Imager, InitFormat, OsImage, OsListItem, OsSubList};
-use crate::t3::canonical::{Board, Image};
+use crate::t3::canonical::{Board, Image, T3_BOARD_TAG};
 use crate::t3::validate::ValidatedT3Catalog;
 
 pub fn catalog_to_config(catalog: &ValidatedT3Catalog) -> Config {
@@ -28,6 +28,43 @@ pub fn catalog_to_config(catalog: &ValidatedT3Catalog) -> Config {
     }
 }
 
+const T3_DOCUMENTATION_URL: &str = "https://docs.t3gemstone.org/";
+
+const T3_GEM_O1_SPECIFICATION: &[(&str, &str)] = &[
+    ("Processor", "Texas Instruments AM67A"),
+    (
+        "Cores",
+        "4 x 1.4GHz ARM® Cortex-A53 (64-bit), 2 x 800MHz ARM® Cortex-R5F",
+    ),
+    ("GPU", "IMG BXS-4-64, 50 GFLOPS"),
+    ("AI Accelerator", "2 x 2 TOPS deep learning accelerator"),
+    ("RAM", "4GB LPDDR4"),
+    ("Onboard Flash", "32GB eMMC"),
+];
+
+fn is_t3_board(board: &Board) -> bool {
+    board.tags.iter().any(|tag| tag == T3_BOARD_TAG)
+}
+
+fn documentation_for(board: &Board) -> Option<Url> {
+    if !is_t3_board(board) {
+        return None;
+    }
+
+    T3_DOCUMENTATION_URL.parse().ok()
+}
+
+fn specification_for(board: &Board) -> Vec<(String, String)> {
+    if !is_t3_board(board) {
+        return Vec::new();
+    }
+
+    T3_GEM_O1_SPECIFICATION
+        .iter()
+        .map(|(key, value)| ((*key).to_owned(), (*value).to_owned()))
+        .collect()
+}
+
 fn board_to_device(board: &Board) -> Device {
     Device {
         name: board.name.clone(),
@@ -36,9 +73,9 @@ fn board_to_device(board: &Board) -> Device {
         description: board.description.clone(),
         flasher: Flasher::SdCard,
         emmc_dfu: board.capabilities.supports_dfu(),
-        documentation: None,
+        documentation: documentation_for(board),
         instructions: None,
-        specification: Vec::new(),
+        specification: specification_for(board),
         oshw: None,
     }
 }
@@ -154,7 +191,7 @@ fn distribution_sublist(name: &str, members: &[&Image], boards: &[&Board]) -> Op
         }
     }
 
-    releases.sort_by(|a, b| newest_release_date(&b.1).cmp(&newest_release_date(&a.1)));
+    releases.sort_by_key(|release| std::cmp::Reverse(newest_release_date(&release.1)));
 
     let mut subitems: Vec<OsListItem> = Vec::new();
 
@@ -400,6 +437,80 @@ mod tests {
             })
             .collect();
         assert_eq!(names, ["T3 Gemstone OS (Desktop)"]);
+    }
+
+    #[test]
+    fn the_t3_board_carries_its_hardware_specification() {
+        let config = bridged(ProductScope::T3AndBeagleY);
+
+        let t3 = config
+            .imager
+            .devices
+            .iter()
+            .find(|device| device.tags.contains(T3_BOARD_TAG))
+            .expect("the T3 board must be bridged");
+
+        let keys: Vec<&str> = t3
+            .specification
+            .iter()
+            .map(|(key, _)| key.as_str())
+            .collect();
+        assert!(
+            keys.contains(&"Processor")
+                && keys.contains(&"Cores")
+                && keys.contains(&"GPU")
+                && keys.contains(&"RAM"),
+            "the board detail pane shows these rows: {keys:?}"
+        );
+        assert!(
+            t3.specification.iter().all(|(_, value)| !value.is_empty()),
+            "an empty value renders as a blank row"
+        );
+
+        let beagley = config
+            .imager
+            .devices
+            .iter()
+            .find(|device| !device.tags.contains(T3_BOARD_TAG))
+            .expect("BeagleY-AI is in scope here");
+        assert!(
+            beagley.specification.is_empty(),
+            "only the T3 board has a specification published by this fork"
+        );
+    }
+
+    #[test]
+    fn the_t3_board_links_to_the_documentation_site() {
+        let config = bridged(ProductScope::T3AndBeagleY);
+
+        let t3 = config
+            .imager
+            .devices
+            .iter()
+            .find(|device| device.tags.contains(T3_BOARD_TAG))
+            .expect("the T3 board must be bridged");
+
+        let documentation = t3
+            .documentation
+            .as_ref()
+            .expect("the board pane only draws the button when a link is present");
+        assert_eq!(documentation.as_str(), "https://docs.t3gemstone.org/");
+        assert_eq!(
+            documentation.scheme(),
+            "https",
+            "the link is opened in a browser, so it must not be plain http"
+        );
+
+        let beagley = config
+            .imager
+            .devices
+            .iter()
+            .find(|device| !device.tags.contains(T3_BOARD_TAG))
+            .expect("BeagleY-AI is in scope here");
+        assert!(
+            beagley.documentation.is_none(),
+            "BeagleY-AI documentation belongs to BeagleBoard, not this site"
+        );
     }
 
     #[test]

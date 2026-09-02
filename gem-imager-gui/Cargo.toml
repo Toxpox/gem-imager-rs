@@ -4,32 +4,33 @@ description = "The easiest way to install the latest operating system images for
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 repository.workspace = true
 license.workspace = true
 
 [dependencies]
-iced = { version = "0.14.0", features = ["image", "svg", "tokio", "advanced"] }
+iced = { version = "0.14", features = ["image", "svg", "tokio", "advanced"] }
 rfd = { version = "0.17.2", features = ["file-handle-inner"] }
 gem-flasher = { path = "../gem-flasher", features = ["serde", "piped_image", "t3_gem_init"] }
-tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
-tracing = "0.1.44"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing = "0.1"
 iced_aw = { version = "0.14.1", default-features = false, features = ["spinner"] }
 image = "0.25"
 tokio = { version = "1.52", default-features = false, features = ["macros", "time"] }
 webbrowser = "1.2.1"
 notify-rust = { version = "4.17.0", default-features = false, features = ["z-with-tokio"], optional = true }
-url = "2.5.4"
+url = "2.5"
 whoami = "2.1"
 iana-time-zone = "0.1"
-serde = { version = "1.0.228", features = ["derive"] }
-serde_json = { version = "1.0.150" }
-directories = "6.0.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+directories = "6.0"
 gem-downloader = { path = "../gem-downloader", default-features = false, features = ["json"] }
 gem-config = { path = "../gem-config" }
 gem-helper = { path = "../gem-helper", features = ["file_stream", "cancel"] }
 semver = "1.0.28"
 anyhow = "1.0"
-tempfile = "3.26"
+tempfile = "3.27"
 const-hex = { version = "1.19", features = ["serde"] }
 tokio-util = { version = "0.7", features = ["rt"] }
 rusqlite = { version = "0.40", features = ["url", "chrono"] }
@@ -52,11 +53,11 @@ windows-sys = { version = "0.61", features = ["Win32_Storage_FileSystem", "Win32
 
 [build-dependencies]
 embed-resource = "3.0"
-sha2 = "0.10"
+sha2 = "0.11"
 
 [dev-dependencies]
 httpmock = "0.8"
-sha2 = "0.10"
+sha2 = "0.11"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 gem-flasher = { path = "../gem-flasher", features = ["sd_linux_udev"] }
@@ -94,7 +95,7 @@ banner_path = "assets/icons/installer_banner.png"
 dialog_image_path = "assets/icons/dialog_image.png"
 
 [package.metadata.packager.macos]
-info_plist_path = "assets/packages/darwin/Info.plist"
+info_plist_path = "../target/packaging/darwin/Info.plist"
 
 [package.metadata.packager.deb]
 package_name = "gem-imager-gui"

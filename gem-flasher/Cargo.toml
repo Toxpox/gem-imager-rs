@@ -4,6 +4,7 @@ description = "Library providing flashing capabilities for T3 Gemstone boards"
 version = "0.1.0"
 authors.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 repository.workspace = true
 license.workspace = true
 readme = "README.md"
@@ -21,18 +22,20 @@ gem-flasher-sd = { path = "../gem-flasher-sd", optional = true }
 tokio-util = { version = "0.7", optional = true, features = ["rt"] }
 gem-helper = { path = "../gem-helper", features = ["cancel"] }
 rc-zip-sync = { version = "4.4", default-features = false, features = ["deflate"] }
-sha2 = "0.10"
+sha2 = "0.11"
 const-hex = "1.19"
 gem-flasher-dfu = { path = "../gem-flasher-dfu", optional = true }
 anyhow = "1.0"
-# T3 GemInit `config.ini` secrets. Kept on the mature RustCrypto generation (digest 0.10) so the
-# whole workspace shares one `sha2`/`digest` version.
+# T3 GemInit `config.ini` secrets. Still on the mature RustCrypto generation: sha-crypt 0.5 pulls
+# sha2 0.10/digest 0.10, while everything this workspace depends on directly is on sha2
+# 0.11/digest 0.11. Both generations are therefore linked in, which is correct but not free, and
+# this pin can be dropped once sha-crypt releases a digest 0.11 version.
 sha-crypt = { version = "0.5", default-features = false, optional = true }
-des = { version = "0.8", optional = true }
-cipher = { version = "0.4", optional = true }
+des = { version = "0.9", optional = true }
+cipher = { version = "0.5", optional = true }
 zeroize = { version = "1", optional = true }
 # The crypt(3) salt has to come from the OS CSPRNG (`instruction.md` §10.3), never a userspace PRNG.
-getrandom = { version = "0.3", optional = true }
+getrandom = { version = "0.4", optional = true }
 chrono-tz = { version = "0.10", optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
@@ -64,7 +67,7 @@ t3_gem_init = [
 sd_linux_udev = ["gem-flasher-sd?/udev"]
 sd_macos_authopen = ["gem-flasher-sd?/macos_authopen"]
 dfu = ["gem-flasher-dfu"]
-static = ["liblzma/static"]
+static = ["liblzma/static", "gem-flasher-dfu?/static"]
 piped_image = ["dep:tokio-util", "gem-helper/file_stream"]
 
 [package.metadata.docs.rs]

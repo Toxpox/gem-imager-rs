@@ -278,6 +278,7 @@ pub(crate) fn detect_host_wifi() -> HostWifiPrefill {
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
+#[cfg_attr(not(feature = "sd"), allow(dead_code))]
 pub(crate) struct RemoteImage {
     name: Box<str>,
     url: Box<url::Url>,
@@ -312,6 +313,7 @@ impl RemoteImage {
         }
     }
 
+    #[cfg_attr(not(feature = "sd"), allow(dead_code))]
     fn extract_gate(&self) -> gem_flasher::img::ExtractGate {
         match self.extract_sha256 {
             Some(sha256) => gem_flasher::img::ExtractGate::Declared(
@@ -325,6 +327,7 @@ impl RemoteImage {
         self.url.path_segments().unwrap().next_back().unwrap()
     }
 
+    #[cfg_attr(not(feature = "dfu"), allow(dead_code))]
     fn archive_cache_growth_estimate(&self) -> u64 {
         if self
             .downloader
@@ -338,6 +341,7 @@ impl RemoteImage {
         }
     }
 
+    #[cfg_attr(not(feature = "sd"), allow(dead_code))]
     fn into_image_fn(
         self,
         cancel: gem_helper::cancel::CancellationToken,
@@ -464,12 +468,15 @@ impl RemoteImage {
     }
 }
 
+#[cfg_attr(not(feature = "sd"), allow(dead_code))]
 struct StagedRemoteImage {
     file: std::fs::File,
     _staging: crate::staging::StagingImage,
 }
 
+#[cfg_attr(not(feature = "sd"), allow(dead_code))]
 type ImageReader = Box<dyn io::Read + Send>;
+#[cfg_attr(not(feature = "sd"), allow(dead_code))]
 type ImageResolver = Box<dyn FnOnce() -> io::Result<(ImageReader, u64)> + Send>;
 
 impl io::Read for StagedRemoteImage {
@@ -498,6 +505,7 @@ impl SelectedImage {
         }
     }
 
+    #[cfg_attr(not(feature = "dfu"), allow(dead_code))]
     fn staging_size_estimate(&self) -> u64 {
         match self {
             Self::RemoteImage(x) => x
@@ -508,6 +516,7 @@ impl SelectedImage {
         }
     }
 
+    #[cfg_attr(not(feature = "sd"), allow(dead_code))]
     fn into_image_fn(self, cancel: gem_helper::cancel::CancellationToken) -> ImageResolver {
         match self {
             SelectedImage::LocalImage(x) => Box::new(move || {
@@ -744,6 +753,7 @@ impl WriteMethods {
 }
 
 pub(crate) fn destinations(methods: WriteMethods, filter: bool) -> Vec<Destination> {
+    #[cfg_attr(not(feature = "sd"), allow(unused_mut))]
     let mut out: Vec<Destination> = Vec::new();
 
     #[cfg(feature = "sd")]
@@ -774,7 +784,9 @@ pub(crate) fn keep_selected_destination(
 ) -> Option<Destination> {
     match selected {
         Some(Destination::LocalFile(p)) => Some(Destination::LocalFile(p)),
+        #[cfg_attr(not(any(feature = "sd", feature = "dfu")), allow(unreachable_patterns))]
         Some(dest) if available.contains(&dest) => Some(dest),
+        #[cfg_attr(not(any(feature = "sd", feature = "dfu")), allow(unreachable_patterns))]
         Some(dest) => {
             tracing::info!("Clearing the selected destination: {dest} is no longer present");
             None
@@ -1256,22 +1268,38 @@ fn is_t3_catalog(url: &Url) -> bool {
         .is_some_and(|(canonical_host, host)| canonical_host == host)
 }
 
+const BEAGLEBOARD_CATALOG_URL: &str =
+    "https://raw.githubusercontent.com/beagleboard/distros/refs/heads/main/os_list.json";
+const BEAGLEY_OFFICIAL_TAG: &str = "beagle-am67";
+
+fn is_beagleboard_catalog(url: &Url) -> bool {
+    url.as_str() == BEAGLEBOARD_CATALOG_URL
+}
+
 pub(crate) async fn fetch_remote_config(
     downloader: &gem_downloader::Downloader,
     url: Url,
 ) -> std::io::Result<gem_config::config::Config> {
     if !is_t3_catalog(&url) {
-        return Ok(downloader.download_json_no_cache(url).await?);
+        let is_beagleboard = is_beagleboard_catalog(&url);
+        let mut config: gem_config::config::Config = downloader.download_json_no_cache(url).await?;
+
+        if is_beagleboard {
+            config.retain_device_tag(BEAGLEY_OFFICIAL_TAG);
+            tracing::info!(
+                "BeagleBoard catalog: retained {} official BeagleY-AI image(s)",
+                config.image_count()
+            );
+        }
+
+        return Ok(config);
     }
 
     let raw: gem_config::t3::RawT3Catalog = downloader.download_json_no_cache(url.clone()).await?;
 
-    let parsed = gem_config::t3::validate_catalog(
-        raw,
-        gem_config::t3::ProductScope::T3AndBeagleY,
-        url.as_str(),
-    )
-    .map_err(|e| std::io::Error::other(format!("T3 catalog rejected: {e}")))?;
+    let parsed =
+        gem_config::t3::validate_catalog(raw, gem_config::t3::ProductScope::T3Only, url.as_str())
+            .map_err(|e| std::io::Error::other(format!("T3 catalog rejected: {e}")))?;
 
     for diagnostic in &parsed.diagnostics {
         tracing::warn!("T3 catalog: {diagnostic}");
@@ -1438,12 +1466,52 @@ mod tests {
     }
 
     #[test]
-    fn no_customization_covers_non_configurable_flashers() {
-        let img = BoardImage::format();
-        assert!(matches!(
-            no_customization(config::Flasher::SdCard, &img),
-            Some(FlashingCustomization::NoneSd)
-        ));
+    fn no_customization_covers_every_remote_sd_init_format() {
+        let remote_image = |init_format| {
+            let cache = tempfile::tempdir().unwrap().keep();
+            let remote = RemoteImage::new(
+                "test image".into(),
+                "https://example.invalid/image.xz"
+                    .parse::<url::Url>()
+                    .unwrap()
+                    .into(),
+                [7u8; 32],
+                Some(7),
+                Some([8u8; 32]),
+                11,
+                gem_downloader::Downloader::new(cache).unwrap(),
+            );
+
+            BoardImage::Image {
+                flasher: config::Flasher::SdCard,
+                init_format,
+                img: remote.into(),
+                info_text: None,
+                description: None,
+                icon: BoardImageIcon::Remote("https://example.invalid/icon.png".parse().unwrap()),
+                details: Vec::new(),
+                support: None,
+            }
+        };
+
+        for init_format in [config::InitFormat::Sysconf, config::InitFormat::CloudInit] {
+            let image = remote_image(init_format);
+            assert!(
+                no_customization(config::Flasher::SdCard, &image).is_none(),
+                "{init_format:?} must show the customization page"
+            );
+        }
+
+        for init_format in [config::InitFormat::None, config::InitFormat::Armbian] {
+            let image = remote_image(init_format);
+            assert!(
+                matches!(
+                    no_customization(config::Flasher::SdCard, &image),
+                    Some(FlashingCustomization::NoneSd)
+                ),
+                "{init_format:?} must be written unchanged"
+            );
+        }
     }
 
     #[test]

@@ -1,3 +1,0 @@
-* xref:install-gui.adoc[]
-* xref:packaging.adoc[]
-* xref:contributing.adoc[]

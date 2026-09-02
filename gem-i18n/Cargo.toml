@@ -4,6 +4,7 @@ description = "Turkish and English user-facing strings for the T3 Gemstone Image
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 repository.workspace = true
 license.workspace = true
 

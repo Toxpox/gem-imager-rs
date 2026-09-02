@@ -179,6 +179,12 @@ catalog! {
         en: "The destination disappeared while writing. The card is now in an unknown state — write it again from the beginning before using it.",
         tr: "Hedef, yazma sırasında kayboldu. Kart artık bilinmeyen bir durumda — kullanmadan önce baştan yeniden yazın."
     },
+    DestinationChangedTitle { en: "A different card is now in this slot", tr: "Bu yuvada artık başka bir kart var" },
+    DestinationChangedBody {
+        en: "The device at the selected path is not the card you chose. Writing was stopped so the wrong card is not erased. Reselect the destination and try again.",
+        tr: "Seçilen yoldaki aygıt, seçtiğiniz kart değil. Yanlış kartın silinmemesi için yazma durduruldu. Hedefi yeniden seçip tekrar deneyin."
+    },
+
     UnknownDestinationTitle { en: "This card is no longer recognised", tr: "Bu kart artık tanınmıyor" },
     UnknownDestinationBody {
         en: "The selected destination is no longer among the detected removable devices, so it cannot be checked before writing. Reconnect the card, let it appear in the list again, and retry.",
